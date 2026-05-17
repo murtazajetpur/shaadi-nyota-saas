@@ -3,7 +3,7 @@ import './App.css';
 import Hero from './components/Hero';
 import Section1 from './components/Section1';
 import AudioPlayer from './components/AudioPlayer';
-import { sampleWeddingData } from './data/sampleWeddingData';
+import { defaultWeddingSlug, getWeddingBySlug } from './data/sampleWeddingData';
 
 const Section2 = lazy(() => import('./components/Section2'));
 const Section3 = lazy(() => import('./components/Section3'));
@@ -11,7 +11,8 @@ const Section4 = lazy(() => import('./components/Section4'));
 const Section5 = lazy(() => import('./components/Section5'));
 
 function App() {
-  const data = sampleWeddingData;
+  const slug = window.location.pathname.split('/').filter(Boolean)[0] ?? defaultWeddingSlug;
+  const data = getWeddingBySlug(slug);
   const [ganeshaVisible, setGaneshaVisible] = useState(false);
   const [heroDone, setHeroDone] = useState(false);
   const [heroStarted, setHeroStarted] = useState(false);
@@ -20,11 +21,11 @@ function App() {
   const handleHeroComplete = useCallback(() => setHeroDone(true), []);
 
   useEffect(() => {
-    document.title = data.wedding.pageTitle;
-  }, [data.wedding.pageTitle]);
+    document.title = data?.wedding.pageTitle ?? 'Wedding Not Found | Shaadi Nyota';
+  }, [data?.wedding.pageTitle]);
 
   useEffect(() => {
-    if (!heroStarted) return;
+    if (!heroStarted || !data) return;
 
     const preloadImage = (src: string) => {
       return new Promise((resolve) => {
@@ -52,6 +53,23 @@ function App() {
 
     runPreload();
   }, [heroStarted, data]);
+
+  if (!data) {
+    return (
+      <>
+        <div className="desktop-bg-blur" />
+        <div className="desktop-vignette" />
+        <div className="app-container">
+          <div className="phone-canvas">
+            <section className="section-wrapper not-found-section">
+              <h1>Wedding invite not found</h1>
+              <p>Please check the invitation link and try again.</p>
+            </section>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

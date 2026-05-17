@@ -130,6 +130,28 @@
   flex-direction: column;
 }
 
+.not-found-section {
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+  background-color: var(--color-ivory);
+}
+
+.not-found-section h1 {
+  font-family: var(--font-secondary);
+  font-size: 1.8rem;
+  font-weight: 400;
+  color: var(--color-text);
+}
+
+.not-found-section p {
+  font-family: var(--font-secondary);
+  font-size: 0.95rem;
+  color: var(--color-text-light);
+}
+
 @media (min-width: 601px) {
   .section-wrapper {
     min-height: min(92vh, 900px);
