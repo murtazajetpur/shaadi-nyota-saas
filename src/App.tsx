@@ -1,7 +1,8 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import './App.css';
 import Admin from './components/Admin';
 import AuthPage from './components/AuthPage';
+import CreateWeddingPage from './components/CreateWeddingPage';
 import Dashboard from './components/Dashboard';
 import InviteExperience from './components/InviteExperience';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -15,6 +16,11 @@ import {
   mockDashboardDraftStorageKey,
   type SampleWeddingData,
 } from './data/sampleWeddingData';
+import {
+  buildWeddingShellFromRow,
+  getOwnedWeddingForUser,
+  type OwnedWeddingRow,
+} from './lib/weddingOnboarding';
 
 function NotFound({ title = 'Wedding invite not found', message = 'Please check the invitation link and try again.' }) {
   useEffect(() => {
@@ -71,6 +77,52 @@ function AccessMessage({
   );
 }
 
+function DashboardRoute() {
+  const { user, loading, isConfigured } = useAuth();
+  const [ownedWedding, setOwnedWedding] = useState<OwnedWeddingRow | null>(null);
+  const [isCheckingWedding, setIsCheckingWedding] = useState(false);
+  const [weddingError, setWeddingError] = useState('');
+
+  useEffect(() => {
+    if (!isConfigured || loading || !user) return;
+
+    setIsCheckingWedding(true);
+    getOwnedWeddingForUser(user.id).then(({ wedding, error }) => {
+      setOwnedWedding(wedding);
+      setWeddingError(error ?? '');
+      setIsCheckingWedding(false);
+    });
+  }, [isConfigured, loading, user]);
+
+  if (!isConfigured) {
+    return <Dashboard authNotice="Supabase env vars are missing, so the mock dashboard is running in development bypass mode." />;
+  }
+
+  if (loading || isCheckingWedding) {
+    return <AccessMessage title="Checking wedding" message="Please wait while we load your wedding workspace." />;
+  }
+
+  if (!user) {
+    return <RedirectToLogin />;
+  }
+
+  if (weddingError) {
+    return <AccessMessage title="Unable to load wedding" message={weddingError} />;
+  }
+
+  if (!ownedWedding) {
+    return (
+      <AccessMessage
+        title="Create your wedding"
+        message="You do not have a wedding workspace yet. Create one to start setting up your Shaadi Nyota invite."
+        action={<a className="auth-link-button" href="/create-wedding">Create your wedding</a>}
+      />
+    );
+  }
+
+  return <Dashboard initialWedding={buildWeddingShellFromRow(ownedWedding)} />;
+}
+
 function AppRoutes() {
   const { user, profile, loading, profileLoading, isConfigured, signOut } = useAuth();
   const pathParts = window.location.pathname.split('/').filter(Boolean);
@@ -79,6 +131,7 @@ function AppRoutes() {
   const isAdmin = firstSegment === 'admin';
   const isLogin = firstSegment === 'login';
   const isSignup = firstSegment === 'signup';
+  const isCreateWedding = firstSegment === 'create-wedding';
   const isPersonalizedInvite = isPersonalizedInvitePath(window.location.pathname);
   const slug = firstSegment ?? defaultWeddingSlug;
   const savedDraft = window.localStorage.getItem(mockDashboardDraftStorageKey);
@@ -122,10 +175,10 @@ function AppRoutes() {
   const visibleEvents = data && guest ? getEventsForGuest(data, guest) : undefined;
 
   useEffect(() => {
-    if (!isDashboard && !isAdmin && !isLogin && !isSignup && data) {
+    if (!isDashboard && !isAdmin && !isLogin && !isSignup && !isCreateWedding && data) {
       document.title = data.wedding.pageTitle;
     }
-  }, [data, isAdmin, isDashboard, isLogin, isSignup]);
+  }, [data, isAdmin, isCreateWedding, isDashboard, isLogin, isSignup]);
 
   if (isLogin) {
     return <AuthPage mode="login" />;
@@ -135,17 +188,12 @@ function AppRoutes() {
     return <AuthPage mode="signup" />;
   }
 
+  if (isCreateWedding) {
+    return <CreateWeddingPage />;
+  }
+
   if (isDashboard) {
-    if (!isConfigured) {
-      return <Dashboard authNotice="Supabase env vars are missing, so the mock dashboard is running in development bypass mode." />;
-    }
-    if (loading) {
-      return <AccessMessage title="Checking session" message="Please wait while we verify your login." />;
-    }
-    if (!user) {
-      return <RedirectToLogin />;
-    }
-    return <Dashboard />;
+    return <DashboardRoute />;
   }
 
   if (isAdmin) {

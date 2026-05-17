@@ -196,10 +196,16 @@ const loadStoredRsvpResponses = () => {
     }
 };
 
-export default function Dashboard({ authNotice }: { authNotice?: string }) {
+export default function Dashboard({
+    authNotice,
+    initialWedding,
+}: {
+    authNotice?: string;
+    initialWedding?: SampleWeddingData;
+}) {
     const { user, isConfigured, signOut } = useAuth();
     const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
-    const [weddingData, setWeddingData] = useState<SampleWeddingData>(loadInitialWedding);
+    const [weddingData, setWeddingData] = useState<SampleWeddingData>(() => initialWedding ?? loadInitialWedding());
     const [previewMode, setPreviewMode] = useState<PreviewMode>('public');
     const [guestSearchQuery, setGuestSearchQuery] = useState('');
     const [guestImportMode, setGuestImportMode] = useState<CsvImportMode>('append');
@@ -362,7 +368,7 @@ export default function Dashboard({ authNotice }: { authNotice?: string }) {
 
     const handleResetDraft = () => {
         window.localStorage.removeItem(mockDashboardDraftStorageKey);
-        setWeddingData(cloneWedding(dashboardBaseWedding));
+        setWeddingData(cloneWedding(initialWedding ?? dashboardBaseWedding));
         setPreviewMode('public');
         setHasUnsavedChanges(false);
         setSaveStatus('');

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import './AuthPage.css';
 import { useAuth } from '../context/AuthContext';
+import { getOwnedWeddingForCurrentUser } from '../lib/weddingOnboarding';
 
 interface AuthPageProps {
   mode: 'login' | 'signup';
@@ -42,7 +43,8 @@ export default function AuthPage({ mode }: AuthPageProps) {
       return;
     }
 
-    window.location.href = '/dashboard';
+    const { wedding } = await getOwnedWeddingForCurrentUser();
+    window.location.href = wedding ? '/dashboard' : '/create-wedding';
   };
 
   return (
