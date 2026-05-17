@@ -1,4 +1,5 @@
 export type PackageType = 'basic' | 'rsvp' | 'whatsapp';
+export type WeddingStatus = 'draft' | 'unpaid' | 'paid' | 'published' | 'suspended';
 
 export interface WeddingEvent {
   id: string;
@@ -19,6 +20,7 @@ export interface SampleWeddingData {
   wedding: {
     slug: string;
     packageType: PackageType;
+    status: WeddingStatus;
     themeKey: string;
     pageTitle: string;
   };
@@ -132,6 +134,7 @@ export const sampleWeddings: SampleWeddingData[] = [
     wedding: {
       slug: 'murtaza-lubna',
       packageType: 'basic',
+      status: 'draft',
       themeKey: 'palace-door-opening',
       pageTitle: 'Murtaza & Lubna | Shaadi Nyota',
     },
@@ -245,6 +248,7 @@ export const sampleWeddings: SampleWeddingData[] = [
     wedding: {
       slug: 'ali-sara',
       packageType: 'rsvp',
+      status: 'draft',
       themeKey: 'palace-door-opening',
       pageTitle: 'Ali & Sara | Shaadi Nyota',
     },
