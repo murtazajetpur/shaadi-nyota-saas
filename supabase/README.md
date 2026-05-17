@@ -66,3 +66,12 @@ The current Vite React app is still in mock mode:
 - RSVP responses stay in localStorage
 
 Future migration phases will wire these screens to Supabase gradually.
+
+## 6. Auth Notes
+
+- Confirm Email is currently disabled for local MVP testing.
+- Signup passes `full_name` through Supabase Auth user metadata.
+- The frontend does not insert into `public.profiles` during signup.
+- The `public.handle_new_user()` database trigger creates the `profiles` row after a new auth user signs up.
+- New profiles should default to `role = 'couple'`.
+- To test admin access locally, manually update the test user's `profiles.role` to `admin` in Supabase.

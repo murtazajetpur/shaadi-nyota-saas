@@ -49,11 +49,11 @@ export default function AuthPage({ mode }: AuthPageProps) {
     <main className="auth-page">
       <section className="auth-card">
         <p className="auth-eyebrow">Shaadi Nyota</p>
-        <h1>{isSignup ? 'Create couple account' : 'Welcome back'}</h1>
+        <h1>{isSignup ? 'Create your couple account' : 'Sign in to your Shaadi Nyota account'}</h1>
         <p className="auth-copy">
           {isSignup
-            ? 'Create a mock couple login for the dashboard.'
-            : 'Sign in to continue to the couple dashboard.'}
+            ? 'Set up access to your Shaadi Nyota couple dashboard.'
+            : 'Continue to your couple dashboard.'}
         </p>
 
         {!isConfigured && (
