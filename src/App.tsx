@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import './App.css';
 import Admin from './components/Admin';
+import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import InviteExperience from './components/InviteExperience';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import {
   defaultWeddingSlug,
   getEventsForGuest,
@@ -35,11 +37,48 @@ function NotFound({ title = 'Wedding invite not found', message = 'Please check 
   );
 }
 
-function App() {
+function RedirectToLogin() {
+  useEffect(() => {
+    window.location.href = '/login';
+  }, []);
+
+  return (
+    <AccessMessage
+      title="Login required"
+      message="Redirecting you to login..."
+    />
+  );
+}
+
+function AccessMessage({
+  title,
+  message,
+  action,
+}: {
+  title: string;
+  message: string;
+  action?: ReactNode;
+}) {
+  return (
+    <main className="auth-page">
+      <section className="auth-card">
+        <p className="auth-eyebrow">Shaadi Nyota</p>
+        <h1>{title}</h1>
+        <p className="auth-copy">{message}</p>
+        {action}
+      </section>
+    </main>
+  );
+}
+
+function AppRoutes() {
+  const { user, profile, loading, profileLoading, isConfigured, signOut } = useAuth();
   const pathParts = window.location.pathname.split('/').filter(Boolean);
   const firstSegment = pathParts[0];
   const isDashboard = firstSegment === 'dashboard';
   const isAdmin = firstSegment === 'admin';
+  const isLogin = firstSegment === 'login';
+  const isSignup = firstSegment === 'signup';
   const isPersonalizedInvite = isPersonalizedInvitePath(window.location.pathname);
   const slug = firstSegment ?? defaultWeddingSlug;
   const savedDraft = window.localStorage.getItem(mockDashboardDraftStorageKey);
@@ -83,16 +122,54 @@ function App() {
   const visibleEvents = data && guest ? getEventsForGuest(data, guest) : undefined;
 
   useEffect(() => {
-    if (!isDashboard && data) {
+    if (!isDashboard && !isAdmin && !isLogin && !isSignup && data) {
       document.title = data.wedding.pageTitle;
     }
-  }, [data, isDashboard]);
+  }, [data, isAdmin, isDashboard, isLogin, isSignup]);
+
+  if (isLogin) {
+    return <AuthPage mode="login" />;
+  }
+
+  if (isSignup) {
+    return <AuthPage mode="signup" />;
+  }
 
   if (isDashboard) {
+    if (!isConfigured) {
+      return <Dashboard authNotice="Supabase env vars are missing, so the mock dashboard is running in development bypass mode." />;
+    }
+    if (loading) {
+      return <AccessMessage title="Checking session" message="Please wait while we verify your login." />;
+    }
+    if (!user) {
+      return <RedirectToLogin />;
+    }
     return <Dashboard />;
   }
 
   if (isAdmin) {
+    if (!isConfigured) {
+      return <Admin authNotice="Supabase env vars are missing, so the mock admin is running in development bypass mode." />;
+    }
+    if (loading || profileLoading) {
+      return <AccessMessage title="Checking admin access" message="Please wait while we verify your account." />;
+    }
+    if (!user) {
+      return <RedirectToLogin />;
+    }
+    if (profile?.role !== 'admin') {
+      return (
+        <AccessMessage
+          title="Access denied"
+          message="Your account does not have admin access."
+          action={<button className="auth-link-button" type="button" onClick={async () => {
+            await signOut();
+            window.location.href = '/login';
+          }}>Sign Out</button>}
+        />
+      );
+    }
     return <Admin />;
   }
 
@@ -134,6 +211,14 @@ function App() {
       visibleEvents={visibleEvents}
       personalizedInviteMode={Boolean(guest)}
     />
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }
 

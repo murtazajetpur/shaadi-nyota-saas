@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import './Dashboard.css';
 import InviteExperience from './InviteExperience';
+import { useAuth } from '../context/AuthContext';
 import {
     defaultDashboardWeddingSlug,
     getPackageDisplayLabel,
@@ -195,7 +196,8 @@ const loadStoredRsvpResponses = () => {
     }
 };
 
-export default function Dashboard() {
+export default function Dashboard({ authNotice }: { authNotice?: string }) {
+    const { user, isConfigured, signOut } = useAuth();
     const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
     const [weddingData, setWeddingData] = useState<SampleWeddingData>(loadInitialWedding);
     const [previewMode, setPreviewMode] = useState<PreviewMode>('public');
@@ -702,18 +704,26 @@ export default function Dashboard() {
         }));
     };
 
+    const handleLogout = async () => {
+        await signOut();
+        window.location.href = '/login';
+    };
+
     return (
         <main className="dashboard-page">
             <aside className="dashboard-sidebar">
                 <div>
                     <p className="dashboard-eyebrow">Shaadi Nyota</p>
                     <h1>Couple Dashboard</h1>
+                    {user?.email && <p className="dashboard-auth-user">{user.email}</p>}
                 </div>
+                {authNotice && <p className="dashboard-auth-notice">{authNotice}</p>}
                 <div className="dashboard-draft-bar">
                     <span className={hasUnsavedChanges ? 'unsaved' : 'saved'}>
                         {hasUnsavedChanges ? 'Unsaved changes' : saveStatus || 'Draft ready'}
                     </span>
                     <button type="button" onClick={handleResetDraft}>Reset Draft</button>
+                    {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                 </div>
                 <nav className="dashboard-tabs" aria-label="Dashboard sections">
                     {dashboardTabs.map((tab) => (

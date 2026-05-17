@@ -36,6 +36,23 @@
     margin-top: 6px;
 }
 
+.dashboard-auth-user {
+    margin: 8px 0 0;
+    color: #666666;
+    font-size: 0.84rem;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-auth-notice {
+    margin: -18px 0 0;
+    padding: 10px;
+    border: 1px solid rgba(138, 93, 18, 0.24);
+    border-radius: 8px;
+    background: #fff8e7;
+    color: #8a5d12;
+    font-size: 0.82rem;
+}
+
 .dashboard-eyebrow {
     font-size: 0.72rem;
     text-transform: uppercase;

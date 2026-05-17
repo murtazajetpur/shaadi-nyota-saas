@@ -32,6 +32,22 @@
     color: #666666;
 }
 
+.admin-auth-user {
+    overflow-wrap: anywhere;
+    font-size: 0.88rem;
+}
+
+.admin-auth-notice {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(138, 93, 18, 0.24);
+    border-radius: 8px;
+    background: #fff8e7;
+    color: #8a5d12;
+    font-size: 0.86rem;
+}
+
 .admin-eyebrow {
     margin: 0 0 6px;
     color: #7a1f1f;

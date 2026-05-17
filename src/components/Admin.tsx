@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import './Admin.css';
+import { useAuth } from '../context/AuthContext';
 import {
     getPackageDisplayLabel,
     mockAdminWeddingsStorageKey,
@@ -138,7 +139,8 @@ const loadStoredRsvpResponses = () => {
     }
 };
 
-export default function Admin() {
+export default function Admin({ authNotice }: { authNotice?: string }) {
+    const { user, isConfigured, signOut } = useAuth();
     const [weddings, setWeddings] = useState<SampleWeddingData[]>(loadAdminWeddings);
     const [rsvpResponses, setRsvpResponses] = useState<StoredRsvpResponse[]>(loadStoredRsvpResponses);
     const [saveStatus, setSaveStatus] = useState('Admin data ready');
@@ -267,6 +269,11 @@ export default function Admin() {
         setSaveStatus('Refreshed from local draft');
     };
 
+    const handleLogout = async () => {
+        await signOut();
+        window.location.href = '/login';
+    };
+
     return (
         <main className="admin-page">
             <section className="admin-shell">
@@ -275,10 +282,13 @@ export default function Admin() {
                         <p className="admin-eyebrow">Shaadi Nyota</p>
                         <h1>Mock Admin Panel</h1>
                         <p>Manual package, payment, and publishing controls for local testing.</p>
+                        {user?.email && <p className="admin-auth-user">{user.email}</p>}
+                        {authNotice && <p className="admin-auth-notice">{authNotice}</p>}
                     </div>
                     <div className="admin-header-actions">
                         <span>{saveStatus}</span>
                         <button type="button" onClick={refreshFromLocalData}>Refresh Local Data</button>
+                        {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                     </div>
                 </div>
 
