@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import './Dashboard.css';
 import InviteExperience from './InviteExperience';
 import {
@@ -16,6 +16,7 @@ import {
 
 type DashboardTab = 'overview' | 'couple' | 'events' | 'guests' | 'rsvp' | 'theme' | 'preview';
 type PreviewMode = 'public' | 'rsvp';
+type CsvImportMode = 'append' | 'replace';
 
 const dashboardTabs: Array<{ id: DashboardTab; label: string }> = [
     { id: 'overview', label: 'Overview' },
@@ -32,6 +33,73 @@ const dashboardBaseWedding = getWeddingBySlug(defaultDashboardWeddingSlug) ?? sa
 
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => {
     return JSON.parse(JSON.stringify(wedding)) as SampleWeddingData;
+};
+
+const guestCsvBaseHeaders = ['guestName', 'phone', 'invitedCount', 'category'];
+const invitedCsvValues = new Set(['yes', 'y', 'true', '1']);
+
+const normalizeCsvHeader = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const csvEscape = (value: string | number) => {
+    const text = String(value ?? '');
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+const parseCsv = (text: string) => {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+        const char = text[index];
+        const nextChar = text[index + 1];
+
+        if (char === '"' && inQuotes && nextChar === '"') {
+            field += '"';
+            index += 1;
+        } else if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            row.push(field);
+            field = '';
+        } else if ((char === '\n' || char === '\r') && !inQuotes) {
+            if (char === '\r' && nextChar === '\n') index += 1;
+            row.push(field);
+            rows.push(row);
+            row = [];
+            field = '';
+        } else {
+            field += char;
+        }
+    }
+
+    if (field || row.length) {
+        row.push(field);
+        rows.push(row);
+    }
+
+    return rows.filter((csvRow) => csvRow.some((cell) => cell.trim()));
+};
+
+const downloadCsv = (filename: string, rows: Array<Array<string | number>>) => {
+    const csvText = rows.map((row) => row.map(csvEscape).join(',')).join('\r\n');
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(url);
+};
+
+const createUniqueInviteCode = (existingCodes: Set<string>) => {
+    let code = Math.random().toString(36).slice(2, 8);
+    while (existingCodes.has(code)) {
+        code = Math.random().toString(36).slice(2, 8);
+    }
+    existingCodes.add(code);
+    return code;
 };
 
 const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
@@ -107,6 +175,8 @@ export default function Dashboard() {
     const [weddingData, setWeddingData] = useState<SampleWeddingData>(loadInitialWedding);
     const [previewMode, setPreviewMode] = useState<PreviewMode>('public');
     const [guestSearchQuery, setGuestSearchQuery] = useState('');
+    const [guestImportMode, setGuestImportMode] = useState<CsvImportMode>('append');
+    const [guestImportWarnings, setGuestImportWarnings] = useState<string[]>([]);
     const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
     const [rsvpResponses, setRsvpResponses] = useState<StoredRsvpResponse[]>(loadStoredRsvpResponses);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -423,6 +493,164 @@ export default function Dashboard() {
         await window.navigator.clipboard?.writeText(link);
     };
 
+    const previewGuestInvite = (guest: WeddingGuest) => {
+        window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(weddingData));
+        setHasUnsavedChanges(false);
+        setSaveStatus('Saved');
+        window.open(getGuestInviteLink(guest), '_blank', 'noopener,noreferrer');
+    };
+
+    const downloadGuestCsvTemplate = () => {
+        downloadCsv(`${weddingData.wedding.slug}-guest-template.csv`, [
+            [...guestCsvBaseHeaders, ...weddingData.events.map((event) => event.eventName)],
+        ]);
+    };
+
+    const exportGuestsCsv = () => {
+        const rows: Array<Array<string | number>> = [[
+            ...guestCsvBaseHeaders,
+            'inviteCode',
+            'inviteLink',
+            ...weddingData.events.map((event) => event.eventName),
+        ]];
+
+        weddingData.rsvp.guests.forEach((guest) => {
+            rows.push([
+                guest.guestName,
+                guest.phone,
+                guest.invitedCount,
+                guest.category,
+                guest.inviteCode,
+                getGuestInviteLink(guest),
+                ...weddingData.events.map((event) => (
+                    guest.invitedEventIds.includes(event.id) ? 'yes' : 'no'
+                )),
+            ]);
+        });
+
+        downloadCsv(`${weddingData.wedding.slug}-guests.csv`, rows);
+    };
+
+    const handleGuestCsvImport = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+
+        const rows = parseCsv(await file.text());
+        if (rows.length < 2) {
+            setGuestImportWarnings(['CSV must include a header row and at least one guest row.']);
+            return;
+        }
+
+        const [headers, ...dataRows] = rows;
+        const normalizedHeaders = headers.map(normalizeCsvHeader);
+        const headerIndex = (name: string) => normalizedHeaders.indexOf(normalizeCsvHeader(name));
+        const baseHeaderKeys = new Set(guestCsvBaseHeaders.map(normalizeCsvHeader));
+        const warnings: string[] = [];
+        const eventColumns = headers
+            .map((header, index) => {
+                const normalizedHeader = normalizedHeaders[index];
+                if (!header.trim() || baseHeaderKeys.has(normalizedHeader)) return null;
+                const matchedEvent = weddingData.events.find((weddingEvent) => (
+                    [weddingEvent.eventName, weddingEvent.id].some((eventKey) => (
+                        normalizeCsvHeader(eventKey) === normalizedHeader
+                    ))
+                ));
+                if (!matchedEvent) {
+                    warnings.push(`Column "${header}" does not match a current event.`);
+                    return null;
+                }
+                return { index, eventId: matchedEvent.id };
+            })
+            .filter((column): column is { index: number; eventId: string } => Boolean(column));
+        const existingCodes = new Set(weddingData.rsvp.guests.map((guest) => guest.inviteCode));
+        const existingIds = new Set(weddingData.rsvp.guests.map((guest) => guest.id));
+
+        const importedGuests = dataRows.map((row, rowIndex) => {
+            const displayRow = rowIndex + 2;
+            const guestName = row[headerIndex('guestName')]?.trim() ?? '';
+            const phone = row[headerIndex('phone')]?.trim() ?? '';
+            const category = row[headerIndex('category')]?.trim() ?? '';
+            const invitedCountValue = row[headerIndex('invitedCount')]?.trim() ?? '';
+            const parsedInvitedCount = invitedCountValue ? Number(invitedCountValue) : 1;
+            const invitedCount = Number.isFinite(parsedInvitedCount) && parsedInvitedCount >= 1
+                ? Math.floor(parsedInvitedCount)
+                : 1;
+            const invitedEventIds = eventColumns
+                .filter(({ index }) => invitedCsvValues.has((row[index] ?? '').trim().toLowerCase()))
+                .map(({ eventId }) => eventId);
+
+            if (!guestName) warnings.push(`Row ${displayRow}: guestName is missing.`);
+            if (!phone) warnings.push(`Row ${displayRow}: phone is missing.`);
+            if (invitedCountValue && (!Number.isFinite(parsedInvitedCount) || parsedInvitedCount < 1)) {
+                warnings.push(`Row ${displayRow}: invitedCount is invalid.`);
+            }
+            if (!invitedEventIds.length) warnings.push(`Row ${displayRow}: no invited events selected.`);
+
+            let guestId = `guest-${Date.now()}-${rowIndex + 1}`;
+            while (existingIds.has(guestId)) {
+                guestId = `guest-${Date.now()}-${rowIndex + 1}-${Math.random().toString(36).slice(2, 5)}`;
+            }
+            existingIds.add(guestId);
+
+            return {
+                id: guestId,
+                guestName,
+                phone,
+                invitedCount,
+                category,
+                inviteCode: createUniqueInviteCode(existingCodes),
+                invitedEventIds,
+            };
+        });
+
+        updateWeddingData((current) => ({
+            ...current,
+            rsvp: {
+                ...current.rsvp,
+                guests: guestImportMode === 'replace'
+                    ? importedGuests
+                    : [...current.rsvp.guests, ...importedGuests],
+            },
+        }));
+        setGuestImportWarnings(warnings);
+    };
+
+    const exportRsvpCsv = () => {
+        const relevantResponses = rsvpResponses.filter((response) => response.weddingSlug === weddingData.wedding.slug);
+        const rows: Array<Array<string | number>> = [[
+            'guestName',
+            'phone',
+            'category',
+            'invitedCount',
+            'eventName',
+            'rsvpStatus',
+            'mealPreference',
+            'updatedAt',
+        ]];
+
+        weddingData.rsvp.guests.forEach((guest) => {
+            guest.invitedEventIds.forEach((eventId) => {
+                const weddingEvent = weddingData.events.find((eventItem) => eventItem.id === eventId);
+                const response = relevantResponses.find((storedResponse) => (
+                    storedResponse.guestId === guest.id && storedResponse.eventId === eventId
+                ));
+                rows.push([
+                    guest.guestName,
+                    guest.phone,
+                    guest.category,
+                    guest.invitedCount,
+                    weddingEvent?.eventName ?? eventId,
+                    response?.status || 'pending',
+                    response?.mealPreference || '',
+                    response?.updatedAt || '',
+                ]);
+            });
+        });
+
+        downloadCsv(`${weddingData.wedding.slug}-rsvp-responses.csv`, rows);
+    };
+
     const updateHero = <Key extends keyof SampleWeddingData['hero']>(
         key: Key,
         value: SampleWeddingData['hero'][Key]
@@ -460,7 +688,6 @@ export default function Dashboard() {
                     <span className={hasUnsavedChanges ? 'unsaved' : 'saved'}>
                         {hasUnsavedChanges ? 'Unsaved changes' : saveStatus || 'Draft ready'}
                     </span>
-                    <button type="button" onClick={handleSaveDraft}>Save Draft</button>
                     <button type="button" onClick={handleResetDraft}>Reset Draft</button>
                 </div>
                 <nav className="dashboard-tabs" aria-label="Dashboard sections">
@@ -510,9 +737,14 @@ export default function Dashboard() {
 
                 {activeTab === 'couple' && (
                     <div className="dashboard-panel">
-                        <div className="dashboard-panel-header">
-                            <p className="dashboard-eyebrow">Couple</p>
-                            <h2>Edit couple details</h2>
+                        <div className="dashboard-panel-header dashboard-panel-header-row">
+                            <div>
+                                <p className="dashboard-eyebrow">Couple</p>
+                                <h2>Edit couple details</h2>
+                            </div>
+                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
+                                Save Couple Details
+                            </button>
                         </div>
                         <label className="dashboard-check">
                             <input
@@ -539,7 +771,12 @@ export default function Dashboard() {
                                 <p className="dashboard-eyebrow">Events</p>
                                 <h2>Wedding events</h2>
                             </div>
-                            <button className="dashboard-primary-btn" type="button" onClick={addEvent}>Add event</button>
+                            <div className="dashboard-header-actions">
+                                <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
+                                    Save Events
+                                </button>
+                                <button className="dashboard-primary-btn" type="button" onClick={addEvent}>Add event</button>
+                            </div>
                         </div>
                         <div className="event-editor-list">
                             {weddingData.events.map((event, index) => (
@@ -570,7 +807,12 @@ export default function Dashboard() {
                                 <p className="dashboard-eyebrow">Guests</p>
                                 <h2>Guest invite links</h2>
                             </div>
-                            <button className="dashboard-primary-btn" type="button" onClick={addGuest}>Add guest</button>
+                            <div className="dashboard-header-actions">
+                                <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
+                                    Save Guests
+                                </button>
+                                <button className="dashboard-primary-btn" type="button" onClick={addGuest}>Add guest</button>
+                            </div>
                         </div>
                         <div className="guest-summary-grid">
                             <InfoBlock label="Families" value={String(guestSummary.totalGuests)} />
@@ -578,6 +820,41 @@ export default function Dashboard() {
                             <InfoBlock label="No events" value={String(guestSummary.noEventGuests)} />
                             <InfoBlock label="Missing phone" value={String(guestSummary.missingPhoneGuests)} />
                         </div>
+                        <div className="guest-csv-toolbar">
+                            <button className="dashboard-primary-btn secondary" type="button" onClick={downloadGuestCsvTemplate}>
+                                Download CSV Template
+                            </button>
+                            <button className="dashboard-primary-btn secondary" type="button" onClick={exportGuestsCsv}>
+                                Export Guests CSV
+                            </button>
+                            <label className="csv-mode-select">
+                                <span>Import mode</span>
+                                <select
+                                    value={guestImportMode}
+                                    onChange={(event) => setGuestImportMode(event.target.value as CsvImportMode)}
+                                >
+                                    <option value="append">Append to current guests</option>
+                                    <option value="replace">Replace all guests</option>
+                                </select>
+                            </label>
+                            <label className="csv-file-control">
+                                <span>Import CSV</span>
+                                <input type="file" accept=".csv,text/csv" onChange={handleGuestCsvImport} />
+                            </label>
+                        </div>
+                        {guestImportWarnings.length > 0 && (
+                            <div className="csv-warning-box">
+                                <strong>Import warnings</strong>
+                                <ul>
+                                    {guestImportWarnings.slice(0, 10).map((warning) => (
+                                        <li key={warning}>{warning}</li>
+                                    ))}
+                                </ul>
+                                {guestImportWarnings.length > 10 && (
+                                    <p>{guestImportWarnings.length - 10} more warnings hidden.</p>
+                                )}
+                            </div>
+                        )}
                         <label className="guest-search">
                             <span>Search guests</span>
                             <input
@@ -652,7 +929,7 @@ export default function Dashboard() {
                                                     <code>{getGuestInviteLink(guest)}</code>
                                                     <div className="guest-link-actions compact">
                                                         <button type="button" onClick={() => copyGuestInviteLink(guest)}>Copy</button>
-                                                        <a href={getGuestInviteLink(guest)} target="_blank" rel="noreferrer">Preview</a>
+                                                        <button type="button" onClick={() => previewGuestInvite(guest)}>Preview</button>
                                                     </div>
                                                 </td>
                                                 <td>
@@ -695,9 +972,14 @@ export default function Dashboard() {
                                 <p className="dashboard-eyebrow">RSVP Dashboard</p>
                                 <h2>Mock RSVP analytics</h2>
                             </div>
-                            <button className="dashboard-primary-btn secondary" type="button" onClick={clearMockRsvpResponses}>
-                                Clear Mock RSVP Responses
-                            </button>
+                            <div className="dashboard-header-actions">
+                                <button className="dashboard-primary-btn secondary" type="button" onClick={exportRsvpCsv}>
+                                    Export RSVP CSV
+                                </button>
+                                <button className="dashboard-primary-btn secondary" type="button" onClick={clearMockRsvpResponses}>
+                                    Clear Mock RSVP Responses
+                                </button>
+                            </div>
                         </div>
                         <div className="guest-summary-grid rsvp-summary-grid">
                             <InfoBlock label="Families" value={String(weddingData.rsvp.guests.length)} />
@@ -763,9 +1045,14 @@ export default function Dashboard() {
 
                 {activeTab === 'theme' && (
                     <div className="dashboard-panel">
-                        <div className="dashboard-panel-header">
-                            <p className="dashboard-eyebrow">Theme</p>
-                            <h2>Theme media</h2>
+                        <div className="dashboard-panel-header dashboard-panel-header-row">
+                            <div>
+                                <p className="dashboard-eyebrow">Theme</p>
+                                <h2>Theme media</h2>
+                            </div>
+                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
+                                Save Theme Settings
+                            </button>
                         </div>
                         <div className="form-grid">
                             <SelectField
