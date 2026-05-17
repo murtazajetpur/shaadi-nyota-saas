@@ -32,6 +32,16 @@ export interface CreateWeddingInput {
   pageTitle: string;
 }
 
+export interface UpdateWeddingShellInput {
+  weddingId: string;
+  brideName: string;
+  groomName: string;
+  displayName: string;
+  slug: string;
+  themeKey: string;
+  pageTitle: string;
+}
+
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => (
   JSON.parse(JSON.stringify(wedding)) as SampleWeddingData
 );
@@ -89,7 +99,7 @@ export const getOwnedWeddingForUser = async (userId: string) => {
     .from('weddings')
     .select('id, owner_id, created_by, slug, package_type, status, payment_status, theme_key, page_title, bride_name, groom_name, display_name, published_at')
     .eq('owner_id', userId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
@@ -97,6 +107,32 @@ export const getOwnedWeddingForUser = async (userId: string) => {
     wedding: data as OwnedWeddingRow | null,
     error: error?.message ?? null,
   };
+};
+
+export const updateWeddingShell = async (input: UpdateWeddingShellInput) => {
+  if (!supabase) return { error: 'Supabase is not configured.' };
+
+  const { error } = await supabase
+    .from('weddings')
+    .update({
+      bride_name: input.brideName,
+      groom_name: input.groomName,
+      display_name: input.displayName,
+      slug: input.slug,
+      theme_key: input.themeKey,
+      page_title: input.pageTitle,
+    })
+    .eq('id', input.weddingId);
+
+  if (error) {
+    return {
+      error: error.code === '23505'
+        ? 'This slug is already taken. Please choose another.'
+        : error.message,
+    };
+  }
+
+  return { error: null };
 };
 
 export const getOwnedWeddingForCurrentUser = async () => {

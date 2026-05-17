@@ -120,7 +120,7 @@ function DashboardRoute() {
     );
   }
 
-  return <Dashboard initialWedding={buildWeddingShellFromRow(ownedWedding)} />;
+  return <Dashboard initialWedding={buildWeddingShellFromRow(ownedWedding)} supabaseWeddingId={ownedWedding.id} />;
 }
 
 function AppRoutes() {

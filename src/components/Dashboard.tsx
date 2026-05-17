@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import './Dashboard.css';
 import InviteExperience from './InviteExperience';
 import { useAuth } from '../context/AuthContext';
+import { updateWeddingShell } from '../lib/weddingOnboarding';
 import {
     defaultDashboardWeddingSlug,
     getPackageDisplayLabel,
@@ -199,9 +200,11 @@ const loadStoredRsvpResponses = () => {
 export default function Dashboard({
     authNotice,
     initialWedding,
+    supabaseWeddingId,
 }: {
     authNotice?: string;
     initialWedding?: SampleWeddingData;
+    supabaseWeddingId?: string;
 }) {
     const { user, isConfigured, signOut } = useAuth();
     const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
@@ -214,6 +217,7 @@ export default function Dashboard({
     const [rsvpResponses, setRsvpResponses] = useState<StoredRsvpResponse[]>(loadStoredRsvpResponses);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [saveStatus, setSaveStatus] = useState('');
+    const [saveError, setSaveError] = useState('');
 
     useEffect(() => {
         document.title = 'Mock Dashboard | Shaadi Nyota';
@@ -233,7 +237,11 @@ export default function Dashboard({
 
     const validation = useMemo(() => {
         return {
-            slug: weddingData.wedding.slug.trim() ? '' : 'Slug is required.',
+            slug: !weddingData.wedding.slug.trim()
+                ? 'Slug is required.'
+                : /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(weddingData.wedding.slug)
+                    ? ''
+                    : 'Use lowercase letters, numbers, and hyphens only.',
             brideName: weddingData.couple.brideName.trim() ? '' : 'Bride name is required.',
             groomName: weddingData.couple.groomName.trim() ? '' : 'Groom name is required.',
             events: weddingData.events.map((event) => ({
@@ -358,9 +366,37 @@ export default function Dashboard({
         setWeddingData(updater);
         setHasUnsavedChanges(true);
         setSaveStatus('');
+        setSaveError('');
     };
 
-    const handleSaveDraft = () => {
+    const handleSaveDraft = async () => {
+        setSaveError('');
+        setSaveStatus('Saving...');
+
+        if (supabaseWeddingId) {
+            if (validation.slug || validation.brideName || validation.groomName) {
+                setSaveStatus('');
+                setSaveError('Could not save wedding details. Please fix the highlighted wedding fields.');
+                return;
+            }
+
+            const result = await updateWeddingShell({
+                weddingId: supabaseWeddingId,
+                brideName: weddingData.couple.brideName.trim(),
+                groomName: weddingData.couple.groomName.trim(),
+                displayName: weddingData.couple.displayName.trim(),
+                slug: weddingData.wedding.slug.trim(),
+                themeKey: weddingData.wedding.themeKey.trim(),
+                pageTitle: weddingData.wedding.pageTitle.trim(),
+            });
+
+            if (result.error) {
+                setSaveStatus('');
+                setSaveError(`Could not save wedding details. ${result.error}`);
+                return;
+            }
+        }
+
         window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(weddingData));
         setHasUnsavedChanges(false);
         setSaveStatus('Saved');
@@ -372,6 +408,7 @@ export default function Dashboard({
         setPreviewMode('public');
         setHasUnsavedChanges(false);
         setSaveStatus('');
+        setSaveError('');
     };
 
     const clearMockRsvpResponses = () => {
@@ -404,6 +441,19 @@ export default function Dashboard({
             wedding: {
                 ...current.wedding,
                 themeKey,
+            },
+        }));
+    };
+
+    const updateWeddingShellField = <Key extends keyof SampleWeddingData['wedding']>(
+        key: Key,
+        value: SampleWeddingData['wedding'][Key]
+    ) => {
+        updateWeddingData((current) => ({
+            ...current,
+            wedding: {
+                ...current.wedding,
+                [key]: value,
             },
         }));
     };
@@ -728,6 +778,7 @@ export default function Dashboard({
                     <span className={hasUnsavedChanges ? 'unsaved' : 'saved'}>
                         {hasUnsavedChanges ? 'Unsaved changes' : saveStatus || 'Draft ready'}
                     </span>
+                    {saveError && <em>{saveError}</em>}
                     <button type="button" onClick={handleResetDraft}>Reset Draft</button>
                     {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                 </div>
@@ -748,9 +799,14 @@ export default function Dashboard({
             <section className="dashboard-content">
                 {activeTab === 'overview' && (
                     <div className="dashboard-panel">
-                        <div className="dashboard-panel-header">
-                            <p className="dashboard-eyebrow">Overview</p>
-                            <h2>{weddingData.couple.displayName}</h2>
+                        <div className="dashboard-panel-header dashboard-panel-header-row">
+                            <div>
+                                <p className="dashboard-eyebrow">Overview</p>
+                                <h2>{weddingData.couple.displayName}</h2>
+                            </div>
+                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
+                                Save Wedding Details
+                            </button>
                         </div>
                         <div className="overview-grid">
                             <ReadOnlyBadgeCard
@@ -764,8 +820,21 @@ export default function Dashboard({
                                 value={weddingData.wedding.status}
                                 helperText="Payment and publishing status will be managed by admin/payment flow later."
                             />
-                            <InfoBlock label="Slug" value={weddingData.wedding.slug || 'Missing slug'} />
+                            <InfoBlock label="Payment" value={weddingData.wedding.paymentStatus} />
                             <InfoBlock label="Theme" value={weddingData.wedding.themeKey} />
+                        </div>
+                        <div className="form-grid dashboard-shell-fields">
+                            <TextField
+                                label="Slug"
+                                value={weddingData.wedding.slug}
+                                error={validation.slug}
+                                onChange={(value) => updateWeddingShellField('slug', value.toLowerCase())}
+                            />
+                            <TextField
+                                label="Page title"
+                                value={weddingData.wedding.pageTitle}
+                                onChange={(value) => updateWeddingShellField('pageTitle', value)}
+                            />
                         </div>
                         {validationCount > 0 && (
                             <p className="validation-summary">{validationCount} validation warning{validationCount === 1 ? '' : 's'} need attention.</p>
