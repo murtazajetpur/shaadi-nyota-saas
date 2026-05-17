@@ -3,7 +3,7 @@ import './App.css';
 import Hero from './components/Hero';
 import Section1 from './components/Section1';
 import AudioPlayer from './components/AudioPlayer';
-import { defaultWeddingSlug, getWeddingBySlug } from './data/sampleWeddingData';
+import { defaultWeddingSlug, getWeddingBySlug, hasRsvpAccess } from './data/sampleWeddingData';
 
 const Section2 = lazy(() => import('./components/Section2'));
 const Section3 = lazy(() => import('./components/Section3'));
@@ -13,6 +13,7 @@ const Section5 = lazy(() => import('./components/Section5'));
 function App() {
   const slug = window.location.pathname.split('/').filter(Boolean)[0] ?? defaultWeddingSlug;
   const data = getWeddingBySlug(slug);
+  const shouldShowRsvp = data ? hasRsvpAccess(data) && data.rsvp.enabled : false;
   const [ganeshaVisible, setGaneshaVisible] = useState(false);
   const [heroDone, setHeroDone] = useState(false);
   const [heroStarted, setHeroStarted] = useState(false);
@@ -93,7 +94,7 @@ function App() {
               <Suspense fallback={null}>
                 {data.couple.enabled && <Section2 couple={data.couple} />}
                 <Section3 events={data.events} />
-                {data.rsvp.enabled && <Section4 rsvp={data.rsvp} />}
+                {shouldShowRsvp && <Section4 rsvp={data.rsvp} />}
                 <Section5 closing={data.closing} />
               </Suspense>
             </>

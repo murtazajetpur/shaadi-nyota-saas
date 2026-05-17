@@ -126,7 +126,7 @@ export const sampleWeddings: SampleWeddingData[] = [
   {
     wedding: {
       slug: 'murtaza-lubna',
-      packageType: 'rsvp',
+      packageType: 'basic',
       themeKey: 'palace-door-opening',
       pageTitle: 'Murtaza & Lubna | Shaadi Nyota',
     },
@@ -345,6 +345,10 @@ export const defaultWeddingSlug = 'murtaza-lubna';
 
 export const getWeddingBySlug = (slug: string) => {
   return sampleWeddings.find((wedding) => wedding.wedding.slug === slug);
+};
+
+export const hasRsvpAccess = (wedding: SampleWeddingData) => {
+  return wedding.wedding.packageType === 'rsvp' || wedding.wedding.packageType === 'whatsapp';
 };
 
 export const sampleWeddingData = getWeddingBySlug(defaultWeddingSlug) ?? sampleWeddings[0];
