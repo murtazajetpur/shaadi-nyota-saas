@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Poppins:wght@300;400;500&display=swap');
+
+:root {
+  --color-ivory: #F8F5F0;
+  /* light ivory background */
+  --color-ivory-dim: #F2E8E2;
+  /* darker ivory for canvas background */
+  --color-white: #FFFFFF;
+  --color-gold: #C5A059;
+  /* warm gold accents */
+  --color-text: #1A1A1A;
+  --color-text-light: #4A4A4A;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+  color: var(--color-text);
+  background: var(--color-ivory);
+  /* Base fallback */
+  overflow: hidden;
+  /* Hidden on desktop so the wrapper scrolls or body scrolls. See App wrapper. */
+}
+
+/* Typography Helpers */
+h1,
+h2,
+h3,
+h4,
+.font-heading {
+  font-family: 'Cormorant Garamond', serif;
+}
+
+/* Animations & Utilities */
+.fade-in {
+  opacity: 0;
+  animation: fadeIn 0.8s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}

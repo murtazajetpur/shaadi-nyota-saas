@@ -1,0 +1,203 @@
+.events-container {
+    width: 100%;
+}
+
+.event-section {
+    position: relative;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--color-white);
+    background-size: 100% auto, 100% auto;
+    background-repeat: no-repeat, repeat;
+    background-position: center bottom, left top;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    overflow: hidden;
+}
+
+/* Backgrounds */
+.haldi-bg {
+    background-image: url('/assets/haldi.png'), url('/assets/haldi-bg.png');
+    background-color: #FAF4E8;
+    /* warm tint to match edges if needed */
+}
+
+.mehendi-bg {
+    background-image: url('/assets/mehendi.png'), url('/assets/mehendi-bg.png');
+    background-color: #F1F6F3;
+    /* subtle green tint */
+}
+
+.sangeet-bg {
+    background-image: url('/assets/sangeet.png'), url('/assets/sangeet-bg.png');
+    background-color: #F8F5F7;
+}
+
+.wedding-bg {
+    background-image: url('/assets/wedding.png'), url('/assets/wedding-bg.png');
+    background-color: #FDFBF7;
+    /* very soft warm white */
+}
+
+.reception-bg {
+    background-image: url('/assets/reception.png'), url('/assets/reception-bg.png');
+    background-color: #F6F4F2;
+}
+
+/* Gradient Overlay for Text Readability */
+.event-content-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    padding-top: 12vh;
+    z-index: 2;
+    pointer-events: none;
+    /* Let clicks pass to background if needed, but not buttons */
+}
+
+.event-content-overlay>* {
+    pointer-events: auto;
+    /* Re-enable clicks for text/buttons */
+    text-align: center;
+}
+
+.event-title {
+    font-family: var(--font-primary);
+    font-size: 3.5rem;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--color-text);
+    margin-bottom: 0.5rem;
+    line-height: 1;
+}
+
+.wedding-title {
+    font-size: 3.8rem;
+    /* slightly larger for importance */
+}
+
+.event-details {
+    font-family: var(--font-secondary);
+    font-size: 0.95rem;
+    font-weight: 300;
+    letter-spacing: 0.06em;
+    color: var(--color-text);
+    line-height: 1.6;
+    margin-bottom: 2rem;
+    text-transform: uppercase;
+}
+
+.event-details p {
+    margin: 0;
+}
+
+.event-actions {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.minimal-link-btn {
+    background: transparent;
+    border: none;
+    font-family: var(--font-secondary);
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text);
+    padding: 0 0 4px 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+}
+
+.minimal-link-btn::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0%;
+    height: 1px;
+    background-color: var(--color-text);
+    transition: width 0.3s ease;
+}
+
+.minimal-link-btn:hover::after,
+.minimal-link-btn:active::after {
+    width: 100%;
+}
+
+.minimal-link-btn svg {
+    opacity: 0.7;
+    width: 14px;
+    height: 14px;
+}
+
+/* Haldi Particles (Triggered via state) */
+.haldi-particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+}
+
+.haldi-particle {
+    position: absolute;
+    top: -10%;
+    width: 6px;
+    height: 12px;
+    background-color: rgba(255, 215, 0, 0.4);
+    /* subtle yellow */
+    border-radius: 50%;
+    /* user requested 3-4s ONLY, no looping */
+    animation: simpleFall 3.5s ease-in forwards;
+    animation-iteration-count: 1;
+}
+
+/* Mehendi Particles (Triggered via state) */
+.mehendi-particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+}
+
+.mehendi-particle {
+    position: absolute;
+    top: -10%;
+    width: 8px;
+    height: 8px;
+    background-color: rgba(144, 238, 144, 0.35);
+    /* subtle green/floral */
+    border-radius: 50%;
+    /* 3-4s ONLY, no looping, reuses simpleFall */
+    animation: simpleFall 3.8s ease-in forwards;
+    animation-iteration-count: 1;
+}
+
+
+
+@keyframes simpleFall {
+    0% {
+        transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8);
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate3d(20px, 110vh, 0) rotate(180deg) scale(1.1);
+        opacity: 0;
+    }
+}

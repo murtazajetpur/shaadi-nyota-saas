@@ -1,0 +1,85 @@
+.section-2 {
+    position: relative;
+    background-color: var(--color-white);
+    overflow: hidden;
+    align-items: center;
+    justify-content: space-between;
+    max-height: 100vh;
+    max-height: 100dvh;
+}
+
+.s2-image-wrapper {
+    width: 100%;
+    flex: 1;
+    /* Take up all available space */
+    position: relative;
+    background-image: url('/assets/second section old.png');
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    /* Start from top */
+    padding-top: 10vh;
+    /* Push names into the blank sky space */
+}
+
+.s2-top-names {
+    font-family: var(--font-primary);
+    font-size: 3.5rem;
+    letter-spacing: 0.02em;
+    color: var(--color-text);
+    z-index: 4;
+    white-space: nowrap;
+    margin-bottom: 0.5rem;
+}
+
+.s2-heading-container {
+    text-align: center;
+    z-index: 3;
+}
+
+.petals-container {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    /* Below text if needed, mingled with image */
+}
+
+/* 
+  Petal shapes - teardrop 
+*/
+.petal {
+    position: absolute;
+    top: -10%;
+    width: 12px;
+    height: 12px;
+    background-color: rgba(220, 110, 110, 0.4);
+    /* soft pink/red */
+    border-radius: 0 50% 0 50%;
+    /* leaf/petal shape */
+    animation-name: fallAndDrift;
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
+    will-change: transform;
+}
+
+@keyframes fallAndDrift {
+    0% {
+        transform: translate3d(0, -5vh, 0) rotate(0deg) scale(1);
+    }
+
+    30% {
+        transform: translate3d(15px, 30vh, 0) rotate(120deg) scale(0.9);
+    }
+
+    60% {
+        transform: translate3d(-10px, 70vh, 0) rotate(240deg) scale(1.1);
+    }
+
+    100% {
+        transform: translate3d(20px, 110vh, 0) rotate(360deg) scale(1);
+    }
+}
