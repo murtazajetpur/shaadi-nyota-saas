@@ -20,10 +20,9 @@
 .desktop-bg-blur {
   position: fixed;
   inset: 0;
-  background-image: url('/assets/ChatGPT Image Feb 22, 2026, 11_41_13 PM.png');
-  background-size: cover;
-  background-position: center;
-  filter: blur(12px) brightness(0.85);
+  background:
+    radial-gradient(circle at center, rgba(248, 245, 240, 0.98) 0%, rgba(242, 232, 226, 0.92) 48%, rgba(197, 160, 89, 0.28) 100%),
+    linear-gradient(135deg, #F8F5F0 0%, #F2E8E2 100%);
   z-index: -2;
   pointer-events: none;
 }

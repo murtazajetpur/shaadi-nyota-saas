@@ -50,14 +50,14 @@ export default function Section4({ rsvp }: Section4Props) {
                     {/* STEP 0: NAME */}
                     {step === 0 && (
                         <div className="rsvp-step fade-in">
-                            <h3 className="rsvp-question">May we have your name?</h3>
+                            <h3 className="rsvp-question">{rsvp.nameQuestion}</h3>
                             <input
                                 type="text"
                                 className="rsvp-minimal-input"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 onKeyDown={handleKeyDownName}
-                                placeholder="First & Last Name"
+                                placeholder={rsvp.namePlaceholder}
                             />
                             {name.trim() !== '' && (
                                 <button className="rsvp-arrow-btn micro-interaction" onClick={handleNextName}>
@@ -70,7 +70,7 @@ export default function Section4({ rsvp }: Section4Props) {
                     {/* STEP 1: ATTENDING */}
                     {step === 1 && (
                         <div className="rsvp-step fade-in">
-                            <h3 className="rsvp-question">Will you be celebrating with us?</h3>
+                            <h3 className="rsvp-question">{rsvp.attendanceQuestion}</h3>
                             <div className="rsvp-choices">
                                 <button className="rsvp-pill-btn micro-interaction" onClick={() => handleAttendance('yes')}>
                                     {rsvp.responseOptions.yes}
@@ -85,14 +85,14 @@ export default function Section4({ rsvp }: Section4Props) {
                     {/* STEP 2: PHONE */}
                     {step === 2 && (
                         <div className="rsvp-step fade-in">
-                            <h3 className="rsvp-question">Where can we reach you?</h3>
+                            <h3 className="rsvp-question">{rsvp.phoneQuestion}</h3>
                             <input
                                 type="tel"
                                 className="rsvp-minimal-input"
                                 value={phone}
                                 onChange={(e) => setPhone(e.target.value)}
                                 onKeyDown={handleKeyDownPhone}
-                                placeholder="Phone Number"
+                                placeholder={rsvp.phonePlaceholder}
                             />
                             {phone.trim() !== '' && (
                                 <button className="rsvp-arrow-btn micro-interaction" onClick={handleNextPhone}>

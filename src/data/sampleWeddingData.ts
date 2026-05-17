@@ -50,6 +50,11 @@ export interface SampleWeddingData {
     enabled: boolean;
     title: string;
     subtitle: string;
+    nameQuestion: string;
+    namePlaceholder: string;
+    attendanceQuestion: string;
+    phoneQuestion: string;
+    phonePlaceholder: string;
     responseOptions: {
       yes: string;
       no: string;
@@ -212,6 +217,11 @@ export const sampleWeddings: SampleWeddingData[] = [
       enabled: true,
       title: 'Will you be joining us?',
       subtitle: '',
+      nameQuestion: 'May we have your name?',
+      namePlaceholder: 'First & Last Name',
+      attendanceQuestion: 'Will you be celebrating with us?',
+      phoneQuestion: 'Where can we reach you?',
+      phonePlaceholder: 'Phone Number',
       responseOptions: {
         yes: 'Yes',
         no: 'Regretfully, no',
@@ -320,6 +330,11 @@ export const sampleWeddings: SampleWeddingData[] = [
       enabled: true,
       title: 'Will you be joining us?',
       subtitle: '',
+      nameQuestion: 'May we have your name?',
+      namePlaceholder: 'First & Last Name',
+      attendanceQuestion: 'Will you be celebrating with us?',
+      phoneQuestion: 'Where can we reach you?',
+      phonePlaceholder: 'Phone Number',
       responseOptions: {
         yes: 'Yes',
         no: 'Regretfully, no',
