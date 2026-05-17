@@ -2,11 +2,30 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import './CreateWeddingPage.css';
 import { useAuth } from '../context/AuthContext';
 import {
+  getPackageDisplayLabel,
+  type PackageType,
+} from '../data/sampleWeddingData';
+import {
   createSlugFromNames,
   createWeddingShell,
   defaultThemeKey,
   getOwnedWeddingForUser,
 } from '../lib/weddingOnboarding';
+
+const packageOptions: Array<{ value: PackageType; description: string }> = [
+  {
+    value: 'basic',
+    description: 'Wedding website with event details',
+  },
+  {
+    value: 'rsvp',
+    description: 'Website + RSVP + guest-wise event access',
+  },
+  {
+    value: 'whatsapp',
+    description: 'Website + RSVP + WhatsApp invites and reminders later',
+  },
+];
 
 export default function CreateWeddingPage() {
   const { user, loading, isConfigured } = useAuth();
@@ -17,6 +36,7 @@ export default function CreateWeddingPage() {
   const [slugEdited, setSlugEdited] = useState(false);
   const [displayNameEdited, setDisplayNameEdited] = useState(false);
   const [themeKey, setThemeKey] = useState(defaultThemeKey);
+  const [packageType, setPackageType] = useState<PackageType>('basic');
   const [pageTitle, setPageTitle] = useState('');
   const [pageTitleEdited, setPageTitleEdited] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,6 +50,12 @@ export default function CreateWeddingPage() {
 
   useEffect(() => {
     document.title = 'Create Wedding | Shaadi Nyota';
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'auto';
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+    };
   }, []);
 
   useEffect(() => {
@@ -99,6 +125,10 @@ export default function CreateWeddingPage() {
       setError('Slug is required.');
       return;
     }
+    if (!packageType) {
+      setError('Select a package.');
+      return;
+    }
 
     setIsSubmitting(true);
     const result = await createWeddingShell({
@@ -107,6 +137,7 @@ export default function CreateWeddingPage() {
       groomName: groomName.trim(),
       displayName: displayName.trim() || suggestedDisplayName,
       slug: slug.trim(),
+      packageType,
       themeKey: themeKey.trim() || defaultThemeKey,
       pageTitle: pageTitle.trim() || `${displayName.trim() || suggestedDisplayName} | Shaadi Nyota`,
     });
@@ -181,16 +212,35 @@ export default function CreateWeddingPage() {
             />
           </label>
 
-          <div className="create-wedding-grid">
-            <label>
-              <span>Theme key</span>
-              <input value={themeKey} onChange={(event) => setThemeKey(event.target.value)} />
-            </label>
-            <label>
+          <div className="package-selection">
+            <div>
               <span>Package</span>
-              <input value="Nyota Classic" readOnly />
-            </label>
+              <p>Choose the plan for this wedding. Admin can adjust it later if needed.</p>
+            </div>
+            <div className="package-options">
+              {packageOptions.map((option) => (
+                <label
+                  className={`package-option ${packageType === option.value ? 'selected' : ''}`}
+                  key={option.value}
+                >
+                  <input
+                    type="radio"
+                    name="packageType"
+                    value={option.value}
+                    checked={packageType === option.value}
+                    onChange={() => setPackageType(option.value)}
+                  />
+                  <strong>{getPackageDisplayLabel(option.value)}</strong>
+                  <small>{option.description}</small>
+                </label>
+              ))}
+            </div>
           </div>
+
+          <label>
+            <span>Theme key</span>
+            <input value={themeKey} onChange={(event) => setThemeKey(event.target.value)} />
+          </label>
 
           <label>
             <span>Page title</span>

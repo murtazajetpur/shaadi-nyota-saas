@@ -27,6 +27,7 @@ export interface CreateWeddingInput {
   groomName: string;
   displayName: string;
   slug: string;
+  packageType: PackageType;
   themeKey: string;
   pageTitle: string;
 }
@@ -121,7 +122,7 @@ export const createWeddingShell = async (input: CreateWeddingInput) => {
       groom_name: input.groomName,
       display_name: input.displayName,
       slug: input.slug,
-      package_type: 'basic',
+      package_type: input.packageType,
       status: 'draft',
       payment_status: 'unpaid',
       theme_key: input.themeKey,
