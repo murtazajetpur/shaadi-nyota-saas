@@ -20,6 +20,7 @@ interface AuthContextValue {
   profile: AuthProfile | null;
   loading: boolean;
   profileLoading: boolean;
+  profileError: string;
   isConfigured: boolean;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (fullName: string, email: string, password: string) => Promise<AuthResult>;
@@ -39,16 +40,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [loading, setLoading] = useState(isSupabaseConfigured);
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(isSupabaseConfigured);
+  const [profileError, setProfileError] = useState('');
 
   const loadProfile = async (currentUser: User | null) => {
     if (!supabase || !currentUser) {
       setProfile(null);
+      setProfileError('');
       setProfileLoading(false);
       return;
     }
 
     setProfileLoading(true);
+    setProfileError('');
     const { data, error } = await supabase
       .from('profiles')
       .select('id, full_name, phone, role')
@@ -58,8 +62,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       console.warn('Unable to load auth profile', error);
       setProfile(null);
+      setProfileError(error.message);
     } else {
       setProfile(data as AuthProfile | null);
+      setProfileError('');
     }
     setProfileLoading(false);
   };
@@ -73,12 +79,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let isMounted = true;
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!isMounted) return;
       setSession(data.session);
       setUser(data.session?.user ?? null);
+      await loadProfile(data.session?.user ?? null);
+      if (!isMounted) return;
       setLoading(false);
-      void loadProfile(data.session?.user ?? null);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
@@ -131,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null);
       setUser(null);
       setProfile(null);
+      setProfileError('');
     }
     return { error: error?.message ?? null };
   };
@@ -139,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     user,
     profile,
+    profileError,
     loading,
     profileLoading,
     isConfigured: isSupabaseConfigured,
@@ -146,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signUp,
     signOut,
     refreshProfile,
-  }), [loading, profile, profileLoading, session, user]);
+  }), [loading, profile, profileError, profileLoading, session, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

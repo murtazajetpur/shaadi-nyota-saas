@@ -124,7 +124,7 @@ function DashboardRoute() {
 }
 
 function AppRoutes() {
-  const { user, profile, loading, profileLoading, isConfigured, signOut } = useAuth();
+  const { user, profile, loading, profileLoading, profileError, isConfigured, signOut, refreshProfile } = useAuth();
   const pathParts = window.location.pathname.split('/').filter(Boolean);
   const firstSegment = pathParts[0];
   const isDashboard = firstSegment === 'dashboard';
@@ -205,6 +205,28 @@ function AppRoutes() {
     }
     if (!user) {
       return <RedirectToLogin />;
+    }
+    if (profileError) {
+      return (
+        <AccessMessage
+          title="Unable to verify admin access"
+          message={`Could not read your profile: ${profileError}`}
+          action={<button className="auth-link-button" type="button" onClick={() => {
+            void refreshProfile();
+          }}>Retry Profile Check</button>}
+        />
+      );
+    }
+    if (!profile) {
+      return (
+        <AccessMessage
+          title="Profile not ready"
+          message="Your profile row was not found yet. If you just signed up, wait a moment and retry. The profiles table must also allow users to read their own profile."
+          action={<button className="auth-link-button" type="button" onClick={() => {
+            void refreshProfile();
+          }}>Retry Profile Check</button>}
+        />
+      );
     }
     if (profile?.role !== 'admin') {
       return (

@@ -9,28 +9,57 @@ import {
     packageDisplayLabels,
     sampleWeddings,
     type PackageType,
-    type PaymentStatus,
     type SampleWeddingData,
     type StoredRsvpResponse,
     type WeddingStatus,
 } from '../data/sampleWeddingData';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 type WebsiteStatus = 'draft' | 'published' | 'suspended';
 type PaymentFilter = 'all' | 'unpaid' | 'paid';
 type WebsiteStatusFilter = 'all' | WebsiteStatus;
+type AdminDataSource = 'supabase' | 'mock';
+
+interface SupabaseWeddingRow {
+    id: string;
+    slug: string;
+    package_type: PackageType;
+    status: WebsiteStatus;
+    payment_status: 'unpaid' | 'paid';
+    bride_name: string | null;
+    groom_name: string | null;
+    display_name: string | null;
+    page_title: string | null;
+    theme_key: string | null;
+    published_at: string | null;
+    created_at: string | null;
+}
+
+interface AdminWeddingRecord {
+    id: string;
+    slug: string;
+    packageType: PackageType;
+    paymentStatus: 'unpaid' | 'paid';
+    websiteStatus: WebsiteStatus;
+    displayName: string;
+    pageTitle: string;
+    themeKey: string;
+    createdAt: string | null;
+    publishedAt: string | null;
+    guestCount: number | null;
+    invitedCount: number | null;
+    responseCount: number | null;
+    eventCount: number | null;
+}
+
+const packageOptions: PackageType[] = ['basic', 'rsvp', 'whatsapp'];
 
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => (
     JSON.parse(JSON.stringify(wedding)) as SampleWeddingData
 );
 
-const packageOptions: PackageType[] = ['basic', 'rsvp', 'whatsapp'];
-
-const getFallbackPaymentStatus = (status: WeddingStatus): PaymentStatus => (
+const getFallbackPaymentStatus = (status: WeddingStatus): 'unpaid' | 'paid' => (
     status === 'paid' || status === 'published' ? 'paid' : 'unpaid'
-);
-
-const getEffectivePaymentStatus = (paymentStatus: PaymentStatus): PaymentFilter => (
-    paymentStatus === 'paid' ? 'paid' : 'unpaid'
 );
 
 const getWebsiteStatus = (status: WeddingStatus): WebsiteStatus => {
@@ -117,7 +146,7 @@ const mergeDashboardDraft = (records: SampleWeddingData[]) => {
     return [...records, draftWithAdminFields];
 };
 
-const loadAdminWeddings = () => {
+const loadMockWeddings = () => {
     try {
         const savedWeddings = window.localStorage.getItem(mockAdminWeddingsStorageKey);
         const parsedWeddings = savedWeddings
@@ -139,68 +168,164 @@ const loadStoredRsvpResponses = () => {
     }
 };
 
+const mockWeddingToRecord = (wedding: SampleWeddingData, rsvpResponses: StoredRsvpResponse[]): AdminWeddingRecord => ({
+    id: wedding.wedding.slug,
+    slug: wedding.wedding.slug,
+    packageType: wedding.wedding.packageType,
+    paymentStatus: getFallbackPaymentStatus(wedding.wedding.status),
+    websiteStatus: getWebsiteStatus(wedding.wedding.status),
+    displayName: wedding.couple.displayName,
+    pageTitle: wedding.wedding.pageTitle,
+    themeKey: wedding.wedding.themeKey,
+    createdAt: null,
+    publishedAt: null,
+    guestCount: wedding.rsvp.guests.length,
+    invitedCount: wedding.rsvp.guests.reduce((total, guest) => total + guest.invitedCount, 0),
+    responseCount: rsvpResponses.filter((response) => response.weddingSlug === wedding.wedding.slug).length,
+    eventCount: wedding.events.length,
+});
+
+const supabaseWeddingToRecord = (wedding: SupabaseWeddingRow): AdminWeddingRecord => {
+    const displayName = wedding.display_name || [wedding.groom_name, wedding.bride_name].filter(Boolean).join(' & ') || 'Untitled wedding';
+
+    return {
+        id: wedding.id,
+        slug: wedding.slug,
+        packageType: wedding.package_type,
+        paymentStatus: wedding.payment_status,
+        websiteStatus: wedding.status,
+        displayName,
+        pageTitle: wedding.page_title || `${displayName} | Shaadi Nyota`,
+        themeKey: wedding.theme_key || 'palace-door-opening',
+        createdAt: wedding.created_at,
+        publishedAt: wedding.published_at,
+        guestCount: null,
+        invitedCount: null,
+        responseCount: null,
+        eventCount: null,
+    };
+};
+
+const formatDate = (value: string | null) => {
+    if (!value) return 'Not available';
+    return new Date(value).toLocaleDateString();
+};
+
 export default function Admin({ authNotice }: { authNotice?: string }) {
     const { user, isConfigured, signOut } = useAuth();
-    const [weddings, setWeddings] = useState<SampleWeddingData[]>(loadAdminWeddings);
+    const [mockWeddings, setMockWeddings] = useState<SampleWeddingData[]>(loadMockWeddings);
+    const [adminWeddings, setAdminWeddings] = useState<AdminWeddingRecord[]>([]);
+    const [dataSource, setDataSource] = useState<AdminDataSource>('mock');
     const [rsvpResponses, setRsvpResponses] = useState<StoredRsvpResponse[]>(loadStoredRsvpResponses);
     const [saveStatus, setSaveStatus] = useState('Admin data ready');
+    const [devWarning, setDevWarning] = useState('');
+    const [isLoadingWeddings, setIsLoadingWeddings] = useState(false);
     const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [planFilter, setPlanFilter] = useState<'all' | PackageType>('all');
     const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
     const [websiteStatusFilter, setWebsiteStatusFilter] = useState<WebsiteStatusFilter>('all');
 
+    const loadSupabaseWeddings = async () => {
+        if (!supabase || !isSupabaseConfigured) {
+            setDataSource('mock');
+            setAdminWeddings(mockWeddings.map((wedding) => mockWeddingToRecord(wedding, rsvpResponses)));
+            setDevWarning('Supabase env vars are missing, so the mock admin is running in development fallback mode.');
+            return;
+        }
+
+        setIsLoadingWeddings(true);
+        const { data, error } = await supabase
+            .from('weddings')
+            .select('id, slug, package_type, status, payment_status, bride_name, groom_name, display_name, page_title, theme_key, published_at, created_at')
+            .order('created_at', { ascending: false });
+        setIsLoadingWeddings(false);
+
+        if (error) {
+            setDataSource('mock');
+            setAdminWeddings(mockWeddings.map((wedding) => mockWeddingToRecord(wedding, rsvpResponses)));
+            setDevWarning(`Supabase admin query failed: ${error.message}. Showing mock fallback data.`);
+            setSaveStatus('Mock fallback active');
+            return;
+        }
+
+        setDataSource('supabase');
+        setAdminWeddings((data as SupabaseWeddingRow[]).map(supabaseWeddingToRecord));
+        setDevWarning('');
+        setSaveStatus('Loaded from Supabase');
+    };
+
     useEffect(() => {
-        document.title = 'Mock Admin | Shaadi Nyota';
+        document.title = 'Admin | Shaadi Nyota';
         setRsvpResponses(loadStoredRsvpResponses());
     }, []);
 
-    const summaries = useMemo(() => weddings.map((wedding) => {
-        const guestCount = wedding.rsvp.guests.length;
-        const invitedCount = wedding.rsvp.guests.reduce((total, guest) => total + guest.invitedCount, 0);
-        const responseCount = rsvpResponses.filter((response) => response.weddingSlug === wedding.wedding.slug).length;
+    useEffect(() => {
+        void loadSupabaseWeddings();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isConfigured, user]);
 
-        return {
-            wedding,
-            guestCount,
-            invitedCount,
-            responseCount,
-            paymentStatus: getEffectivePaymentStatus(wedding.wedding.paymentStatus),
-            websiteStatus: getWebsiteStatus(wedding.wedding.status),
-        };
-    }), [rsvpResponses, weddings]);
+    useEffect(() => {
+        if (dataSource === 'mock') {
+            setAdminWeddings(mockWeddings.map((wedding) => mockWeddingToRecord(wedding, rsvpResponses)));
+        }
+    }, [dataSource, mockWeddings, rsvpResponses]);
+
+    const summaries = useMemo(() => adminWeddings, [adminWeddings]);
 
     const filteredSummaries = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
-        return summaries.filter(({ wedding, paymentStatus, websiteStatus }) => {
-            const matchesSearch = !query || [wedding.couple.displayName, wedding.wedding.slug].some((value) => (
+        return summaries.filter((wedding) => {
+            const matchesSearch = !query || [wedding.displayName, wedding.slug].some((value) => (
                 value.toLowerCase().includes(query)
             ));
-            const matchesPlan = planFilter === 'all' || wedding.wedding.packageType === planFilter;
-            const matchesPayment = paymentFilter === 'all' || paymentStatus === paymentFilter;
-            const matchesWebsiteStatus = websiteStatusFilter === 'all' || websiteStatus === websiteStatusFilter;
+            const matchesPlan = planFilter === 'all' || wedding.packageType === planFilter;
+            const matchesPayment = paymentFilter === 'all' || wedding.paymentStatus === paymentFilter;
+            const matchesWebsiteStatus = websiteStatusFilter === 'all' || wedding.websiteStatus === websiteStatusFilter;
 
             return matchesSearch && matchesPlan && matchesPayment && matchesWebsiteStatus;
         });
     }, [paymentFilter, planFilter, searchQuery, summaries, websiteStatusFilter]);
 
-    const persistWeddings = (nextWeddings: SampleWeddingData[]) => {
-        setWeddings(nextWeddings);
+    const persistMockWeddings = (nextWeddings: SampleWeddingData[]) => {
+        setMockWeddings(nextWeddings);
         window.localStorage.setItem(mockAdminWeddingsStorageKey, JSON.stringify(nextWeddings));
-        setSaveStatus('Saved');
+        setSaveStatus('Saved mock data');
     };
 
-    const updateWedding = (
+    const updateMockWedding = (
         slug: string,
         updater: (wedding: SampleWeddingData) => SampleWeddingData
     ) => {
-        persistWeddings(weddings.map((wedding) => (
+        persistMockWeddings(mockWeddings.map((wedding) => (
             wedding.wedding.slug === slug ? updater(wedding) : wedding
         )));
     };
 
-    const changePlan = (slug: string, packageType: PackageType) => {
-        updateWedding(slug, (wedding) => ({
+    const updateSupabaseWedding = async (id: string, values: Partial<SupabaseWeddingRow>) => {
+        if (!supabase) return;
+
+        const { error } = await supabase
+            .from('weddings')
+            .update(values)
+            .eq('id', id);
+
+        if (error) {
+            setDevWarning(`Supabase update failed: ${error.message}`);
+            return;
+        }
+
+        setSaveStatus('Saved to Supabase');
+        await loadSupabaseWeddings();
+    };
+
+    const changePlan = (record: AdminWeddingRecord, packageType: PackageType) => {
+        if (dataSource === 'supabase') {
+            void updateSupabaseWedding(record.id, { package_type: packageType } as Partial<SupabaseWeddingRow>);
+            return;
+        }
+
+        updateMockWedding(record.slug, (wedding) => ({
             ...wedding,
             wedding: {
                 ...wedding.wedding,
@@ -209,64 +334,113 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
         }));
     };
 
-    const markPaid = (slug: string) => updateWedding(slug, (wedding) => ({
-        ...wedding,
-        wedding: {
-            ...wedding.wedding,
-            paymentStatus: 'paid',
-            status: wedding.wedding.status === 'published' ? 'published' : 'draft',
-        },
-    }));
+    const markPaid = (record: AdminWeddingRecord) => {
+        if (dataSource === 'supabase') {
+            void updateSupabaseWedding(record.id, { payment_status: 'paid' } as Partial<SupabaseWeddingRow>);
+            return;
+        }
 
-    const markUnpaid = (slug: string) => updateWedding(slug, (wedding) => ({
-        ...wedding,
-        wedding: {
-            ...wedding.wedding,
-            paymentStatus: 'unpaid',
-            status: wedding.wedding.status === 'suspended' ? 'suspended' : 'draft',
-        },
-    }));
+        updateMockWedding(record.slug, (wedding) => ({
+            ...wedding,
+            wedding: {
+                ...wedding.wedding,
+                paymentStatus: 'paid',
+                status: wedding.wedding.status === 'published' ? 'published' : 'draft',
+            },
+        }));
+    };
 
-    const publishWedding = (slug: string) => updateWedding(slug, (wedding) => {
-        if (getEffectivePaymentStatus(wedding.wedding.paymentStatus) !== 'paid') return wedding;
-        return {
+    const markUnpaid = (record: AdminWeddingRecord) => {
+        if (dataSource === 'supabase') {
+            void updateSupabaseWedding(record.id, { payment_status: 'unpaid' } as Partial<SupabaseWeddingRow>);
+            return;
+        }
+
+        updateMockWedding(record.slug, (wedding) => ({
+            ...wedding,
+            wedding: {
+                ...wedding.wedding,
+                paymentStatus: 'unpaid',
+                status: wedding.wedding.status === 'suspended' ? 'suspended' : 'draft',
+            },
+        }));
+    };
+
+    const publishWedding = (record: AdminWeddingRecord) => {
+        if (record.paymentStatus !== 'paid') return;
+
+        if (dataSource === 'supabase') {
+            void updateSupabaseWedding(record.id, {
+                status: 'published',
+                published_at: new Date().toISOString(),
+            } as Partial<SupabaseWeddingRow>);
+            return;
+        }
+
+        updateMockWedding(record.slug, (wedding) => ({
             ...wedding,
             wedding: {
                 ...wedding.wedding,
                 status: 'published',
             },
-        };
-    });
+        }));
+    };
 
-    const unpublishWedding = (slug: string) => updateWedding(slug, (wedding) => ({
-        ...wedding,
-        wedding: {
-            ...wedding.wedding,
-            status: 'draft',
-        },
-    }));
+    const unpublishWedding = (record: AdminWeddingRecord) => {
+        if (dataSource === 'supabase') {
+            void updateSupabaseWedding(record.id, { status: 'draft' } as Partial<SupabaseWeddingRow>);
+            return;
+        }
 
-    const suspendWedding = (slug: string) => updateWedding(slug, (wedding) => ({
-        ...wedding,
-        wedding: {
-            ...wedding.wedding,
-            status: 'suspended',
-        },
-    }));
+        updateMockWedding(record.slug, (wedding) => ({
+            ...wedding,
+            wedding: {
+                ...wedding.wedding,
+                status: 'draft',
+            },
+        }));
+    };
 
-    const restoreWebsite = (slug: string) => updateWedding(slug, (wedding) => ({
-        ...wedding,
-        wedding: {
-            ...wedding.wedding,
-            status: 'draft',
-        },
-    }));
+    const suspendWedding = (record: AdminWeddingRecord) => {
+        if (dataSource === 'supabase') {
+            void updateSupabaseWedding(record.id, { status: 'suspended' } as Partial<SupabaseWeddingRow>);
+            return;
+        }
 
-    const refreshFromLocalData = () => {
-        const nextWeddings = mergeDashboardDraft(weddings.map(normalizeAdminWedding));
-        persistWeddings(nextWeddings);
+        updateMockWedding(record.slug, (wedding) => ({
+            ...wedding,
+            wedding: {
+                ...wedding.wedding,
+                status: 'suspended',
+            },
+        }));
+    };
+
+    const restoreWebsite = (record: AdminWeddingRecord) => {
+        if (dataSource === 'supabase') {
+            void updateSupabaseWedding(record.id, { status: 'draft' } as Partial<SupabaseWeddingRow>);
+            return;
+        }
+
+        updateMockWedding(record.slug, (wedding) => ({
+            ...wedding,
+            wedding: {
+                ...wedding.wedding,
+                status: 'draft',
+            },
+        }));
+    };
+
+    const refreshData = () => {
+        if (dataSource === 'supabase') {
+            void loadSupabaseWeddings();
+            return;
+        }
+
+        const nextWeddings = mergeDashboardDraft(mockWeddings.map(normalizeAdminWedding));
+        persistMockWeddings(nextWeddings);
         setRsvpResponses(loadStoredRsvpResponses());
-        setSaveStatus('Refreshed from local draft');
+        setSaveStatus('Refreshed mock data');
     };
 
     const handleLogout = async () => {
@@ -274,26 +448,34 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
         window.location.href = '/login';
     };
 
+    const totalGuests = summaries.reduce((total, wedding) => total + (wedding.guestCount ?? 0), 0);
+    const totalResponses = summaries.reduce((total, wedding) => total + (wedding.responseCount ?? 0), 0);
+
     return (
         <main className="admin-page">
             <section className="admin-shell">
                 <div className="admin-header">
                     <div>
                         <p className="admin-eyebrow">Shaadi Nyota</p>
-                        <h1>Mock Admin Panel</h1>
+                        <h1>Admin Panel</h1>
                         <p>Manual package, payment, and publishing controls for local testing.</p>
                         {user?.email && <p className="admin-auth-user">{user.email}</p>}
-                        {authNotice && <p className="admin-auth-notice">{authNotice}</p>}
+                        {(authNotice || devWarning) && <p className="admin-auth-notice">{authNotice || devWarning}</p>}
+                        {dataSource === 'supabase' && (
+                            <p className="admin-data-note">Guest and RSVP counts will migrate in a later phase.</p>
+                        )}
                     </div>
                     <div className="admin-header-actions">
-                        <span>{saveStatus}</span>
-                        <button type="button" onClick={refreshFromLocalData}>Refresh Local Data</button>
+                        <span>{isLoadingWeddings ? 'Loading...' : saveStatus}</span>
+                        <button type="button" onClick={refreshData}>
+                            {dataSource === 'supabase' ? 'Refresh Supabase Data' : 'Refresh Mock Data'}
+                        </button>
                         {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                     </div>
                 </div>
 
                 <div className="admin-summary-grid">
-                    <InfoCard label="Total Weddings" value={String(weddings.length)} />
+                    <InfoCard label="Total Weddings" value={String(summaries.length)} />
                     <InfoCard
                         label="Live Websites"
                         value={String(summaries.filter((summary) => summary.websiteStatus === 'published').length)}
@@ -304,9 +486,12 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                     />
                     <InfoCard
                         label="Total Guests"
-                        value={String(weddings.reduce((total, wedding) => total + wedding.rsvp.guests.length, 0))}
+                        value={dataSource === 'supabase' ? 'Not migrated' : String(totalGuests)}
                     />
-                    <InfoCard label="RSVP Responses" value={String(rsvpResponses.length)} />
+                    <InfoCard
+                        label="RSVP Responses"
+                        value={dataSource === 'supabase' ? 'Not migrated' : String(totalResponses)}
+                    />
                 </div>
 
                 <div className="admin-filters">
@@ -358,38 +543,38 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                 <th>Plan</th>
                                 <th>Payment</th>
                                 <th>Website Status</th>
+                                <th>Created</th>
                                 <th>Guests</th>
-                                <th>Invited</th>
                                 <th>RSVPs</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredSummaries.map(({ wedding, guestCount, invitedCount, responseCount, paymentStatus, websiteStatus }) => (
-                                <Fragment key={wedding.wedding.slug}>
+                            {filteredSummaries.map((wedding) => (
+                                <Fragment key={wedding.id}>
                                     <tr>
                                         <td>
-                                            <strong>{wedding.couple.displayName}</strong>
-                                            <small>{wedding.wedding.pageTitle}</small>
+                                            <strong>{wedding.displayName}</strong>
+                                            <small>{wedding.pageTitle}</small>
                                         </td>
-                                        <td><code>{wedding.wedding.slug}</code></td>
-                                        <td><StatusBadge tone="plan">{getPackageDisplayLabel(wedding.wedding.packageType)}</StatusBadge></td>
-                                        <td><StatusBadge tone={paymentStatus}>{paymentStatus}</StatusBadge></td>
-                                        <td><StatusBadge tone={websiteStatus}>{websiteStatus}</StatusBadge></td>
-                                        <td>{guestCount}</td>
-                                        <td>{invitedCount}</td>
-                                        <td>{responseCount}</td>
+                                        <td><code>{wedding.slug}</code></td>
+                                        <td><StatusBadge tone="plan">{getPackageDisplayLabel(wedding.packageType)}</StatusBadge></td>
+                                        <td><StatusBadge tone={wedding.paymentStatus}>{wedding.paymentStatus}</StatusBadge></td>
+                                        <td><StatusBadge tone={wedding.websiteStatus}>{wedding.websiteStatus}</StatusBadge></td>
+                                        <td>{formatDate(wedding.createdAt)}</td>
+                                        <td>{wedding.guestCount ?? 'Not migrated'}</td>
+                                        <td>{wedding.responseCount ?? 'Not migrated'}</td>
                                         <td>
                                             <button
                                                 className="admin-manage-btn"
                                                 type="button"
-                                                onClick={() => setExpandedSlug(expandedSlug === wedding.wedding.slug ? null : wedding.wedding.slug)}
+                                                onClick={() => setExpandedSlug(expandedSlug === wedding.slug ? null : wedding.slug)}
                                             >
-                                                {expandedSlug === wedding.wedding.slug ? 'Close' : 'Manage'}
+                                                {expandedSlug === wedding.slug ? 'Close' : 'Manage'}
                                             </button>
                                         </td>
                                     </tr>
-                                    {expandedSlug === wedding.wedding.slug && (
+                                    {expandedSlug === wedding.slug && (
                                         <tr className="admin-manage-row">
                                             <td colSpan={9}>
                                                 <div className="admin-manage-panel">
@@ -398,8 +583,8 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                         <label className="admin-inline-field">
                                                             <span>Plan</span>
                                                             <select
-                                                                value={wedding.wedding.packageType}
-                                                                onChange={(event) => changePlan(wedding.wedding.slug, event.target.value as PackageType)}
+                                                                value={wedding.packageType}
+                                                                onChange={(event) => changePlan(wedding, event.target.value as PackageType)}
                                                             >
                                                                 {packageOptions.map((packageType) => (
                                                                     <option key={packageType} value={packageType}>
@@ -413,10 +598,10 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                     <div className="admin-manage-section">
                                                         <h3>Payment Controls</h3>
                                                         <div className="admin-action-grid">
-                                                            {paymentStatus === 'unpaid' ? (
-                                                                <button type="button" onClick={() => markPaid(wedding.wedding.slug)}>Mark Paid</button>
+                                                            {wedding.paymentStatus === 'unpaid' ? (
+                                                                <button type="button" onClick={() => markPaid(wedding)}>Mark Paid</button>
                                                             ) : (
-                                                                <button type="button" onClick={() => markUnpaid(wedding.wedding.slug)}>Mark Unpaid</button>
+                                                                <button type="button" onClick={() => markUnpaid(wedding)}>Mark Unpaid</button>
                                                             )}
                                                         </div>
                                                     </div>
@@ -424,27 +609,27 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                     <div className="admin-manage-section">
                                                         <h3>Website Controls</h3>
                                                         <div className="admin-action-grid">
-                                                            {websiteStatus === 'draft' && (
+                                                            {wedding.websiteStatus === 'draft' && (
                                                                 <button
                                                                     type="button"
-                                                                    disabled={paymentStatus !== 'paid'}
-                                                                    title={paymentStatus !== 'paid' ? 'Mark payment as paid before publishing' : undefined}
-                                                                    onClick={() => publishWedding(wedding.wedding.slug)}
+                                                                    disabled={wedding.paymentStatus !== 'paid'}
+                                                                    title={wedding.paymentStatus !== 'paid' ? 'Mark payment as paid before publishing' : undefined}
+                                                                    onClick={() => publishWedding(wedding)}
                                                                 >
                                                                     Publish
                                                                 </button>
                                                             )}
-                                                            {websiteStatus === 'published' && (
+                                                            {wedding.websiteStatus === 'published' && (
                                                                 <>
-                                                                    <button type="button" onClick={() => unpublishWedding(wedding.wedding.slug)}>Unpublish</button>
-                                                                    <button type="button" onClick={() => suspendWedding(wedding.wedding.slug)}>Suspend</button>
+                                                                    <button type="button" onClick={() => unpublishWedding(wedding)}>Unpublish</button>
+                                                                    <button type="button" onClick={() => suspendWedding(wedding)}>Suspend</button>
                                                                 </>
                                                             )}
-                                                            {websiteStatus === 'suspended' && (
-                                                                <button type="button" onClick={() => restoreWebsite(wedding.wedding.slug)}>Restore Website</button>
+                                                            {wedding.websiteStatus === 'suspended' && (
+                                                                <button type="button" onClick={() => restoreWebsite(wedding)}>Restore Website</button>
                                                             )}
                                                         </div>
-                                                        {websiteStatus === 'draft' && paymentStatus !== 'paid' && (
+                                                        {wedding.websiteStatus === 'draft' && wedding.paymentStatus !== 'paid' && (
                                                             <p className="admin-helper-text">Mark payment as paid before publishing.</p>
                                                         )}
                                                     </div>
@@ -453,20 +638,20 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                         <h3>Summary</h3>
                                                         <dl className="admin-summary-list">
                                                             <div>
+                                                                <dt>Theme</dt>
+                                                                <dd>{wedding.themeKey}</dd>
+                                                            </div>
+                                                            <div>
                                                                 <dt>Events</dt>
-                                                                <dd>{wedding.events.length}</dd>
+                                                                <dd>{wedding.eventCount ?? 'Not migrated'}</dd>
                                                             </div>
                                                             <div>
                                                                 <dt>Families</dt>
-                                                                <dd>{guestCount}</dd>
-                                                            </div>
-                                                            <div>
-                                                                <dt>Invited Count</dt>
-                                                                <dd>{invitedCount}</dd>
+                                                                <dd>{wedding.guestCount ?? 'Not migrated'}</dd>
                                                             </div>
                                                             <div>
                                                                 <dt>RSVP Responses</dt>
-                                                                <dd>{responseCount}</dd>
+                                                                <dd>{wedding.responseCount ?? 'Not migrated'}</dd>
                                                             </div>
                                                         </dl>
                                                     </div>
@@ -474,7 +659,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                     <div className="admin-manage-section">
                                                         <h3>Links</h3>
                                                         <div className="admin-link-stack">
-                                                            <a href={`/${wedding.wedding.slug}`} target="_blank" rel="noreferrer">Open Website</a>
+                                                            <a href={`/${wedding.slug}`} target="_blank" rel="noreferrer">Open Website</a>
                                                             <a href="/dashboard" target="_blank" rel="noreferrer">Open Couple Dashboard</a>
                                                             <a href="/dashboard" target="_blank" rel="noreferrer">View RSVP</a>
                                                         </div>
