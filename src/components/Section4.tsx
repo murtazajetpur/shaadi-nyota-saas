@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import './Section4.css';
+import type { SampleWeddingData } from '../data/sampleWeddingData';
 
-export default function Section4() {
+interface Section4Props {
+    rsvp: SampleWeddingData['rsvp'];
+}
+
+export default function Section4({ rsvp }: Section4Props) {
     const [step, setStep] = useState(0);
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
@@ -36,7 +41,8 @@ export default function Section4() {
                 {step < 3 && (
                     <div className="rsvp-header-area">
                         <div className="step-indicator">0{step + 1} / 03</div>
-                        <h2 className="rsvp-title">Will you be joining us?</h2>
+                        <h2 className="rsvp-title">{rsvp.title}</h2>
+                        {rsvp.subtitle && <p>{rsvp.subtitle}</p>}
                     </div>
                 )}
 
@@ -67,10 +73,10 @@ export default function Section4() {
                             <h3 className="rsvp-question">Will you be celebrating with us?</h3>
                             <div className="rsvp-choices">
                                 <button className="rsvp-pill-btn micro-interaction" onClick={() => handleAttendance('yes')}>
-                                    Yes
+                                    {rsvp.responseOptions.yes}
                                 </button>
                                 <button className="rsvp-pill-btn micro-interaction" onClick={() => handleAttendance('no')}>
-                                    Regretfully, no
+                                    {rsvp.responseOptions.no}
                                 </button>
                             </div>
                         </div>
@@ -99,8 +105,9 @@ export default function Section4() {
                     {/* STEP 3: SUCCESS */}
                     {step === 3 && (
                         <div className="rsvp-step fade-in success-step">
-                            <p className="success-text">Thank you.</p>
-                            <p className="success-text">We look forward to celebrating together.</p>
+                            {rsvp.successMessage.map((message) => (
+                                <p key={message} className="success-text">{message}</p>
+                            ))}
                         </div>
                     )}
                 </div>

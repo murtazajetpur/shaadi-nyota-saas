@@ -3,9 +3,11 @@ import './AudioPlayer.css';
 
 interface AudioPlayerProps {
     triggerPlay: boolean;
+    audioSrc: string;
+    title: string;
 }
 
-export default function AudioPlayer({ triggerPlay }: AudioPlayerProps) {
+export default function AudioPlayer({ triggerPlay, audioSrc, title }: AudioPlayerProps) {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [isMuted, setIsMuted] = useState(false);
     const [hasAttemptedPlay, setHasAttemptedPlay] = useState(false);
@@ -32,7 +34,7 @@ export default function AudioPlayer({ triggerPlay }: AudioPlayerProps) {
         // Standard setup
         const audio = audioRef.current;
         if (!audio.getAttribute('src')) {
-            audio.setAttribute('src', '/assets/din-shangda-audio.mp3');
+            audio.setAttribute('src', audioSrc);
         }
         audio.loop = true;
 
@@ -67,7 +69,7 @@ export default function AudioPlayer({ triggerPlay }: AudioPlayerProps) {
             console.warn("Autoplay was blocked by browser:", err);
             // Fallback: If autoplay blocked without interaction, we show unmuted but rely on user tapping it to actually start
         });
-    }, [triggerPlay, hasAttemptedPlay, isMuted]);
+    }, [triggerPlay, hasAttemptedPlay, isMuted, audioSrc]);
 
     return (
         <div className="audio-player-container">
@@ -75,7 +77,7 @@ export default function AudioPlayer({ triggerPlay }: AudioPlayerProps) {
             <button
                 className="mute-btn micro-interaction"
                 onClick={toggleMute}
-                title="Play / Pause Audio"
+                title={title}
                 aria-label={isMuted ? 'Play Audio' : 'Pause Audio'}
             >
                 {isMuted ? (

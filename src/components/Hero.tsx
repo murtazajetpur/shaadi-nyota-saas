@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import './Hero.css';
+import type { SampleWeddingData } from '../data/sampleWeddingData';
 
 interface HeroProps {
+    hero: SampleWeddingData['hero'];
+    audioSrc: string;
     onHeroStart: () => void;
     onGaneshaReveal: () => void;
     onHeroComplete: () => void;
 }
 
-export default function Hero({ onHeroStart, onGaneshaReveal, onHeroComplete }: HeroProps) {
+export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onHeroComplete }: HeroProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [ctaFadingOut, setCtaFadingOut] = useState(false);
@@ -29,7 +32,7 @@ export default function Hero({ onHeroStart, onGaneshaReveal, onHeroComplete }: H
             const audioEl = document.querySelector('audio');
             if (audioEl && audioEl.paused) {
                 if (!audioEl.getAttribute('src')) {
-                    audioEl.setAttribute('src', '/assets/din-shangda-audio.mp3');
+                    audioEl.setAttribute('src', audioSrc);
                 }
                 if (!audioEl.muted) {
                     audioEl.volume = 0; // Let AudioPlayer handle the fade-in via triggerPlay
@@ -72,7 +75,7 @@ export default function Hero({ onHeroStart, onGaneshaReveal, onHeroComplete }: H
         const audioEl = document.querySelector('audio');
         if (audioEl && audioEl.paused && !audioEl.muted) {
             if (!audioEl.getAttribute('src')) {
-                audioEl.setAttribute('src', '/assets/din-shangda-audio.mp3');
+                audioEl.setAttribute('src', audioSrc);
             }
             audioEl.play().catch(err => console.error("Audio play blocked on video play event:", err));
         }
@@ -82,14 +85,12 @@ export default function Hero({ onHeroStart, onGaneshaReveal, onHeroComplete }: H
         if (videoRef.current && isPlaying) {
             const time = videoRef.current.currentTime;
 
-            // Exact 5.0s reveal (guard with ref boolean)
-            if (time >= 5.0 && !revealedRef.current) {
+            if (time >= hero.revealImageShowAtSeconds && !revealedRef.current) {
                 revealedRef.current = true;
                 onGaneshaReveal();
             }
 
-            // Start fade out slightly before 8.0s (buffer jump)
-            if (time >= 7.95 && !fadingOutRef.current) {
+            if (time >= hero.heroFadeAtSeconds && !fadingOutRef.current) {
                 fadingOutRef.current = true;
                 setIsFadingOut(true);
 
@@ -113,7 +114,7 @@ export default function Hero({ onHeroStart, onGaneshaReveal, onHeroComplete }: H
             animationFrame = requestAnimationFrame(loop);
         }
         return () => cancelAnimationFrame(animationFrame);
-    }, [isPlaying, onGaneshaReveal, onHeroComplete]);
+    }, [isPlaying, hero.heroFadeAtSeconds, hero.revealImageShowAtSeconds, onGaneshaReveal, onHeroComplete]);
 
     return (
         <div className={`hero-container ${isFadingOut ? 'fade-out' : ''}`}>
@@ -123,8 +124,8 @@ export default function Hero({ onHeroStart, onGaneshaReveal, onHeroComplete }: H
                 webkit-playsinline="true"
                 className="hero-video"
                 preload="auto"
-                poster="/assets/hero-poster-v1.jpeg"
-                src="/assets/hero-v1.mp4"
+                poster={hero.posterSrc}
+                src={hero.videoSrc}
                 onPlay={handleVideoPlay}
                 onTimeUpdate={checkTime}
                 onCanPlay={handleVideoReady}
@@ -139,13 +140,17 @@ export default function Hero({ onHeroStart, onGaneshaReveal, onHeroComplete }: H
                 }}
             />
 
-            <div className={`video-loading-overlay ${isVideoReady ? 'fade-out' : ''}`} onClick={handleTap}>
+            <div
+                className={`video-loading-overlay ${isVideoReady ? 'fade-out' : ''}`}
+                style={{ backgroundImage: `url('${hero.posterSrc}')` }}
+                onClick={handleTap}
+            >
                 {/* Empty overlay just for poster background and click interception */}
             </div>
 
             {!isPlaying && (
                 <div className={`hero-cta-overlay ${ctaFadingOut ? 'fading-out' : ''}`} onClick={handleTap}>
-                    <button className="hero-btn">Tap to Reveal</button>
+                    <button className="hero-btn">{hero.revealCtaText}</button>
                 </div>
             )}
         </div>
