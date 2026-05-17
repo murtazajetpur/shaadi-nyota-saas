@@ -1,7 +1,18 @@
 export type PackageType = 'basic' | 'rsvp' | 'whatsapp';
 export type WeddingStatus = 'draft' | 'unpaid' | 'paid' | 'published' | 'suspended';
+export type PaymentStatus = 'unpaid' | 'paid' | 'manual_pending' | 'ref_pending';
 export type RsvpStatus = 'yes' | 'no' | 'maybe' | '';
 export type MealPreference = 'veg' | 'nonVeg' | 'jain' | '';
+
+export const packageDisplayLabels: Record<PackageType, string> = {
+  basic: 'Nyota Classic',
+  rsvp: 'Nyota Plus',
+  whatsapp: 'Nyota Complete',
+};
+
+export const getPackageDisplayLabel = (packageType: PackageType) => {
+  return packageDisplayLabels[packageType];
+};
 
 export interface WeddingEvent {
   id: string;
@@ -47,6 +58,7 @@ export interface SampleWeddingData {
     slug: string;
     packageType: PackageType;
     status: WeddingStatus;
+    paymentStatus: PaymentStatus;
     themeKey: string;
     pageTitle: string;
   };
@@ -161,7 +173,8 @@ export const sampleWeddings: SampleWeddingData[] = [
     wedding: {
       slug: 'murtaza-lubna',
       packageType: 'basic',
-      status: 'draft',
+      status: 'published',
+      paymentStatus: 'paid',
       themeKey: 'palace-door-opening',
       pageTitle: 'Murtaza & Lubna | Shaadi Nyota',
     },
@@ -286,7 +299,8 @@ export const sampleWeddings: SampleWeddingData[] = [
     wedding: {
       slug: 'ali-sara',
       packageType: 'rsvp',
-      status: 'draft',
+      status: 'published',
+      paymentStatus: 'paid',
       themeKey: 'palace-door-opening',
       pageTitle: 'Ali & Sara | Shaadi Nyota',
     },
@@ -422,6 +436,7 @@ export const defaultWeddingSlug = 'murtaza-lubna';
 export const defaultDashboardWeddingSlug = 'ali-sara';
 export const mockDashboardDraftStorageKey = 'shaadi-nyota-mock-dashboard-draft';
 export const mockRsvpResponsesStorageKey = 'shaadi-nyota-mock-rsvp-responses';
+export const mockAdminWeddingsStorageKey = 'shaadi-nyota-mock-admin-weddings';
 
 export const getWeddingBySlug = (slug: string) => {
   return sampleWeddings.find((wedding) => wedding.wedding.slug === slug);

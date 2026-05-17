@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import './App.css';
+import Admin from './components/Admin';
 import Dashboard from './components/Dashboard';
 import InviteExperience from './components/InviteExperience';
 import {
@@ -8,6 +9,7 @@ import {
   getGuestByInviteCode,
   getWeddingBySlug,
   isPersonalizedInvitePath,
+  mockAdminWeddingsStorageKey,
   mockDashboardDraftStorageKey,
   type SampleWeddingData,
 } from './data/sampleWeddingData';
@@ -37,10 +39,13 @@ function App() {
   const pathParts = window.location.pathname.split('/').filter(Boolean);
   const firstSegment = pathParts[0];
   const isDashboard = firstSegment === 'dashboard';
+  const isAdmin = firstSegment === 'admin';
   const isPersonalizedInvite = isPersonalizedInvitePath(window.location.pathname);
   const slug = firstSegment ?? defaultWeddingSlug;
   const savedDraft = window.localStorage.getItem(mockDashboardDraftStorageKey);
+  const savedAdminWeddings = window.localStorage.getItem(mockAdminWeddingsStorageKey);
   let draftWedding: SampleWeddingData | undefined;
+  let adminWeddings: SampleWeddingData[] = [];
 
   if (savedDraft) {
     try {
@@ -50,7 +55,29 @@ function App() {
     }
   }
 
-  const data = draftWedding?.wedding.slug === slug ? draftWedding : getWeddingBySlug(slug);
+  if (savedAdminWeddings) {
+    try {
+      adminWeddings = JSON.parse(savedAdminWeddings) as SampleWeddingData[];
+    } catch {
+      adminWeddings = [];
+    }
+  }
+
+  const sampleWedding = getWeddingBySlug(slug);
+  const baseData = draftWedding?.wedding.slug === slug ? draftWedding : sampleWedding;
+  const adminWedding = adminWeddings.find((wedding) => wedding.wedding.slug === slug);
+  const adminFieldSource = adminWedding ?? sampleWedding;
+  const data = baseData && adminFieldSource
+    ? {
+      ...baseData,
+      wedding: {
+        ...baseData.wedding,
+        packageType: adminFieldSource.wedding.packageType,
+        status: adminFieldSource.wedding.status,
+        paymentStatus: adminFieldSource.wedding.paymentStatus ?? baseData.wedding.paymentStatus,
+      },
+    }
+    : baseData;
   const inviteCode = isPersonalizedInvite ? pathParts[2] : undefined;
   const guest = data && inviteCode ? getGuestByInviteCode(data, inviteCode) : undefined;
   const visibleEvents = data && guest ? getEventsForGuest(data, guest) : undefined;
@@ -65,8 +92,30 @@ function App() {
     return <Dashboard />;
   }
 
+  if (isAdmin) {
+    return <Admin />;
+  }
+
   if (!data) {
     return <NotFound />;
+  }
+
+  if (data.wedding.status === 'suspended') {
+    return (
+      <NotFound
+        title="Wedding website unavailable"
+        message="This wedding website is currently unavailable."
+      />
+    );
+  }
+
+  if (data.wedding.status !== 'published') {
+    return (
+      <NotFound
+        title="Wedding website not live"
+        message="This wedding website is not live yet."
+      />
+    );
   }
 
   if (isPersonalizedInvite && !guest) {

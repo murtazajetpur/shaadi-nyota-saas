@@ -3,6 +3,8 @@ import './Dashboard.css';
 import InviteExperience from './InviteExperience';
 import {
     defaultDashboardWeddingSlug,
+    getPackageDisplayLabel,
+    mockAdminWeddingsStorageKey,
     mockDashboardDraftStorageKey,
     mockRsvpResponsesStorageKey,
     getWeddingBySlug,
@@ -33,6 +35,28 @@ const dashboardBaseWedding = getWeddingBySlug(defaultDashboardWeddingSlug) ?? sa
 
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => {
     return JSON.parse(JSON.stringify(wedding)) as SampleWeddingData;
+};
+
+const applyAdminFields = (wedding: SampleWeddingData): SampleWeddingData => {
+    try {
+        const adminWeddings = JSON.parse(
+            window.localStorage.getItem(mockAdminWeddingsStorageKey) ?? '[]'
+        ) as SampleWeddingData[];
+        const adminWedding = adminWeddings.find((record) => record.wedding.slug === wedding.wedding.slug);
+        if (!adminWedding) return wedding;
+
+        return {
+            ...wedding,
+            wedding: {
+                ...wedding.wedding,
+                packageType: adminWedding.wedding.packageType,
+                status: adminWedding.wedding.status,
+                paymentStatus: adminWedding.wedding.paymentStatus ?? wedding.wedding.paymentStatus,
+            },
+        };
+    } catch {
+        return wedding;
+    }
 };
 
 const guestCsvBaseHeaders = ['guestName', 'phone', 'invitedCount', 'category'];
@@ -112,6 +136,7 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
             ...defaults.wedding,
             ...wedding.wedding,
             status: wedding.wedding.status ?? defaults.wedding.status,
+            paymentStatus: wedding.wedding.paymentStatus ?? defaults.wedding.paymentStatus,
         },
         hero: {
             ...defaults.hero,
@@ -148,16 +173,16 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
 
 const loadInitialWedding = () => {
     const savedDraft = window.localStorage.getItem(mockDashboardDraftStorageKey);
-    if (!savedDraft) return cloneWedding(dashboardBaseWedding);
+    if (!savedDraft) return applyAdminFields(cloneWedding(dashboardBaseWedding));
 
     try {
         const draft = normalizeWedding(JSON.parse(savedDraft) as SampleWeddingData);
         return hasRsvpAccess(draft) && draft.wedding.slug === defaultDashboardWeddingSlug
-            ? draft
-            : cloneWedding(dashboardBaseWedding);
+            ? applyAdminFields(draft)
+            : applyAdminFields(cloneWedding(dashboardBaseWedding));
     } catch {
         window.localStorage.removeItem(mockDashboardDraftStorageKey);
-        return cloneWedding(dashboardBaseWedding);
+        return applyAdminFields(cloneWedding(dashboardBaseWedding));
     }
 };
 
@@ -714,7 +739,7 @@ export default function Dashboard() {
                         <div className="overview-grid">
                             <ReadOnlyBadgeCard
                                 label="Plan"
-                                value={weddingData.wedding.packageType}
+                                value={getPackageDisplayLabel(weddingData.wedding.packageType)}
                                 helperText="Plan changes will be handled from checkout/admin in a later phase."
                                 actionLabel="Request upgrade"
                             />
@@ -1082,8 +1107,8 @@ export default function Dashboard() {
                                 value={previewMode}
                                 options={['public', 'rsvp']}
                                 optionLabels={{
-                                    public: 'Public/basic preview',
-                                    rsvp: 'RSVP package preview',
+                                    public: 'Nyota Classic preview',
+                                    rsvp: 'Nyota Plus preview',
                                 }}
                                 onChange={(value) => setPreviewMode(value as PreviewMode)}
                             />
