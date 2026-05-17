@@ -1,5 +1,7 @@
 export type PackageType = 'basic' | 'rsvp' | 'whatsapp';
 export type WeddingStatus = 'draft' | 'unpaid' | 'paid' | 'published' | 'suspended';
+export type RsvpStatus = 'yes' | 'no' | 'maybe' | '';
+export type MealPreference = 'veg' | 'nonVeg' | 'jain' | '';
 
 export interface WeddingEvent {
   id: string;
@@ -14,6 +16,30 @@ export interface WeddingEvent {
   backgroundImageSrc: string;
   calendarTitle: string;
   calendarDescription: string;
+}
+
+export interface WeddingGuest {
+  id: string;
+  guestName: string;
+  phone: string;
+  invitedCount: number;
+  category: string;
+  inviteCode: string;
+  invitedEventIds: string[];
+}
+
+export interface RsvpResponse {
+  guestId: string;
+  eventId: string;
+  status: RsvpStatus;
+  mealPreference: MealPreference;
+  updatedAt?: string;
+}
+
+export interface StoredRsvpResponse extends RsvpResponse {
+  weddingSlug: string;
+  inviteCode: string;
+  updatedAt: string;
 }
 
 export interface SampleWeddingData {
@@ -69,6 +95,7 @@ export interface SampleWeddingData {
       jain: string;
     };
     successMessage: string[];
+    guests: WeddingGuest[];
   };
   closing: {
     coupleDisplayName: string;
@@ -230,13 +257,24 @@ export const sampleWeddings: SampleWeddingData[] = [
         no: 'Regretfully, no',
         maybe: 'Maybe',
       },
-      mealPreferenceEnabled: false,
+      mealPreferenceEnabled: true,
       mealOptions: {
         veg: 'Veg',
         nonVeg: 'Non-Veg',
         jain: 'Jain',
       },
       successMessage: ['Thank you.', 'We look forward to celebrating together.'],
+      guests: [
+        {
+          id: 'guest-1',
+          guestName: 'Ahmed Khan Family',
+          phone: '+919999999999',
+          invitedCount: 5,
+          category: 'Groom Family',
+          inviteCode: 'm1x9k2',
+          invitedEventIds: ['mehendi', 'sangeet', 'wedding', 'reception'],
+        },
+      ],
     },
     closing: {
       coupleDisplayName: 'Murtaza & Lubna',
@@ -344,13 +382,33 @@ export const sampleWeddings: SampleWeddingData[] = [
         no: 'Regretfully, no',
         maybe: 'Maybe',
       },
-      mealPreferenceEnabled: false,
+      mealPreferenceEnabled: true,
       mealOptions: {
         veg: 'Veg',
         nonVeg: 'Non-Veg',
         jain: 'Jain',
       },
       successMessage: ['Thank you.', 'We look forward to celebrating together.'],
+      guests: [
+        {
+          id: 'guest-1',
+          guestName: 'Ahmed Khan Family',
+          phone: '+919999999999',
+          invitedCount: 5,
+          category: 'Groom Family',
+          inviteCode: 'g1x9k2',
+          invitedEventIds: ['mehendi', 'wedding', 'reception'],
+        },
+        {
+          id: 'guest-2',
+          guestName: 'Fatima Sheikh',
+          phone: '+918888888888',
+          invitedCount: 1,
+          category: 'Bride Friends',
+          inviteCode: 's7p4q1',
+          invitedEventIds: ['sangeet', 'wedding'],
+        },
+      ],
     },
     closing: {
       coupleDisplayName: 'Ali & Sara',
@@ -361,6 +419,9 @@ export const sampleWeddings: SampleWeddingData[] = [
 ];
 
 export const defaultWeddingSlug = 'murtaza-lubna';
+export const defaultDashboardWeddingSlug = 'ali-sara';
+export const mockDashboardDraftStorageKey = 'shaadi-nyota-mock-dashboard-draft';
+export const mockRsvpResponsesStorageKey = 'shaadi-nyota-mock-rsvp-responses';
 
 export const getWeddingBySlug = (slug: string) => {
   return sampleWeddings.find((wedding) => wedding.wedding.slug === slug);
@@ -368,6 +429,19 @@ export const getWeddingBySlug = (slug: string) => {
 
 export const hasRsvpAccess = (wedding: SampleWeddingData) => {
   return wedding.wedding.packageType === 'rsvp' || wedding.wedding.packageType === 'whatsapp';
+};
+
+export const getGuestByInviteCode = (wedding: SampleWeddingData, inviteCode: string) => {
+  return wedding.rsvp.guests.find((guest) => guest.inviteCode === inviteCode);
+};
+
+export const getEventsForGuest = (wedding: SampleWeddingData, guest: WeddingGuest) => {
+  return wedding.events.filter((event) => guest.invitedEventIds.includes(event.id));
+};
+
+export const isPersonalizedInvitePath = (pathname: string) => {
+  const parts = pathname.split('/').filter(Boolean);
+  return parts.length === 3 && parts[1] === 'invite';
 };
 
 export const sampleWeddingData = getWeddingBySlug(defaultWeddingSlug) ?? sampleWeddings[0];

@@ -17,8 +17,18 @@
     min-height: 50vh;
 }
 
+.personalized-rsvp-container {
+    max-width: 380px;
+    justify-content: flex-start;
+    min-height: auto;
+}
+
 .rsvp-header-area {
     margin-bottom: 3rem;
+}
+
+.compact-rsvp-header {
+    margin-bottom: 1.5rem;
 }
 
 .step-indicator {
@@ -126,6 +136,132 @@
 .rsvp-pill-btn:hover {
     border-color: rgba(0, 0, 0, 0.6);
     background: rgba(0, 0, 0, 0.02);
+}
+
+.rsvp-helper-text,
+.rsvp-progress-text {
+    font-family: var(--font-secondary);
+    color: var(--color-text-light);
+    line-height: 1.45;
+}
+
+.rsvp-helper-text {
+    font-size: 0.95rem;
+    margin-top: 0.75rem;
+}
+
+.rsvp-progress-text {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 0.75rem;
+}
+
+.rsvp-pill-btn.selected {
+    border-color: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.rsvp-event-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.compact-rsvp-list {
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.rsvp-event-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.85rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.rsvp-event-copy h3 {
+    font-family: var(--font-secondary);
+    font-size: 1.15rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.rsvp-event-copy p {
+    font-family: var(--font-secondary);
+    font-size: 0.85rem;
+    color: var(--color-text-light);
+}
+
+.rsvp-segmented-control {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border: 1px solid rgba(0, 0, 0, 0.16);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.rsvp-segmented-control button {
+    border: 0;
+    border-right: 1px solid rgba(0, 0, 0, 0.12);
+    background: transparent;
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-size: 0.82rem;
+    padding: 9px 8px;
+    cursor: pointer;
+}
+
+.rsvp-segmented-control button:last-child {
+    border-right: 0;
+}
+
+.rsvp-segmented-control button.selected {
+    background: rgba(197, 160, 89, 0.18);
+    box-shadow: inset 0 0 0 1px rgba(197, 160, 89, 0.35);
+}
+
+.rsvp-meal-panel {
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.rsvp-meal-panel h3 {
+    font-family: var(--font-secondary);
+    font-size: 1.2rem;
+    font-weight: 500;
+    margin-bottom: 0.4rem;
+}
+
+.rsvp-meal-panel p {
+    font-family: var(--font-secondary);
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+    line-height: 1.45;
+    margin-bottom: 1rem;
+}
+
+.rsvp-meal-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+}
+
+.rsvp-submit-btn {
+    width: 100%;
+    margin-top: 1.5rem;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    border-radius: 40px;
+    background: rgba(0, 0, 0, 0.03);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-size: 0.95rem;
+    padding: 12px 24px;
+    cursor: pointer;
+}
+
+.public-rsvp-message {
+    font-size: 1.25rem;
 }
 
 .success-step {

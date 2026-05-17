@@ -2,7 +2,7 @@ import { useState, useCallback, Suspense, lazy, useEffect } from 'react';
 import Hero from './Hero';
 import Section1 from './Section1';
 import AudioPlayer from './AudioPlayer';
-import { hasRsvpAccess, type SampleWeddingData } from '../data/sampleWeddingData';
+import { hasRsvpAccess, type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
 
 const Section2 = lazy(() => import('./Section2'));
 const Section3 = lazy(() => import('./Section3'));
@@ -12,9 +12,19 @@ const Section5 = lazy(() => import('./Section5'));
 interface InviteExperienceProps {
   data: SampleWeddingData;
   embedded?: boolean;
+  guest?: WeddingGuest;
+  visibleEvents?: WeddingEvent[];
+  personalizedInviteMode?: boolean;
 }
 
-export default function InviteExperience({ data, embedded = false }: InviteExperienceProps) {
+export default function InviteExperience({
+  data,
+  embedded = false,
+  guest,
+  visibleEvents,
+  personalizedInviteMode = false,
+}: InviteExperienceProps) {
+  const eventsToShow = visibleEvents ?? data.events;
   const shouldShowRsvp = hasRsvpAccess(data) && data.rsvp.enabled;
   const [ganeshaVisible, setGaneshaVisible] = useState(false);
   const [heroDone, setHeroDone] = useState(false);
@@ -49,7 +59,7 @@ export default function InviteExperience({ data, embedded = false }: InviteExper
       }
 
       const tier3 = [
-        ...data.events.flatMap((event) => [event.foregroundImageSrc, event.backgroundImageSrc]),
+        ...eventsToShow.flatMap((event) => [event.foregroundImageSrc, event.backgroundImageSrc]),
         ...data.closing.carouselImages,
         data.closing.frameImageSrc,
       ];
@@ -57,7 +67,7 @@ export default function InviteExperience({ data, embedded = false }: InviteExper
     };
 
     runPreload();
-  }, [heroStarted, data]);
+  }, [heroStarted, data, eventsToShow]);
 
   const inviteCanvas = (
     <div className={`phone-canvas ${!heroDone ? 'no-scroll' : 'ready-to-snap'}`}>
@@ -74,8 +84,16 @@ export default function InviteExperience({ data, embedded = false }: InviteExper
           <Section1 ganeshaVisible={ganeshaVisible} hero={data.hero} />
           <Suspense fallback={null}>
             {data.couple.enabled && <Section2 couple={data.couple} />}
-            <Section3 events={data.events} />
-            {shouldShowRsvp && <Section4 rsvp={data.rsvp} />}
+            <Section3 events={eventsToShow} />
+            {shouldShowRsvp && (
+              <Section4
+                rsvp={data.rsvp}
+                weddingSlug={data.wedding.slug}
+                events={eventsToShow}
+                guest={guest}
+                personalizedInviteMode={personalizedInviteMode}
+              />
+            )}
             <Section5 closing={data.closing} />
           </Suspense>
         </>
