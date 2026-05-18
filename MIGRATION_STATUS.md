@@ -26,6 +26,16 @@ The app still keeps fallback code for local development and legacy sample invite
 
 These keys are only intended for development fallback/sample routes when Supabase is unavailable or when a public slug does not exist in Supabase.
 
+## Required Supabase Setup Files
+
+Run these files in this order for a fresh Supabase project:
+
+1. `supabase/schema.sql`
+2. `supabase/rls_policies.sql`
+3. `supabase/seed.sql`
+
+Then add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`.
+
 ## Known Limitations
 
 - Theme media and detailed invite copy are still seeded from the existing theme defaults unless edited through current settings.
@@ -38,16 +48,28 @@ These keys are only intended for development fallback/sample routes when Supabas
 
 ## Required RLS Summary
 
+- `public.is_admin()` checks `profiles.role = 'admin'`.
+- Users can read and update their own `profiles` row.
+- Admins can read all `profiles`.
+- Couples can create their own `weddings`.
 - Couples can read and update their own `weddings`.
-- Couples can read and update their own `wedding_settings`.
-- Couples can CRUD `events` for weddings they own.
-- Couples can CRUD `guests` for weddings they own.
-- Couples can CRUD `guest_event_invites` for weddings they own.
-- Couples can read `rsvp_responses` for weddings they own.
-- Public users can read published wedding invite data needed for public and personalized invite routes.
-- Invite guests can submit RSVP responses for valid invite links.
 - Admins can read and update all `weddings`.
-- Admins can read all `events`, `guests`, `guest_event_invites`, and `rsvp_responses` for counts and support.
+- Public invite routes can read published `weddings`.
+- Couples can create, read, and update their own `wedding_settings`.
+- Admins can read all relevant `wedding_settings`.
+- Public invite routes can read published `wedding_settings`.
+- Couples can CRUD `events` for weddings they own.
+- Admins can CRUD all `events`.
+- Public invite routes can read published `events`.
+- Couples can CRUD `guests` for weddings they own.
+- Admins can CRUD all `guests`.
+- Public invite routes can read published invite guests and update meal preference for published weddings.
+- Couples can CRUD `guest_event_invites` for weddings they own.
+- Admins can CRUD all `guest_event_invites`.
+- Public invite routes can read published guest-event invite mappings.
+- Couples can read `rsvp_responses` for weddings they own.
+- Admins can read all `rsvp_responses`.
+- Public invite routes can read, insert, and update RSVP responses for valid guest-event invite combinations on published weddings.
 
 ## Next Recommended Phases
 
@@ -57,4 +79,3 @@ These keys are only intended for development fallback/sample routes when Supabas
 4. Add WhatsApp invite/reminder automation after adding timezone-aware event datetime fields.
 5. Add admin wedding creation/support workflows.
 6. Add multi-wedding support per couple account if needed.
-

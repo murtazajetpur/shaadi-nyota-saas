@@ -1,6 +1,14 @@
 # Supabase Setup
 
-These files prepare the Shaadi Nyota backend schema. The current app still uses mock sample data and `localStorage`; no runtime behavior has been migrated yet.
+These files prepare the Shaadi Nyota Supabase backend used by the MVP app.
+
+## Setup Order
+
+1. Run `supabase/schema.sql`
+2. Run `supabase/rls_policies.sql`
+3. Run `supabase/seed.sql`
+4. Add local env vars
+5. Disable Confirm Email for local MVP testing if desired
 
 ## 1. Create A Supabase Project
 
@@ -10,9 +18,7 @@ These files prepare the Shaadi Nyota backend schema. The current app still uses 
 
 ## 2. Run The Schema
 
-1. Open the Supabase SQL editor.
-2. Paste the full contents of `supabase/schema.sql`.
-3. Run the SQL.
+Open the Supabase SQL editor, paste the full contents of `supabase/schema.sql`, and run it.
 
 The schema creates:
 
@@ -27,13 +33,28 @@ The schema creates:
 - `reveal_variations`
 - `music_options`
 
-It also adds primary keys, foreign keys, check constraints, indexes, comments, and a simple `updated_at` trigger helper.
+It also adds primary keys, foreign keys, check constraints, indexes, comments, and the `updated_at` trigger helper.
 
-## 3. Run The Seed
+## 3. Run RLS Policies
 
-1. Open another SQL editor tab.
-2. Paste the full contents of `supabase/seed.sql`.
-3. Run the SQL.
+Open a new SQL editor tab, paste the full contents of `supabase/rls_policies.sql`, and run it.
+
+This enables row level security and creates policies for:
+
+- users reading/updating their own profile
+- admins reading all profiles
+- couples creating, reading, and updating their own weddings
+- admins reading/updating all weddings
+- couples managing their own settings, events, guests, and guest-event invites
+- admins managing all events, guests, and guest-event invites
+- couples reading RSVP responses for their own weddings
+- admins reading all RSVP responses
+- public invite routes reading published wedding data
+- public personalized invites submitting RSVP responses for valid published guest-event combinations
+
+## 4. Run The Seed
+
+Open another SQL editor tab, paste the full contents of `supabase/seed.sql`, and run it.
 
 The seed adds minimal setup data:
 
@@ -41,9 +62,9 @@ The seed adds minimal setup data:
 - Reveal variation: default Ganesha reveal
 - Music option: `Din Shagna Da`
 
-It does not seed full weddings, guests, or RSVP responses yet.
+It does not seed full weddings, guests, or RSVP responses.
 
-## 4. Add Local Env Vars
+## 5. Add Local Env Vars
 
 Copy `.env.example` to `.env` and fill in:
 
@@ -52,26 +73,24 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 ```
 
-Use the project URL and anon public key from the Supabase project settings.
+Use the project URL and anon public key from Supabase project settings.
 
 Do not commit `.env`. It is ignored by git.
 
-## 5. Current App Behavior
-
-The current Vite React app is still in mock mode:
-
-- wedding data comes from sample data/localStorage
-- dashboard draft data stays in localStorage
-- admin state stays in localStorage
-- RSVP responses stay in localStorage
-
-Future migration phases will wire these screens to Supabase gradually.
-
 ## 6. Auth Notes
 
-- Confirm Email is currently disabled for local MVP testing.
+- Confirm Email can be disabled for local MVP testing.
 - Signup passes `full_name` through Supabase Auth user metadata.
 - The frontend does not insert into `public.profiles` during signup.
-- The `public.handle_new_user()` database trigger creates the `profiles` row after a new auth user signs up.
+- The `public.handle_new_user()` database trigger should create the `profiles` row after a new auth user signs up.
 - New profiles should default to `role = 'couple'`.
 - To test admin access locally, manually update the test user's `profiles.role` to `admin` in Supabase.
+
+## 7. Runtime Notes
+
+- Public RSVP depends on `weddings.status = 'published'`.
+- Draft weddings are visible in the couple dashboard and admin panel but not on public invite routes.
+- Suspended weddings show an unavailable message on public invite routes.
+- Admin pages rely on `public.is_admin()` in RLS policies.
+- The app still keeps local development fallback support for legacy sample routes when Supabase is unavailable.
+
