@@ -334,7 +334,7 @@ function PublicInviteRoute({
   if (data.wedding.status !== 'published') {
     return (
       <NotFound
-        title="Wedding website not live"
+        title="Wedding website not live yet"
         message="This wedding website is not live yet."
       />
     );

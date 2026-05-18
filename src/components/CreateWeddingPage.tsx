@@ -167,7 +167,7 @@ export default function CreateWeddingPage() {
     <main className="create-wedding-page">
       <section className="create-wedding-card">
         <p className="create-wedding-eyebrow">Shaadi Nyota</p>
-        <h1>Create your wedding</h1>
+        <h1>Create your wedding website</h1>
         <p className="create-wedding-copy">
           Start with the basic wedding details. You can add events, guests, and RSVP settings from your dashboard.
         </p>
