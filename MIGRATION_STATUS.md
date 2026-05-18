@@ -28,13 +28,15 @@ These keys are only intended for development fallback/sample routes when Supabas
 
 ## Required Supabase Setup Files
 
-Run these files in this order for a fresh Supabase project:
+The current Supabase project is already being used for development and testing. We do not need to create a fresh Supabase project right now.
+
+Running the setup from scratch is a future reproducibility and production-readiness test. Before production launch, verify that a fresh Supabase project works with this order:
 
 1. `supabase/schema.sql`
 2. `supabase/rls_policies.sql`
 3. `supabase/seed.sql`
-
-Then add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`.
+4. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`
+5. Configure Auth settings, including Confirm Email behavior
 
 ## Known Limitations
 

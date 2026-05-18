@@ -2,13 +2,17 @@
 
 These files prepare the Shaadi Nyota Supabase backend used by the MVP app.
 
+The current Supabase project is already being used for development and testing. You do not need to create a fresh Supabase project right now.
+
+The setup order below is for future reproducibility and production-readiness testing. Before production launch, run through it on a fresh Supabase project to confirm the documented setup works end to end.
+
 ## Setup Order
 
 1. Run `supabase/schema.sql`
 2. Run `supabase/rls_policies.sql`
 3. Run `supabase/seed.sql`
 4. Add local env vars
-5. Disable Confirm Email for local MVP testing if desired
+5. Configure Auth settings, including Confirm Email behavior
 
 ## 1. Create A Supabase Project
 
@@ -93,4 +97,3 @@ Do not commit `.env`. It is ignored by git.
 - Suspended weddings show an unavailable message on public invite routes.
 - Admin pages rely on `public.is_admin()` in RLS policies.
 - The app still keeps local development fallback support for legacy sample routes when Supabase is unavailable.
-
