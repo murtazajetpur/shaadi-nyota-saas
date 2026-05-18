@@ -33,6 +33,7 @@ import {
 type DashboardTab = 'overview' | 'couple' | 'events' | 'guests' | 'rsvp' | 'theme' | 'preview';
 type PreviewMode = 'public' | 'rsvp';
 type CsvImportMode = 'append' | 'replace';
+type DashboardMode = 'couple' | 'admin';
 
 const dashboardTabs: Array<{ id: DashboardTab; label: string }> = [
     { id: 'overview', label: 'Overview' },
@@ -213,10 +214,16 @@ export default function Dashboard({
     authNotice,
     initialWedding,
     supabaseWeddingId,
+    title = 'Couple Dashboard',
+    eyebrow = 'Shaadi Nyota',
+    mode = 'couple',
 }: {
     authNotice?: string;
     initialWedding?: SampleWeddingData;
     supabaseWeddingId?: string;
+    title?: string;
+    eyebrow?: string;
+    mode?: DashboardMode;
 }) {
     const { user, isConfigured, signOut } = useAuth();
     const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
@@ -227,29 +234,39 @@ export default function Dashboard({
     const [guestImportWarnings, setGuestImportWarnings] = useState<string[]>([]);
     const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
     const [rsvpResponses, setRsvpResponses] = useState<StoredRsvpResponse[]>(loadStoredRsvpResponses);
+    const [isRsvpLoading, setIsRsvpLoading] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [saveStatus, setSaveStatus] = useState('');
     const [saveError, setSaveError] = useState('');
+    const isAdminMode = mode === 'admin';
+    const adminRlsHint = ' Admin access requires RLS policies allowing admins to read and update weddings, events, guests, guest_event_invites, and RSVP responses.';
 
     useEffect(() => {
-        document.title = 'Mock Dashboard | Shaadi Nyota';
+        document.title = `${title} | Shaadi Nyota`;
         const previousBodyOverflow = document.body.style.overflow;
         document.body.style.overflow = 'auto';
 
         return () => {
             document.body.style.overflow = previousBodyOverflow;
         };
-    }, []);
+    }, [title]);
 
     useEffect(() => {
         if (activeTab === 'rsvp') {
             if (supabaseWeddingId) {
+                setIsRsvpLoading(true);
                 loadSupabaseRsvpResponses(
                     supabaseWeddingId,
                     weddingData.wedding.slug,
                     weddingData.rsvp.guests
                 ).then((result) => {
-                    if (!result.error) setRsvpResponses(result.responses);
+                    setIsRsvpLoading(false);
+                    if (!result.error) {
+                        setRsvpResponses(result.responses);
+                    } else {
+                        console.warn('Could not load RSVP responses', result.error);
+                        setSaveError('Could not load RSVP responses.');
+                    }
                 });
             } else {
                 setRsvpResponses(loadStoredRsvpResponses());
@@ -420,22 +437,27 @@ export default function Dashboard({
             });
 
             if (result.error) {
+                console.warn('Could not save wedding details', result.error);
                 setSaveStatus('');
-                setSaveError(`Could not save wedding details. ${result.error}`);
+                setSaveError(result.error.toLowerCase().includes('duplicate') || result.error.toLowerCase().includes('unique')
+                    ? 'This slug is already in use. Please choose another slug.'
+                    : 'Could not save wedding details.');
                 return;
             }
 
             const eventsResult = await saveSupabaseEvents(supabaseWeddingId, weddingData.events);
             if (eventsResult.error) {
+                console.warn('Could not save events', eventsResult.error);
                 setSaveStatus('');
-                setSaveError(`Could not save events. ${eventsResult.error}`);
+                setSaveError(`Could not save events.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
 
             const guestsResult = await saveSupabaseGuests(supabaseWeddingId, weddingData.rsvp.guests);
             if (guestsResult.error) {
+                console.warn('Could not save guests', guestsResult.error);
                 setSaveStatus('');
-                setSaveError(`Could not save guests. ${guestsResult.error}`);
+                setSaveError(`Could not save guests.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
         }
@@ -535,7 +557,8 @@ export default function Dashboard({
             setSaveError('');
             const result = await createSupabaseEvent(supabaseWeddingId, newEvent, weddingData.events.length);
             if (result.error || !result.event) {
-                setSaveError(`Could not add event. ${result.error}`);
+                console.warn('Could not add event', result.error);
+                setSaveError(`Could not add event.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
             updateWeddingData((current) => ({
@@ -553,10 +576,12 @@ export default function Dashboard({
 
     const deleteEvent = async (index: number) => {
         const eventToDelete = weddingData.events[index];
+        if (!eventToDelete || !window.confirm(`Delete ${eventToDelete.eventName || 'this event'}?`)) return;
         if (supabaseWeddingId && eventToDelete) {
             const result = await deleteSupabaseEvent(eventToDelete.id);
             if (result.error) {
-                setSaveError(`Could not delete event. ${result.error}`);
+                console.warn('Could not delete event', result.error);
+                setSaveError(`Could not delete event.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
         }
@@ -608,7 +633,10 @@ export default function Dashboard({
 
         if (supabaseWeddingId) {
             replaceSupabaseGuestInvites(supabaseWeddingId, currentGuest.id, nextEventIds).then((result) => {
-                if (result.error) setSaveError(`Could not update guest events. ${result.error}`);
+                if (result.error) {
+                    console.warn('Could not update guest events', result.error);
+                    setSaveError(`Could not update guest events.${isAdminMode ? adminRlsHint : ''}`);
+                }
             });
         }
     };
@@ -627,7 +655,8 @@ export default function Dashboard({
         if (supabaseWeddingId) {
             const result = await createSupabaseGuest(supabaseWeddingId, newGuest);
             if (result.error || !result.guest) {
-                setSaveError(`Could not add guest. ${result.error}`);
+                console.warn('Could not add guest', result.error);
+                setSaveError(`Could not add guest.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
             updateWeddingData((current) => ({
@@ -651,10 +680,12 @@ export default function Dashboard({
 
     const deleteGuest = async (index: number) => {
         const guestToDelete = weddingData.rsvp.guests[index];
+        if (!guestToDelete || !window.confirm(`Delete ${guestToDelete.guestName || 'this guest'}?`)) return;
         if (supabaseWeddingId && guestToDelete) {
             const result = await deleteSupabaseGuest(guestToDelete.id);
             if (result.error) {
-                setSaveError(`Could not delete guest. ${result.error}`);
+                console.warn('Could not delete guest', result.error);
+                setSaveError(`Could not delete guest.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
         }
@@ -788,7 +819,8 @@ export default function Dashboard({
         if (supabaseWeddingId) {
             const result = await importSupabaseGuests(supabaseWeddingId, importedGuests, guestImportMode);
             if (result.error) {
-                setGuestImportWarnings([...warnings, `Import failed: ${result.error}`]);
+                console.warn('Could not import CSV', result.error);
+                setGuestImportWarnings([...warnings, `Could not import CSV. Please check the file and try again.${isAdminMode ? adminRlsHint : ''}`]);
                 return;
             }
             const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
@@ -884,8 +916,8 @@ export default function Dashboard({
         <main className="dashboard-page">
             <aside className="dashboard-sidebar">
                 <div>
-                    <p className="dashboard-eyebrow">Shaadi Nyota</p>
-                    <h1>Couple Dashboard</h1>
+                    <p className="dashboard-eyebrow">{eyebrow}</p>
+                    <h1>{title}</h1>
                     {user?.email && <p className="dashboard-auth-user">{user.email}</p>}
                 </div>
                 {authNotice && <p className="dashboard-auth-notice">{authNotice}</p>}
@@ -956,8 +988,8 @@ export default function Dashboard({
                         )}
                         <p className="dashboard-note">
                             {supabaseWeddingId
-                                ? 'Core wedding, event, guest, and RSVP data is now saved in Supabase. Some theme copy still uses the local MVP defaults.'
-                                : 'This is a mock dashboard. Changes are stored only in local React state and are not saved to a database yet.'}
+                                ? 'Core wedding, event, guest, and RSVP data is saved securely.'
+                                : 'Development fallback mode is active because Supabase is not configured.'}
                         </p>
                     </div>
                 )}
@@ -1023,6 +1055,9 @@ export default function Dashboard({
                                     </div>
                                 </div>
                             ))}
+                            {weddingData.events.length === 0 && (
+                                <p className="dashboard-note">No events yet. Add your first event.</p>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1186,7 +1221,11 @@ export default function Dashboard({
                                 </tbody>
                             </table>
                             {filteredGuestRows.length === 0 && (
-                                <p className="dashboard-note">No guests match this search.</p>
+                                <p className="dashboard-note">
+                                    {weddingData.rsvp.guests.length === 0
+                                        ? 'No guests yet. Add guests manually or import CSV.'
+                                        : 'No guests match this search.'}
+                                </p>
                             )}
                         </div>
                     </div>
@@ -1197,7 +1236,7 @@ export default function Dashboard({
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
                                 <p className="dashboard-eyebrow">RSVP Dashboard</p>
-                                <h2>{supabaseWeddingId ? 'RSVP analytics' : 'Mock RSVP analytics'}</h2>
+                                <h2>RSVP analytics</h2>
                             </div>
                             <div className="dashboard-header-actions">
                                 <button className="dashboard-primary-btn secondary" type="button" onClick={exportRsvpCsv}>
@@ -1205,7 +1244,7 @@ export default function Dashboard({
                                 </button>
                                 {!supabaseWeddingId && (
                                     <button className="dashboard-primary-btn secondary" type="button" onClick={clearMockRsvpResponses}>
-                                        Clear Mock RSVP Responses
+                                        Clear Fallback RSVP Responses
                                     </button>
                                 )}
                             </div>
@@ -1218,6 +1257,10 @@ export default function Dashboard({
                             <InfoBlock label="Maybe" value={String(rsvpAnalytics.totals.maybe)} />
                             <InfoBlock label="Pending" value={String(rsvpAnalytics.totals.pending)} />
                         </div>
+                        {isRsvpLoading && <p className="dashboard-note">Loading RSVP responses...</p>}
+                        {!isRsvpLoading && rsvpResponses.filter((response) => response.weddingSlug === weddingData.wedding.slug).length === 0 && (
+                            <p className="dashboard-note">No RSVP responses yet.</p>
+                        )}
 
                         <RsvpTable title="Event-wise RSVP summary" headers={['Event', 'Invited Families', 'Yes', 'No', 'Maybe', 'Pending']}>
                             {rsvpAnalytics.eventSummaries.map(({ event, invitedGuests, counts }) => (

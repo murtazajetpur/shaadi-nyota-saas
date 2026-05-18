@@ -113,7 +113,7 @@ function DashboardRoute() {
   }, [isConfigured, loading, user]);
 
   if (!isConfigured) {
-    return <Dashboard authNotice="Supabase env vars are missing, so the mock dashboard is running in development bypass mode." />;
+    return <Dashboard authNotice="Supabase env vars are missing, so the dashboard is running with development fallback data." />;
   }
 
   if (loading || isCheckingWedding) {
@@ -139,6 +139,63 @@ function DashboardRoute() {
   }
 
   return <Dashboard initialWedding={dashboardWedding ?? buildWeddingShellFromRow(ownedWedding)} supabaseWeddingId={ownedWedding.id} />;
+}
+
+function AdminWeddingDetailRoute({ weddingId }: { weddingId: string }) {
+  const [wedding, setWedding] = useState<SampleWeddingData | null>(null);
+  const [isLoadingWedding, setIsLoadingWedding] = useState(true);
+  const [weddingError, setWeddingError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadWedding = async () => {
+      setIsLoadingWedding(true);
+      const result = await loadSupabaseWeddingBundle(weddingId, { includeGuests: true });
+      if (!mounted) return;
+
+      if (result.error || !result.wedding) {
+        console.warn('Could not load admin wedding detail', result.error);
+        setWedding(null);
+        setWeddingError(result.error || 'Wedding not found.');
+      } else {
+        setWedding(result.wedding);
+        setWeddingError('');
+      }
+      setIsLoadingWedding(false);
+    };
+
+    void loadWedding();
+
+    return () => {
+      mounted = false;
+    };
+  }, [weddingId]);
+
+  if (isLoadingWedding) {
+    return <AccessMessage title="Loading wedding" message="Please wait while we load this wedding for admin editing." />;
+  }
+
+  if (weddingError || !wedding) {
+    return (
+      <AccessMessage
+        title="Wedding not found"
+        message={weddingError ? 'Could not load this wedding. Check the wedding ID and admin RLS policies.' : 'Wedding not found.'}
+        action={<a className="auth-link-button" href="/admin">Back to Admin</a>}
+      />
+    );
+  }
+
+  return (
+    <Dashboard
+      mode="admin"
+      title="Admin View"
+      eyebrow="Shaadi Nyota Admin"
+      authNotice="You are editing this wedding as an admin."
+      initialWedding={wedding}
+      supabaseWeddingId={weddingId}
+    />
+  );
 }
 
 function PublicInviteRoute({
@@ -307,6 +364,7 @@ function AppRoutes() {
   const { user, profile, loading, profileLoading, profileError, isConfigured, signOut, refreshProfile } = useAuth();
   const pathParts = window.location.pathname.split('/').filter(Boolean);
   const firstSegment = pathParts[0];
+  const secondSegment = pathParts[1];
   const isDashboard = firstSegment === 'dashboard';
   const isAdmin = firstSegment === 'admin';
   const isLogin = firstSegment === 'login';
@@ -334,7 +392,7 @@ function AppRoutes() {
 
   if (isAdmin) {
     if (!isConfigured) {
-      return <Admin authNotice="Supabase env vars are missing, so the mock admin is running in development bypass mode." />;
+      return <Admin authNotice="Supabase env vars are missing, so admin is running with development fallback data." />;
     }
     if (loading || profileLoading) {
       return <AccessMessage title="Checking admin access" message="Please wait while we verify your account." />;
@@ -375,6 +433,19 @@ function AppRoutes() {
           }}>Sign Out</button>}
         />
       );
+    }
+    if (secondSegment === 'weddings') {
+      const weddingId = pathParts[2];
+      if (!weddingId) {
+        return (
+          <AccessMessage
+            title="Wedding not found"
+            message="Please choose a wedding from the admin panel."
+            action={<a className="auth-link-button" href="/admin">Back to Admin</a>}
+          />
+        );
+      }
+      return <AdminWeddingDetailRoute weddingId={weddingId} />;
     }
     return <Admin />;
   }

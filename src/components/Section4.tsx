@@ -135,6 +135,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
             });
 
             if (result.error) {
+                console.warn('Could not submit RSVP', result.error);
                 setSubmitError(result.error);
                 return;
             }
@@ -248,7 +249,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                 )}
                 {submitError && (
                     <div className="rsvp-step fade-in success-step">
-                        <p className="success-text">Could not save RSVP. {submitError}</p>
+                        <p className="success-text">Could not submit RSVP. Please try again.</p>
                     </div>
                 )}
             </div>

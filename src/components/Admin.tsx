@@ -22,6 +22,7 @@ type AdminDataSource = 'supabase' | 'mock';
 
 interface SupabaseWeddingRow {
     id: string;
+    owner_id: string | null;
     slug: string;
     package_type: PackageType;
     status: WebsiteStatus;
@@ -215,7 +216,7 @@ const formatDate = (value: string | null) => {
 };
 
 export default function Admin({ authNotice }: { authNotice?: string }) {
-    const { user, isConfigured, signOut } = useAuth();
+    const { user, profile, isConfigured, signOut } = useAuth();
     const [mockWeddings, setMockWeddings] = useState<SampleWeddingData[]>(loadMockWeddings);
     const [adminWeddings, setAdminWeddings] = useState<AdminWeddingRecord[]>([]);
     const [dataSource, setDataSource] = useState<AdminDataSource>('mock');
@@ -233,22 +234,23 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
         if (!supabase || !isSupabaseConfigured) {
             setDataSource('mock');
             setAdminWeddings(mockWeddings.map((wedding) => mockWeddingToRecord(wedding, rsvpResponses)));
-            setDevWarning('Supabase env vars are missing, so the mock admin is running in development fallback mode.');
+            setDevWarning('Supabase env vars are missing, so admin is running with development fallback data.');
             return;
         }
 
         setIsLoadingWeddings(true);
         const { data, error } = await supabase
             .from('weddings')
-            .select('id, slug, package_type, status, payment_status, bride_name, groom_name, display_name, page_title, theme_key, published_at, created_at')
+            .select('id, owner_id, slug, package_type, status, payment_status, bride_name, groom_name, display_name, page_title, theme_key, published_at, created_at')
             .order('created_at', { ascending: false });
 
         if (error) {
             setIsLoadingWeddings(false);
-            setDataSource('mock');
-            setAdminWeddings(mockWeddings.map((wedding) => mockWeddingToRecord(wedding, rsvpResponses)));
-            setDevWarning(`Supabase admin query failed: ${error.message}. Showing mock fallback data.`);
-            setSaveStatus('Mock fallback active');
+            setDataSource('supabase');
+            setAdminWeddings([]);
+            console.warn('Could not load admin data', error.message);
+            setDevWarning('Could not load admin data. Check admin RLS policies and try again.');
+            setSaveStatus('Could not load admin data');
             return;
         }
 
@@ -298,13 +300,28 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
         setIsLoadingWeddings(false);
         setDataSource('supabase');
         setAdminWeddings(weddings.map((wedding) => supabaseWeddingToRecord(wedding, countMap.get(wedding.id))));
-        setDevWarning(countErrors.join(' '));
+        const allVisibleWeddingsAreOwnedByAdmin = Boolean(
+            profile?.role === 'admin' &&
+            user?.id &&
+            weddings.length > 0 &&
+            weddings.every((wedding) => wedding.owner_id === user.id)
+        );
+        const visibilityWarning = allVisibleWeddingsAreOwnedByAdmin
+            ? 'Admin query is unscoped, but Supabase returned only weddings owned by this user. If other weddings exist, update RLS so admins can read all weddings.'
+            : '';
+        setDevWarning([visibilityWarning, ...countErrors].filter(Boolean).join(' '));
         setSaveStatus(countErrors.length ? 'Loaded weddings; some counts failed' : 'Loaded from Supabase');
     };
 
     useEffect(() => {
         document.title = 'Admin | Shaadi Nyota';
         setRsvpResponses(loadStoredRsvpResponses());
+        const previousBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'auto';
+
+        return () => {
+            document.body.style.overflow = previousBodyOverflow;
+        };
     }, []);
 
     useEffect(() => {
@@ -337,7 +354,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
     const persistMockWeddings = (nextWeddings: SampleWeddingData[]) => {
         setMockWeddings(nextWeddings);
         window.localStorage.setItem(mockAdminWeddingsStorageKey, JSON.stringify(nextWeddings));
-        setSaveStatus('Saved mock data');
+        setSaveStatus('Saved fallback data');
     };
 
     const updateMockWedding = (
@@ -487,7 +504,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
         const nextWeddings = mergeDashboardDraft(mockWeddings.map(normalizeAdminWedding));
         persistMockWeddings(nextWeddings);
         setRsvpResponses(loadStoredRsvpResponses());
-        setSaveStatus('Refreshed mock data');
+        setSaveStatus('Refreshed fallback data');
     };
 
     const handleLogout = async () => {
@@ -505,7 +522,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                     <div>
                         <p className="admin-eyebrow">Shaadi Nyota</p>
                         <h1>Admin Panel</h1>
-                        <p>Manual package, payment, and publishing controls for local testing.</p>
+                        <p>Manual package, payment, and publishing controls.</p>
                         {user?.email && <p className="admin-auth-user">{user.email}</p>}
                         {(authNotice || devWarning) && <p className="admin-auth-notice">{authNotice || devWarning}</p>}
                         {dataSource === 'supabase' && (
@@ -515,7 +532,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                     <div className="admin-header-actions">
                         <span>{isLoadingWeddings ? 'Loading...' : saveStatus}</span>
                         <button type="button" onClick={refreshData}>
-                            {dataSource === 'supabase' ? 'Refresh Supabase Data' : 'Refresh Mock Data'}
+                            {dataSource === 'supabase' ? 'Refresh Data' : 'Refresh Fallback Data'}
                         </button>
                         {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                     </div>
@@ -711,7 +728,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                         <h3>Links</h3>
                                                         <div className="admin-link-stack">
                                                             <a href={`/${wedding.slug}`} target="_blank" rel="noreferrer">Open Website</a>
-                                                            <a href="/dashboard" target="_blank" rel="noreferrer">Open Couple Dashboard</a>
+                                                            <a href={`/admin/weddings/${wedding.id}`} target="_blank" rel="noreferrer">View/Edit Wedding</a>
                                                             <a href="/dashboard" target="_blank" rel="noreferrer">View RSVP</a>
                                                         </div>
                                                     </div>
@@ -724,7 +741,9 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                         </tbody>
                     </table>
                     {filteredSummaries.length === 0 && (
-                        <p className="admin-empty-state">No weddings match these filters.</p>
+                        <p className="admin-empty-state">
+                            {summaries.length === 0 ? 'No weddings found. Create your first wedding.' : 'No weddings match these filters.'}
+                        </p>
                     )}
                 </div>
             </section>

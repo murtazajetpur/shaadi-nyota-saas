@@ -169,7 +169,7 @@ export default function CreateWeddingPage() {
         <p className="create-wedding-eyebrow">Shaadi Nyota</p>
         <h1>Create your wedding</h1>
         <p className="create-wedding-copy">
-          Start with the basic wedding details. Guest lists, RSVP, and admin data remain in the mock workflow for now.
+          Start with the basic wedding details. You can add events, guests, and RSVP settings from your dashboard.
         </p>
 
         {!isConfigured && (
