@@ -185,7 +185,10 @@ const mockWeddingToRecord = (wedding: SampleWeddingData, rsvpResponses: StoredRs
     eventCount: wedding.events.length,
 });
 
-const supabaseWeddingToRecord = (wedding: SupabaseWeddingRow): AdminWeddingRecord => {
+const supabaseWeddingToRecord = (
+    wedding: SupabaseWeddingRow,
+    counts: { guestCount?: number; invitedCount?: number; responseCount?: number; eventCount?: number } = {}
+): AdminWeddingRecord => {
     const displayName = wedding.display_name || [wedding.groom_name, wedding.bride_name].filter(Boolean).join(' & ') || 'Untitled wedding';
 
     return {
@@ -199,10 +202,10 @@ const supabaseWeddingToRecord = (wedding: SupabaseWeddingRow): AdminWeddingRecor
         themeKey: wedding.theme_key || 'palace-door-opening',
         createdAt: wedding.created_at,
         publishedAt: wedding.published_at,
-        guestCount: null,
-        invitedCount: null,
-        responseCount: null,
-        eventCount: null,
+        guestCount: counts.guestCount ?? 0,
+        invitedCount: counts.invitedCount ?? 0,
+        responseCount: counts.responseCount ?? 0,
+        eventCount: counts.eventCount ?? 0,
     };
 };
 
@@ -239,9 +242,9 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
             .from('weddings')
             .select('id, slug, package_type, status, payment_status, bride_name, groom_name, display_name, page_title, theme_key, published_at, created_at')
             .order('created_at', { ascending: false });
-        setIsLoadingWeddings(false);
 
         if (error) {
+            setIsLoadingWeddings(false);
             setDataSource('mock');
             setAdminWeddings(mockWeddings.map((wedding) => mockWeddingToRecord(wedding, rsvpResponses)));
             setDevWarning(`Supabase admin query failed: ${error.message}. Showing mock fallback data.`);
@@ -249,10 +252,54 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
             return;
         }
 
+        const weddings = (data ?? []) as SupabaseWeddingRow[];
+        const weddingIds = weddings.map((wedding) => wedding.id);
+        const countMap = new Map<string, { guestCount: number; invitedCount: number; responseCount: number; eventCount: number }>();
+        weddingIds.forEach((id) => countMap.set(id, { guestCount: 0, invitedCount: 0, responseCount: 0, eventCount: 0 }));
+        const countErrors: string[] = [];
+
+        if (weddingIds.length) {
+            const [guestsResult, responsesResult, eventsResult] = await Promise.all([
+                supabase.from('guests').select('wedding_id,invited_count').in('wedding_id', weddingIds),
+                supabase.from('rsvp_responses').select('wedding_id').in('wedding_id', weddingIds),
+                supabase.from('events').select('wedding_id').in('wedding_id', weddingIds),
+            ]);
+
+            if (!guestsResult.error) {
+                (guestsResult.data ?? []).forEach((guest) => {
+                    const counts = countMap.get(guest.wedding_id as string);
+                    if (!counts) return;
+                    counts.guestCount += 1;
+                    counts.invitedCount += Number(guest.invited_count ?? 0);
+                });
+            } else {
+                countErrors.push(`Guest counts failed: ${guestsResult.error.message}`);
+            }
+
+            if (!responsesResult.error) {
+                (responsesResult.data ?? []).forEach((response) => {
+                    const counts = countMap.get(response.wedding_id as string);
+                    if (counts) counts.responseCount += 1;
+                });
+            } else {
+                countErrors.push(`RSVP counts failed: ${responsesResult.error.message}`);
+            }
+
+            if (!eventsResult.error) {
+                (eventsResult.data ?? []).forEach((event) => {
+                    const counts = countMap.get(event.wedding_id as string);
+                    if (counts) counts.eventCount += 1;
+                });
+            } else {
+                countErrors.push(`Event counts failed: ${eventsResult.error.message}`);
+            }
+        }
+
+        setIsLoadingWeddings(false);
         setDataSource('supabase');
-        setAdminWeddings((data as SupabaseWeddingRow[]).map(supabaseWeddingToRecord));
-        setDevWarning('');
-        setSaveStatus('Loaded from Supabase');
+        setAdminWeddings(weddings.map((wedding) => supabaseWeddingToRecord(wedding, countMap.get(wedding.id))));
+        setDevWarning(countErrors.join(' '));
+        setSaveStatus(countErrors.length ? 'Loaded weddings; some counts failed' : 'Loaded from Supabase');
     };
 
     useEffect(() => {
@@ -448,7 +495,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
         window.location.href = '/login';
     };
 
-    const totalGuests = summaries.reduce((total, wedding) => total + (wedding.guestCount ?? 0), 0);
+    const totalGuests = summaries.reduce((total, wedding) => total + (wedding.invitedCount ?? 0), 0);
     const totalResponses = summaries.reduce((total, wedding) => total + (wedding.responseCount ?? 0), 0);
 
     return (
@@ -462,7 +509,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                         {user?.email && <p className="admin-auth-user">{user.email}</p>}
                         {(authNotice || devWarning) && <p className="admin-auth-notice">{authNotice || devWarning}</p>}
                         {dataSource === 'supabase' && (
-                            <p className="admin-data-note">Guest and RSVP counts will migrate in a later phase.</p>
+                            <p className="admin-data-note">Wedding, guest, event, and RSVP counts are loaded from Supabase.</p>
                         )}
                     </div>
                     <div className="admin-header-actions">
@@ -486,11 +533,11 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                     />
                     <InfoCard
                         label="Total Guests"
-                        value={dataSource === 'supabase' ? 'Not migrated' : String(totalGuests)}
+                        value={String(totalGuests)}
                     />
                     <InfoCard
                         label="RSVP Responses"
-                        value={dataSource === 'supabase' ? 'Not migrated' : String(totalResponses)}
+                        value={String(totalResponses)}
                     />
                 </div>
 
@@ -562,8 +609,8 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                         <td><StatusBadge tone={wedding.paymentStatus}>{wedding.paymentStatus}</StatusBadge></td>
                                         <td><StatusBadge tone={wedding.websiteStatus}>{wedding.websiteStatus}</StatusBadge></td>
                                         <td>{formatDate(wedding.createdAt)}</td>
-                                        <td>{wedding.guestCount ?? 'Not migrated'}</td>
-                                        <td>{wedding.responseCount ?? 'Not migrated'}</td>
+                                        <td>{wedding.guestCount ?? 0} families / {wedding.invitedCount ?? 0} invited</td>
+                                        <td>{wedding.responseCount ?? 0}</td>
                                         <td>
                                             <button
                                                 className="admin-manage-btn"
@@ -647,11 +694,15 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                             </div>
                                                             <div>
                                                                 <dt>Families</dt>
-                                                                <dd>{wedding.guestCount ?? 'Not migrated'}</dd>
+                                                                <dd>{wedding.guestCount ?? 0}</dd>
+                                                            </div>
+                                                            <div>
+                                                                <dt>Total Invited</dt>
+                                                                <dd>{wedding.invitedCount ?? 0}</dd>
                                                             </div>
                                                             <div>
                                                                 <dt>RSVP Responses</dt>
-                                                                <dd>{wedding.responseCount ?? 'Not migrated'}</dd>
+                                                                <dd>{wedding.responseCount ?? 0}</dd>
                                                             </div>
                                                         </dl>
                                                     </div>

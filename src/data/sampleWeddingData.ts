@@ -37,6 +37,7 @@ export interface WeddingGuest {
   category: string;
   inviteCode: string;
   invitedEventIds: string[];
+  mealPreference?: MealPreference;
 }
 
 export interface RsvpResponse {

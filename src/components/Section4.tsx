@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './Section4.css';
 import {
     mockRsvpResponsesStorageKey,
@@ -10,9 +10,11 @@ import {
     type WeddingEvent,
     type WeddingGuest,
 } from '../data/sampleWeddingData';
+import { loadSupabaseRsvpResponses, saveSupabaseRsvpSubmission } from '../lib/supabaseWeddingData';
 
 interface Section4Props {
     rsvp: SampleWeddingData['rsvp'];
+    weddingId?: string;
     weddingSlug: string;
     events: WeddingEvent[];
     guest?: WeddingGuest;
@@ -27,7 +29,7 @@ const loadStoredRsvpResponses = () => {
     }
 };
 
-export default function Section4({ rsvp, weddingSlug, events, guest, personalizedInviteMode = false }: Section4Props) {
+export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, personalizedInviteMode = false }: Section4Props) {
     const [responses, setResponses] = useState<RsvpResponse[]>(() => (
         events.map((event) => {
             const stored = guest
@@ -49,6 +51,7 @@ export default function Section4({ rsvp, weddingSlug, events, guest, personalize
     ));
     const [mealPreference, setMealPreference] = useState<MealPreference>(() => {
         if (!guest) return '';
+        if (guest.mealPreference) return guest.mealPreference;
         return loadStoredRsvpResponses().find((response) => (
             response.weddingSlug === weddingSlug &&
             response.guestId === guest.id &&
@@ -56,6 +59,35 @@ export default function Section4({ rsvp, weddingSlug, events, guest, personalize
         ))?.mealPreference ?? '';
     });
     const [submitted, setSubmitted] = useState(false);
+    const [submitError, setSubmitError] = useState('');
+
+    useEffect(() => {
+        let mounted = true;
+
+        const loadResponses = async () => {
+            if (!weddingId || !guest) return;
+            const result = await loadSupabaseRsvpResponses(weddingId, weddingSlug, [guest]);
+            if (!mounted || result.error) return;
+
+            setResponses(events.map((event) => {
+                const stored = result.responses.find((response) => response.eventId === event.id);
+                return {
+                    guestId: guest.id,
+                    eventId: event.id,
+                    status: stored?.status ?? '',
+                    mealPreference: guest.mealPreference ?? stored?.mealPreference ?? '',
+                    updatedAt: stored?.updatedAt,
+                };
+            }));
+            setMealPreference(guest.mealPreference ?? result.responses.find((response) => response.mealPreference)?.mealPreference ?? '');
+        };
+
+        void loadResponses();
+
+        return () => {
+            mounted = false;
+        };
+    }, [events, guest, weddingId, weddingSlug]);
 
     const hasPositiveResponse = useMemo(() => (
         responses.some((response) => response.status === 'yes' || response.status === 'maybe')
@@ -81,6 +113,7 @@ export default function Section4({ rsvp, weddingSlug, events, guest, personalize
 
     const updateStatus = (eventId: string, status: RsvpStatus) => {
         setSubmitted(false);
+        setSubmitError('');
         setResponses((current) => current.map((response) => (
             response.eventId === eventId
                 ? { ...response, status, updatedAt: new Date().toISOString() }
@@ -88,14 +121,39 @@ export default function Section4({ rsvp, weddingSlug, events, guest, personalize
         )));
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         const updatedAt = new Date().toISOString();
+        const mealValue = hasPositiveResponse ? mealPreference : '';
+
+        if (weddingId) {
+            const result = await saveSupabaseRsvpSubmission({
+                weddingId,
+                weddingSlug,
+                guest,
+                responses: responses.map((response) => ({ eventId: response.eventId, status: response.status })),
+                mealPreference: mealValue,
+            });
+
+            if (result.error) {
+                setSubmitError(result.error);
+                return;
+            }
+
+            setResponses((current) => current.map((response) => ({
+                ...response,
+                mealPreference: mealValue,
+                updatedAt,
+            })));
+            setSubmitted(true);
+            return;
+        }
+
         const storedResponses = loadStoredRsvpResponses();
         const submittedResponses: StoredRsvpResponse[] = responses.map((response) => ({
             ...response,
             weddingSlug,
             inviteCode: guest.inviteCode,
-            mealPreference: hasPositiveResponse ? mealPreference : '',
+            mealPreference: mealValue,
             updatedAt,
         }));
         const submittedEventIds = new Set(submittedResponses.map((response) => response.eventId));
@@ -111,7 +169,7 @@ export default function Section4({ rsvp, weddingSlug, events, guest, personalize
         );
         setResponses((current) => current.map((response) => ({
             ...response,
-            mealPreference: hasPositiveResponse ? mealPreference : '',
+            mealPreference: mealValue,
             updatedAt,
         })));
         setSubmitted(true);
@@ -186,6 +244,11 @@ export default function Section4({ rsvp, weddingSlug, events, guest, personalize
                         {rsvp.successMessage.map((message) => (
                             <p key={message} className="success-text">{message}</p>
                         ))}
+                    </div>
+                )}
+                {submitError && (
+                    <div className="rsvp-step fade-in success-step">
+                        <p className="success-text">Could not save RSVP. {submitError}</p>
                     </div>
                 )}
             </div>

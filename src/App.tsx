@@ -15,12 +15,20 @@ import {
   mockAdminWeddingsStorageKey,
   mockDashboardDraftStorageKey,
   type SampleWeddingData,
+  type WeddingEvent,
+  type WeddingGuest,
 } from './data/sampleWeddingData';
 import {
   buildWeddingShellFromRow,
   getOwnedWeddingForUser,
   type OwnedWeddingRow,
 } from './lib/weddingOnboarding';
+import {
+  loadSupabasePersonalizedInvite,
+  loadSupabaseWeddingBundle,
+  loadSupabaseWeddingBySlug,
+} from './lib/supabaseWeddingData';
+import { isSupabaseConfigured } from './lib/supabaseClient';
 
 function NotFound({ title = 'Wedding invite not found', message = 'Please check the invitation link and try again.' }) {
   useEffect(() => {
@@ -80,6 +88,7 @@ function AccessMessage({
 function DashboardRoute() {
   const { user, loading, isConfigured } = useAuth();
   const [ownedWedding, setOwnedWedding] = useState<OwnedWeddingRow | null>(null);
+  const [dashboardWedding, setDashboardWedding] = useState<SampleWeddingData | null>(null);
   const [isCheckingWedding, setIsCheckingWedding] = useState(false);
   const [weddingError, setWeddingError] = useState('');
 
@@ -87,9 +96,18 @@ function DashboardRoute() {
     if (!isConfigured || loading || !user) return;
 
     setIsCheckingWedding(true);
-    getOwnedWeddingForUser(user.id).then(({ wedding, error }) => {
+    getOwnedWeddingForUser(user.id).then(async ({ wedding, error }) => {
       setOwnedWedding(wedding);
-      setWeddingError(error ?? '');
+      if (error || !wedding) {
+        setWeddingError(error ?? '');
+        setDashboardWedding(null);
+        setIsCheckingWedding(false);
+        return;
+      }
+
+      const bundle = await loadSupabaseWeddingBundle(wedding.id, { includeGuests: true });
+      setDashboardWedding(bundle.wedding ?? buildWeddingShellFromRow(wedding));
+      setWeddingError(bundle.error ?? '');
       setIsCheckingWedding(false);
     });
   }, [isConfigured, loading, user]);
@@ -120,20 +138,27 @@ function DashboardRoute() {
     );
   }
 
-  return <Dashboard initialWedding={buildWeddingShellFromRow(ownedWedding)} supabaseWeddingId={ownedWedding.id} />;
+  return <Dashboard initialWedding={dashboardWedding ?? buildWeddingShellFromRow(ownedWedding)} supabaseWeddingId={ownedWedding.id} />;
 }
 
-function AppRoutes() {
-  const { user, profile, loading, profileLoading, profileError, isConfigured, signOut, refreshProfile } = useAuth();
-  const pathParts = window.location.pathname.split('/').filter(Boolean);
-  const firstSegment = pathParts[0];
-  const isDashboard = firstSegment === 'dashboard';
-  const isAdmin = firstSegment === 'admin';
-  const isLogin = firstSegment === 'login';
-  const isSignup = firstSegment === 'signup';
-  const isCreateWedding = firstSegment === 'create-wedding';
-  const isPersonalizedInvite = isPersonalizedInvitePath(window.location.pathname);
-  const slug = firstSegment ?? defaultWeddingSlug;
+function PublicInviteRoute({
+  slug,
+  inviteCode,
+  isPersonalizedInvite,
+}: {
+  slug: string;
+  inviteCode?: string;
+  isPersonalizedInvite: boolean;
+}) {
+  const [isLoadingInvite, setIsLoadingInvite] = useState(isSupabaseConfigured);
+  const [supabaseData, setSupabaseData] = useState<{
+    data: SampleWeddingData;
+    weddingId?: string;
+    guest?: WeddingGuest;
+    visibleEvents?: WeddingEvent[];
+  } | null>(null);
+  const [supabaseError, setSupabaseError] = useState('');
+
   const savedDraft = window.localStorage.getItem(mockDashboardDraftStorageKey);
   const savedAdminWeddings = window.localStorage.getItem(mockAdminWeddingsStorageKey);
   let draftWedding: SampleWeddingData | undefined;
@@ -155,11 +180,58 @@ function AppRoutes() {
     }
   }
 
+  useEffect(() => {
+    let mounted = true;
+
+    const loadInvite = async () => {
+      if (!isSupabaseConfigured) {
+        setIsLoadingInvite(false);
+        return;
+      }
+
+      setIsLoadingInvite(true);
+      const result = isPersonalizedInvite && inviteCode
+        ? await loadSupabasePersonalizedInvite(slug, inviteCode)
+        : await loadSupabaseWeddingBySlug(slug, { includeGuests: false });
+
+      if (!mounted) return;
+
+      if (result.error) {
+        setSupabaseError(result.error);
+      } else {
+        setSupabaseError('');
+      }
+
+      if (result.wedding) {
+        const personalizedResult = result as {
+          guest?: WeddingGuest;
+          visibleEvents?: WeddingEvent[];
+        };
+        setSupabaseData({
+          data: result.wedding,
+          weddingId: result.weddingId,
+          guest: personalizedResult.guest,
+          visibleEvents: personalizedResult.visibleEvents,
+        });
+      } else {
+        setSupabaseData(null);
+      }
+
+      setIsLoadingInvite(false);
+    };
+
+    void loadInvite();
+
+    return () => {
+      mounted = false;
+    };
+  }, [inviteCode, isPersonalizedInvite, slug]);
+
   const sampleWedding = getWeddingBySlug(slug);
   const baseData = draftWedding?.wedding.slug === slug ? draftWedding : sampleWedding;
   const adminWedding = adminWeddings.find((wedding) => wedding.wedding.slug === slug);
   const adminFieldSource = adminWedding ?? sampleWedding;
-  const data = baseData && adminFieldSource
+  const fallbackData = baseData && adminFieldSource
     ? {
       ...baseData,
       wedding: {
@@ -170,15 +242,79 @@ function AppRoutes() {
       },
     }
     : baseData;
-  const inviteCode = isPersonalizedInvite ? pathParts[2] : undefined;
-  const guest = data && inviteCode ? getGuestByInviteCode(data, inviteCode) : undefined;
-  const visibleEvents = data && guest ? getEventsForGuest(data, guest) : undefined;
+
+  const data = supabaseData?.data ?? fallbackData;
+  const guest = supabaseData?.guest ?? (data && inviteCode ? getGuestByInviteCode(data, inviteCode) : undefined);
+  const visibleEvents = supabaseData?.visibleEvents ?? (data && guest ? getEventsForGuest(data, guest) : undefined);
 
   useEffect(() => {
-    if (!isDashboard && !isAdmin && !isLogin && !isSignup && !isCreateWedding && data) {
+    if (data) {
       document.title = data.wedding.pageTitle;
     }
-  }, [data, isAdmin, isCreateWedding, isDashboard, isLogin, isSignup]);
+  }, [data]);
+
+  if (isLoadingInvite) {
+    return <AccessMessage title="Loading invitation" message="Please wait while we load this wedding website." />;
+  }
+
+  if (supabaseError && !fallbackData) {
+    return <NotFound title="Unable to load invitation" message={supabaseError} />;
+  }
+
+  if (!data) {
+    return <NotFound />;
+  }
+
+  if (data.wedding.status === 'suspended') {
+    return (
+      <NotFound
+        title="Wedding website unavailable"
+        message="This wedding website is currently unavailable."
+      />
+    );
+  }
+
+  if (data.wedding.status !== 'published') {
+    return (
+      <NotFound
+        title="Wedding website not live"
+        message="This wedding website is not live yet."
+      />
+    );
+  }
+
+  if (isPersonalizedInvite && !guest) {
+    return (
+      <NotFound
+        title="Invitation link not found"
+        message="Please check your personalized invitation link and try again."
+      />
+    );
+  }
+
+  return (
+    <InviteExperience
+      data={data}
+      weddingId={supabaseData?.weddingId}
+      guest={guest}
+      visibleEvents={visibleEvents}
+      personalizedInviteMode={Boolean(guest)}
+    />
+  );
+}
+
+function AppRoutes() {
+  const { user, profile, loading, profileLoading, profileError, isConfigured, signOut, refreshProfile } = useAuth();
+  const pathParts = window.location.pathname.split('/').filter(Boolean);
+  const firstSegment = pathParts[0];
+  const isDashboard = firstSegment === 'dashboard';
+  const isAdmin = firstSegment === 'admin';
+  const isLogin = firstSegment === 'login';
+  const isSignup = firstSegment === 'signup';
+  const isCreateWedding = firstSegment === 'create-wedding';
+  const isPersonalizedInvite = isPersonalizedInvitePath(window.location.pathname);
+  const slug = firstSegment ?? defaultWeddingSlug;
+  const inviteCode = isPersonalizedInvite ? pathParts[2] : undefined;
 
   if (isLogin) {
     return <AuthPage mode="login" />;
@@ -243,45 +379,7 @@ function AppRoutes() {
     return <Admin />;
   }
 
-  if (!data) {
-    return <NotFound />;
-  }
-
-  if (data.wedding.status === 'suspended') {
-    return (
-      <NotFound
-        title="Wedding website unavailable"
-        message="This wedding website is currently unavailable."
-      />
-    );
-  }
-
-  if (data.wedding.status !== 'published') {
-    return (
-      <NotFound
-        title="Wedding website not live"
-        message="This wedding website is not live yet."
-      />
-    );
-  }
-
-  if (isPersonalizedInvite && !guest) {
-    return (
-      <NotFound
-        title="Invitation link not found"
-        message="Please check your personalized invitation link and try again."
-      />
-    );
-  }
-
-  return (
-    <InviteExperience
-      data={data}
-      guest={guest}
-      visibleEvents={visibleEvents}
-      personalizedInviteMode={Boolean(guest)}
-    />
-  );
+  return <PublicInviteRoute slug={slug} inviteCode={inviteCode} isPersonalizedInvite={isPersonalizedInvite} />;
 }
 
 function App() {

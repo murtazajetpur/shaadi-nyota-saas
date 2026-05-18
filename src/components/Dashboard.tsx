@@ -4,6 +4,18 @@ import InviteExperience from './InviteExperience';
 import { useAuth } from '../context/AuthContext';
 import { updateWeddingShell } from '../lib/weddingOnboarding';
 import {
+    createSupabaseEvent,
+    createSupabaseGuest,
+    deleteSupabaseEvent,
+    deleteSupabaseGuest,
+    importSupabaseGuests,
+    loadSupabaseRsvpResponses,
+    loadSupabaseWeddingBundle,
+    replaceSupabaseGuestInvites,
+    saveSupabaseEvents,
+    saveSupabaseGuests,
+} from '../lib/supabaseWeddingData';
+import {
     defaultDashboardWeddingSlug,
     getPackageDisplayLabel,
     mockAdminWeddingsStorageKey,
@@ -231,9 +243,26 @@ export default function Dashboard({
 
     useEffect(() => {
         if (activeTab === 'rsvp') {
-            setRsvpResponses(loadStoredRsvpResponses());
+            if (supabaseWeddingId) {
+                loadSupabaseRsvpResponses(
+                    supabaseWeddingId,
+                    weddingData.wedding.slug,
+                    weddingData.rsvp.guests
+                ).then((result) => {
+                    if (!result.error) setRsvpResponses(result.responses);
+                });
+            } else {
+                setRsvpResponses(loadStoredRsvpResponses());
+            }
         }
-    }, [activeTab]);
+    }, [activeTab, supabaseWeddingId, weddingData.wedding.slug, weddingData.rsvp.guests]);
+
+    useEffect(() => {
+        if (initialWedding) {
+            setWeddingData(initialWedding);
+            setHasUnsavedChanges(false);
+        }
+    }, [initialWedding]);
 
     const validation = useMemo(() => {
         return {
@@ -325,7 +354,7 @@ export default function Dashboard({
             };
         });
         const guestMealPreferences = weddingData.rsvp.guests.map((guest) => (
-            relevantResponses.find((response) => response.guestId === guest.id && response.mealPreference)?.mealPreference ?? ''
+            guest.mealPreference ?? relevantResponses.find((response) => response.guestId === guest.id && response.mealPreference)?.mealPreference ?? ''
         ));
         const mealSummary = {
             veg: guestMealPreferences.filter((meal) => meal === 'veg').length,
@@ -335,7 +364,7 @@ export default function Dashboard({
         };
         const guestSummaries = weddingData.rsvp.guests.map((guest) => {
             const counts = countStatusesForGuests([guest]);
-            const mealPreference = relevantResponses.find((response) => response.guestId === guest.id && response.mealPreference)?.mealPreference ?? '';
+            const mealPreference = guest.mealPreference ?? relevantResponses.find((response) => response.guestId === guest.id && response.mealPreference)?.mealPreference ?? '';
             const lastUpdated = relevantResponses
                 .filter((response) => response.guestId === guest.id)
                 .map((response) => response.updatedAt)
@@ -393,6 +422,20 @@ export default function Dashboard({
             if (result.error) {
                 setSaveStatus('');
                 setSaveError(`Could not save wedding details. ${result.error}`);
+                return;
+            }
+
+            const eventsResult = await saveSupabaseEvents(supabaseWeddingId, weddingData.events);
+            if (eventsResult.error) {
+                setSaveStatus('');
+                setSaveError(`Could not save events. ${eventsResult.error}`);
+                return;
+            }
+
+            const guestsResult = await saveSupabaseGuests(supabaseWeddingId, weddingData.rsvp.guests);
+            if (guestsResult.error) {
+                setSaveStatus('');
+                setSaveError(`Could not save guests. ${guestsResult.error}`);
                 return;
             }
         }
@@ -471,35 +514,62 @@ export default function Dashboard({
         }));
     };
 
-    const addEvent = () => {
-        updateWeddingData((current) => {
-            const mediaSource = current.events[0];
-            const newEvent: WeddingEvent = {
-                id: `event-${Date.now()}`,
-                eventName: 'New Event',
-                date: '1st January 2027',
-                startTime: '7:00 PM',
-                venueName: '',
-                city: '',
-                mapsUrl: '',
-                dressCode: '',
-                foregroundImageSrc: mediaSource?.foregroundImageSrc ?? '/assets/reception.png',
-                backgroundImageSrc: mediaSource?.backgroundImageSrc ?? '/assets/reception-bg.png',
-                calendarTitle: `${current.couple.displayName} New Event`,
-                calendarDescription: `New event for ${current.couple.displayName}.`,
-            };
+    const addEvent = async () => {
+        const mediaSource = weddingData.events[0];
+        const newEvent: WeddingEvent = {
+            id: `event-${Date.now()}`,
+            eventName: 'New Event',
+            date: '1st January 2027',
+            startTime: '7:00 PM',
+            venueName: '',
+            city: '',
+            mapsUrl: '',
+            dressCode: '',
+            foregroundImageSrc: mediaSource?.foregroundImageSrc ?? '/assets/reception.png',
+            backgroundImageSrc: mediaSource?.backgroundImageSrc ?? '/assets/reception-bg.png',
+            calendarTitle: `${weddingData.couple.displayName} New Event`,
+            calendarDescription: `New event for ${weddingData.couple.displayName}.`,
+        };
 
-            return {
+        if (supabaseWeddingId) {
+            setSaveError('');
+            const result = await createSupabaseEvent(supabaseWeddingId, newEvent, weddingData.events.length);
+            if (result.error || !result.event) {
+                setSaveError(`Could not add event. ${result.error}`);
+                return;
+            }
+            updateWeddingData((current) => ({
                 ...current,
-                events: [...current.events, newEvent],
-            };
-        });
+                events: [...current.events, result.event],
+            }));
+            return;
+        }
+
+        updateWeddingData((current) => ({
+            ...current,
+            events: [...current.events, newEvent],
+        }));
     };
 
-    const deleteEvent = (index: number) => {
+    const deleteEvent = async (index: number) => {
+        const eventToDelete = weddingData.events[index];
+        if (supabaseWeddingId && eventToDelete) {
+            const result = await deleteSupabaseEvent(eventToDelete.id);
+            if (result.error) {
+                setSaveError(`Could not delete event. ${result.error}`);
+                return;
+            }
+        }
         updateWeddingData((current) => ({
             ...current,
             events: current.events.filter((_, eventIndex) => eventIndex !== index),
+            rsvp: {
+                ...current.rsvp,
+                guests: current.rsvp.guests.map((guest) => ({
+                    ...guest,
+                    invitedEventIds: guest.invitedEventIds.filter((eventId) => eventId !== eventToDelete?.id),
+                })),
+            },
         }));
     };
 
@@ -520,44 +590,74 @@ export default function Dashboard({
     };
 
     const toggleGuestEvent = (guestIndex: number, eventId: string) => {
+        const currentGuest = weddingData.rsvp.guests[guestIndex];
+        const nextEventIds = currentGuest.invitedEventIds.includes(eventId)
+            ? currentGuest.invitedEventIds.filter((id) => id !== eventId)
+            : [...currentGuest.invitedEventIds, eventId];
+
         updateWeddingData((current) => ({
             ...current,
             rsvp: {
                 ...current.rsvp,
                 guests: current.rsvp.guests.map((guest, index) => {
                     if (index !== guestIndex) return guest;
-                    const invitedEventIds = guest.invitedEventIds.includes(eventId)
-                        ? guest.invitedEventIds.filter((id) => id !== eventId)
-                        : [...guest.invitedEventIds, eventId];
-                    return { ...guest, invitedEventIds };
+                    return { ...guest, invitedEventIds: nextEventIds };
                 }),
+            },
+        }));
+
+        if (supabaseWeddingId) {
+            replaceSupabaseGuestInvites(supabaseWeddingId, currentGuest.id, nextEventIds).then((result) => {
+                if (result.error) setSaveError(`Could not update guest events. ${result.error}`);
+            });
+        }
+    };
+
+    const addGuest = async () => {
+        const newGuest: WeddingGuest = {
+            id: `guest-${Date.now()}`,
+            guestName: '',
+            phone: '',
+            invitedCount: 1,
+            category: '',
+            inviteCode: Math.random().toString(36).slice(2, 8),
+            invitedEventIds: [],
+        };
+
+        if (supabaseWeddingId) {
+            const result = await createSupabaseGuest(supabaseWeddingId, newGuest);
+            if (result.error || !result.guest) {
+                setSaveError(`Could not add guest. ${result.error}`);
+                return;
+            }
+            updateWeddingData((current) => ({
+                ...current,
+                rsvp: {
+                    ...current.rsvp,
+                    guests: [...current.rsvp.guests, result.guest],
+                },
+            }));
+            return;
+        }
+
+        updateWeddingData((current) => ({
+            ...current,
+            rsvp: {
+                ...current.rsvp,
+                guests: [...current.rsvp.guests, newGuest],
             },
         }));
     };
 
-    const addGuest = () => {
-        updateWeddingData((current) => {
-            const newGuest: WeddingGuest = {
-                id: `guest-${Date.now()}`,
-                guestName: '',
-                phone: '',
-                invitedCount: 1,
-                category: '',
-                inviteCode: Math.random().toString(36).slice(2, 8),
-                invitedEventIds: [],
-            };
-
-            return {
-                ...current,
-                rsvp: {
-                    ...current.rsvp,
-                    guests: [...current.rsvp.guests, newGuest],
-                },
-            };
-        });
-    };
-
-    const deleteGuest = (index: number) => {
+    const deleteGuest = async (index: number) => {
+        const guestToDelete = weddingData.rsvp.guests[index];
+        if (supabaseWeddingId && guestToDelete) {
+            const result = await deleteSupabaseGuest(guestToDelete.id);
+            if (result.error) {
+                setSaveError(`Could not delete guest. ${result.error}`);
+                return;
+            }
+        }
         updateWeddingData((current) => ({
             ...current,
             rsvp: {
@@ -576,10 +676,8 @@ export default function Dashboard({
         await window.navigator.clipboard?.writeText(link);
     };
 
-    const previewGuestInvite = (guest: WeddingGuest) => {
-        window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(weddingData));
-        setHasUnsavedChanges(false);
-        setSaveStatus('Saved');
+    const previewGuestInvite = async (guest: WeddingGuest) => {
+        await handleSaveDraft();
         window.open(getGuestInviteLink(guest), '_blank', 'noopener,noreferrer');
     };
 
@@ -687,6 +785,23 @@ export default function Dashboard({
             };
         });
 
+        if (supabaseWeddingId) {
+            const result = await importSupabaseGuests(supabaseWeddingId, importedGuests, guestImportMode);
+            if (result.error) {
+                setGuestImportWarnings([...warnings, `Import failed: ${result.error}`]);
+                return;
+            }
+            const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
+            if (refreshed.wedding) {
+                setWeddingData(refreshed.wedding);
+                setHasUnsavedChanges(true);
+                setSaveStatus('');
+                setSaveError('');
+            }
+            setGuestImportWarnings(warnings);
+            return;
+        }
+
         updateWeddingData((current) => ({
             ...current,
             rsvp: {
@@ -725,7 +840,7 @@ export default function Dashboard({
                     guest.invitedCount,
                     weddingEvent?.eventName ?? eventId,
                     response?.status || 'pending',
-                    response?.mealPreference || '',
+                    guest.mealPreference || response?.mealPreference || '',
                     response?.updatedAt || '',
                 ]);
             });
@@ -840,7 +955,9 @@ export default function Dashboard({
                             <p className="validation-summary">{validationCount} validation warning{validationCount === 1 ? '' : 's'} need attention.</p>
                         )}
                         <p className="dashboard-note">
-                            This is a mock dashboard. Changes are stored only in local React state and are not saved to a database yet.
+                            {supabaseWeddingId
+                                ? 'Core wedding, event, guest, and RSVP data is now saved in Supabase. Some theme copy still uses the local MVP defaults.'
+                                : 'This is a mock dashboard. Changes are stored only in local React state and are not saved to a database yet.'}
                         </p>
                     </div>
                 )}
@@ -1080,15 +1197,17 @@ export default function Dashboard({
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
                                 <p className="dashboard-eyebrow">RSVP Dashboard</p>
-                                <h2>Mock RSVP analytics</h2>
+                                <h2>{supabaseWeddingId ? 'RSVP analytics' : 'Mock RSVP analytics'}</h2>
                             </div>
                             <div className="dashboard-header-actions">
                                 <button className="dashboard-primary-btn secondary" type="button" onClick={exportRsvpCsv}>
                                     Export RSVP CSV
                                 </button>
-                                <button className="dashboard-primary-btn secondary" type="button" onClick={clearMockRsvpResponses}>
-                                    Clear Mock RSVP Responses
-                                </button>
+                                {!supabaseWeddingId && (
+                                    <button className="dashboard-primary-btn secondary" type="button" onClick={clearMockRsvpResponses}>
+                                        Clear Mock RSVP Responses
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div className="guest-summary-grid rsvp-summary-grid">

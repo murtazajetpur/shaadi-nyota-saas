@@ -11,6 +11,7 @@ const Section5 = lazy(() => import('./Section5'));
 
 interface InviteExperienceProps {
   data: SampleWeddingData;
+  weddingId?: string;
   embedded?: boolean;
   guest?: WeddingGuest;
   visibleEvents?: WeddingEvent[];
@@ -19,6 +20,7 @@ interface InviteExperienceProps {
 
 export default function InviteExperience({
   data,
+  weddingId,
   embedded = false,
   guest,
   visibleEvents,
@@ -88,6 +90,7 @@ export default function InviteExperience({
             {shouldShowRsvp && (
               <Section4
                 rsvp={data.rsvp}
+                weddingId={weddingId}
                 weddingSlug={data.wedding.slug}
                 events={eventsToShow}
                 guest={guest}
