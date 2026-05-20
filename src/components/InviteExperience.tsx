@@ -3,6 +3,7 @@ import Hero from './Hero';
 import Section1 from './Section1';
 import AudioPlayer from './AudioPlayer';
 import { hasRsvpAccess, type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
+import Theme2InviteExperience from '../themes/theme2/Theme2InviteExperience';
 
 const Section2 = lazy(() => import('./Section2'));
 const Section3 = lazy(() => import('./Section3'));
@@ -26,6 +27,19 @@ export default function InviteExperience({
   visibleEvents,
   personalizedInviteMode = false,
 }: InviteExperienceProps) {
+  if (data.wedding.themeKey === 'theme-2') {
+    return (
+      <Theme2InviteExperience
+        data={data}
+        weddingId={weddingId}
+        embedded={embedded}
+        guest={guest}
+        visibleEvents={visibleEvents}
+        personalizedInviteMode={personalizedInviteMode}
+      />
+    );
+  }
+
   const eventsToShow = visibleEvents ?? data.events;
   const shouldShowRsvp = hasRsvpAccess(data) && data.rsvp.enabled;
   const [ganeshaVisible, setGaneshaVisible] = useState(false);

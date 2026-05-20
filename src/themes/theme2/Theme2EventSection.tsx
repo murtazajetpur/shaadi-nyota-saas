@@ -1,0 +1,133 @@
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import type { WeddingEvent } from '../../data/sampleWeddingData';
+import { getEventTheme2Image, getEventTheme2Tone, toGoogleCalendarUrl } from './theme2Utils';
+
+interface Theme2EventSectionProps {
+  event: WeddingEvent;
+  coupleDisplayName: string;
+  isHeroDone: boolean;
+}
+
+interface Theme2EventFrameProps {
+  event: WeddingEvent;
+  coupleDisplayName: string;
+  isVisible?: boolean;
+  showActions?: boolean;
+  renderParticles?: () => ReactNode;
+  className?: string;
+  sectionRef?: Ref<HTMLDivElement>;
+}
+
+export function Theme2EventFrame({
+  event,
+  coupleDisplayName,
+  isVisible = true,
+  showActions = true,
+  renderParticles,
+  className = '',
+  sectionRef,
+}: Theme2EventFrameProps) {
+  const tone = getEventTheme2Tone(event);
+  const imageSrc = getEventTheme2Image(event);
+
+  return (
+    <div className={`theme2-section theme2-event-section theme2-event-${tone} ${className}`} ref={sectionRef}>
+      <img src={imageSrc} className="theme2-section-bg" alt={event.eventName} loading="lazy" />
+      <div className={`theme2-section-overlay theme2-event-overlay theme2-event-overlay-${tone}`} />
+      {renderParticles?.()}
+      <div className={`theme2-section-content theme2-event-content ${isVisible ? 'visible' : ''}`}>
+        <h1 className="theme2-display-font theme2-fade-up cascade-1">{event.eventName}</h1>
+        <div className="theme2-event-date theme2-fade-up cascade-2">
+          <h2 className="theme2-body-font">{event.date}</h2>
+          <h2 className="theme2-body-font">{event.startTime}</h2>
+        </div>
+        <div className="theme2-event-venue theme2-fade-up cascade-3">
+          <h2 className="theme2-body-font">{event.venueName}</h2>
+          <h2 className="theme2-body-font">{event.city}</h2>
+          {event.dressCode && <p>{event.dressCode}</p>}
+        </div>
+        {showActions && (
+          <div className="theme2-event-actions theme2-fade-up cascade-4">
+            <a href={toGoogleCalendarUrl(event, coupleDisplayName)} target="_blank" rel="noopener noreferrer" className="theme2-event-btn">
+              Add to Calendar
+            </a>
+            {event.mapsUrl && (
+              <a href={event.mapsUrl} target="_blank" rel="noopener noreferrer" className="theme2-event-btn">
+                Google Maps
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function Theme2EventSection({ event, coupleDisplayName, isHeroDone }: Theme2EventSectionProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [inView, setInView] = useState(false);
+  const [showParticles, setShowParticles] = useState(false);
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  const eventKey = `${event.id} ${event.eventName}`.toLowerCase();
+  const particleSeed = useMemo(() => Array.from({ length: 20 }, (_, index) => ({
+    id: index,
+    left: `${(index * 37) % 100}%`,
+    top: `${(index * 23) % 50}%`,
+    delay: `${(index % 5) * 0.45}s`,
+  })), []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setInView(true);
+    }, { threshold: 0.1 });
+    if (sectionRef.current) observer.observe(sectionRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (inView && isHeroDone) {
+      setIsVisible(true);
+      setShowParticles(true);
+    }
+  }, [inView, isHeroDone]);
+
+  const renderParticles = () => {
+    if (!showParticles) return null;
+    if (eventKey.includes('haldi')) {
+      return (
+        <div className="theme2-particles-container">
+          {particleSeed.slice(0, 15).map((particle) => (
+            <div key={particle.id} className="theme2-particle-haldi" style={{ left: particle.left, animationDelay: particle.delay }} />
+          ))}
+        </div>
+      );
+    }
+    if (eventKey.includes('sangeet')) {
+      return (
+        <div className="theme2-particles-container">
+          <div className="theme2-glow-stringlights" />
+          {particleSeed.map((particle) => (
+            <div key={particle.id} className="theme2-particle-sparkle" style={{ top: particle.top, left: particle.left, animationDelay: particle.delay }} />
+          ))}
+        </div>
+      );
+    }
+    return (
+      <div className="theme2-particles-container">
+        {particleSeed.slice(0, 12).map((particle) => (
+          <div key={particle.id} className="theme2-particle-petal" style={{ left: particle.left, animationDelay: particle.delay }} />
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <Theme2EventFrame
+      event={event}
+      coupleDisplayName={coupleDisplayName}
+      isVisible={isVisible}
+      renderParticles={renderParticles}
+      sectionRef={sectionRef}
+    />
+  );
+}

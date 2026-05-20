@@ -15,6 +15,9 @@
 - RSVP dashboard analytics read Supabase guests, events, invites, and RSVP responses for real weddings.
 - Admin panel reads and updates Supabase `weddings`.
 - Admin guest, invited, event, and RSVP counts are aggregated from Supabase.
+- Theme selection is Supabase-backed through `weddings.theme_key`, including Theme 2: Scroll Opening Invite.
+- Event visual selection is Supabase-backed through `events.event_visual_key`; Theme 2 uses this before automatic event type/name recommendations.
+- Event text readability is Supabase-backed through `events.event_text_style`; Theme 2 uses `auto`, `light`, or `dark` to resolve event section text contrast.
 
 ## Fallback Still Present
 

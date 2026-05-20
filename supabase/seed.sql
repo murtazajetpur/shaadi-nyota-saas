@@ -1,13 +1,20 @@
 -- Minimal seed data for Shaadi Nyota MVP setup.
--- Run this after schema.sql.
+-- Run this after schema.sql and rls_policies.sql.
 
 insert into public.themes (theme_key, display_name, description, is_active)
-values (
-  'palace-door-opening',
-  'Palace Door Opening',
-  'Current Shaadi Nyota invite theme with reveal video and wedding sections.',
-  true
-)
+values
+  (
+    'palace-door-opening',
+    'Palace Door Opening',
+    'Current Shaadi Nyota invite theme with reveal video and wedding sections.',
+    true
+  ),
+  (
+    'theme-2',
+    'Scroll Opening Invite',
+    'A cinematic scroll-style wedding invitation adapted from the second reference demo.',
+    true
+  )
 on conflict (theme_key) do update
 set
   display_name = excluded.display_name,

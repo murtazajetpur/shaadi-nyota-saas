@@ -3,6 +3,7 @@ export type WeddingStatus = 'draft' | 'unpaid' | 'paid' | 'published' | 'suspend
 export type PaymentStatus = 'unpaid' | 'paid' | 'manual_pending' | 'ref_pending';
 export type RsvpStatus = 'yes' | 'no' | 'maybe' | '';
 export type MealPreference = 'veg' | 'nonVeg' | 'jain' | '';
+export type EventTextStyle = 'auto' | 'light' | 'dark';
 
 export const packageDisplayLabels: Record<PackageType, string> = {
   basic: 'Nyota Classic',
@@ -14,8 +15,20 @@ export const getPackageDisplayLabel = (packageType: PackageType) => {
   return packageDisplayLabels[packageType];
 };
 
+export const themeDisplayLabels: Record<string, string> = {
+  'palace-door-opening': 'Palace Door Opening',
+  'theme-2': 'Scroll Opening Invite',
+};
+
+export const getThemeDisplayLabel = (themeKey: string) => {
+  return themeDisplayLabels[themeKey] ?? themeKey;
+};
+
 export interface WeddingEvent {
   id: string;
+  eventKey?: string;
+  eventVisualKey?: string;
+  eventTextStyle?: EventTextStyle;
   eventName: string;
   date: string;
   startTime: string;

@@ -3,6 +3,7 @@ import './CreateWeddingPage.css';
 import { useAuth } from '../context/AuthContext';
 import {
   getPackageDisplayLabel,
+  themeDisplayLabels,
   type PackageType,
 } from '../data/sampleWeddingData';
 import {
@@ -26,6 +27,8 @@ const packageOptions: Array<{ value: PackageType; description: string }> = [
     description: 'Website + RSVP + WhatsApp invites and reminders later',
   },
 ];
+
+const themeOptions = ['palace-door-opening', 'theme-2'];
 
 export default function CreateWeddingPage() {
   const { user, loading, isConfigured } = useAuth();
@@ -237,10 +240,34 @@ export default function CreateWeddingPage() {
             </div>
           </div>
 
-          <label>
-            <span>Theme key</span>
-            <input value={themeKey} onChange={(event) => setThemeKey(event.target.value)} />
-          </label>
+          <div className="package-selection">
+            <div>
+              <span>Theme</span>
+              <p>Choose the visual style for this wedding website.</p>
+            </div>
+            <div className="package-options theme-options">
+              {themeOptions.map((option) => (
+                <label
+                  className={`package-option ${themeKey === option ? 'selected' : ''}`}
+                  key={option}
+                >
+                  <input
+                    type="radio"
+                    name="themeKey"
+                    value={option}
+                    checked={themeKey === option}
+                    onChange={() => setThemeKey(option)}
+                  />
+                  <strong>{themeDisplayLabels[option] ?? option}</strong>
+                  <small>
+                    {option === 'theme-2'
+                      ? 'Scroll-style cinematic reveal, story sections, event scenes, and carousel closing.'
+                      : 'Classic palace-door reveal with elegant event sections.'}
+                  </small>
+                </label>
+              ))}
+            </div>
+          </div>
 
           <label>
             <span>Page title</span>

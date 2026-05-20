@@ -125,6 +125,8 @@ create table if not exists public.events (
   id uuid primary key default gen_random_uuid(),
   wedding_id uuid not null references public.weddings(id) on delete cascade,
   event_key text,
+  event_visual_key text,
+  event_text_style text not null default 'auto' check (event_text_style in ('auto', 'light', 'dark')),
   event_name text not null,
   date_label text,
   start_time_label text,

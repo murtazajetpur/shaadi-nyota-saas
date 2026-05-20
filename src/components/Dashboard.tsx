@@ -21,6 +21,7 @@ import {
     mockAdminWeddingsStorageKey,
     mockDashboardDraftStorageKey,
     mockRsvpResponsesStorageKey,
+    getEventsForGuest,
     getWeddingBySlug,
     hasRsvpAccess,
     sampleWeddingData,
@@ -28,7 +29,15 @@ import {
     type StoredRsvpResponse,
     type WeddingEvent,
     type WeddingGuest,
+    themeDisplayLabels,
 } from '../data/sampleWeddingData';
+import {
+    eventVisuals,
+    getEventVisualByKey,
+    getEventVisualsForTheme,
+    getRecommendedVisualForEvent,
+    type EventVisual,
+} from '../data/eventVisuals';
 
 type DashboardTab = 'overview' | 'couple' | 'events' | 'guests' | 'rsvp' | 'theme' | 'preview';
 type PreviewMode = 'public' | 'rsvp';
@@ -45,7 +54,23 @@ const dashboardTabs: Array<{ id: DashboardTab; label: string }> = [
     { id: 'preview', label: 'Preview' },
 ];
 
-const themeKeyOptions = ['palace-door-opening'];
+const themeKeyOptions = ['palace-door-opening', 'theme-2'];
+const eventTypeOptions = ['', 'haldi', 'mehendi', 'sangeet', 'wedding', 'reception', 'custom'];
+const eventTypeLabels: Record<string, string> = {
+    '': 'Auto',
+    haldi: 'Haldi',
+    mehendi: 'Mehendi',
+    sangeet: 'Sangeet',
+    wedding: 'Wedding / Nikaah',
+    reception: 'Reception / Walima',
+    custom: 'Custom',
+};
+const eventTextStyleOptions = ['auto', 'light', 'dark'];
+const eventTextStyleLabels: Record<string, string> = {
+    auto: 'Auto',
+    light: 'Light text',
+    dark: 'Dark text',
+};
 const dashboardBaseWedding = getWeddingBySlug(defaultDashboardWeddingSlug) ?? sampleWeddingData;
 
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => {
@@ -229,6 +254,7 @@ export default function Dashboard({
     const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
     const [weddingData, setWeddingData] = useState<SampleWeddingData>(() => initialWedding ?? loadInitialWedding());
     const [previewMode, setPreviewMode] = useState<PreviewMode>('public');
+    const [previewGuestId, setPreviewGuestId] = useState('public');
     const [guestSearchQuery, setGuestSearchQuery] = useState('');
     const [guestImportMode, setGuestImportMode] = useState<CsvImportMode>('append');
     const [guestImportWarnings, setGuestImportWarnings] = useState<string[]>([]);
@@ -238,7 +264,9 @@ export default function Dashboard({
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [saveStatus, setSaveStatus] = useState('');
     const [saveError, setSaveError] = useState('');
+    const [saveErrorDetail, setSaveErrorDetail] = useState('');
     const isAdminMode = mode === 'admin';
+    const showTechnicalSaveDetail = import.meta.env.DEV && Boolean(saveErrorDetail);
     const adminRlsHint = ' Admin access requires RLS policies allowing admins to read and update weddings, events, guests, guest_event_invites, and RSVP responses.';
 
     useEffect(() => {
@@ -273,6 +301,15 @@ export default function Dashboard({
             }
         }
     }, [activeTab, supabaseWeddingId, weddingData.wedding.slug, weddingData.rsvp.guests]);
+
+    useEffect(() => {
+        if (
+            previewGuestId !== 'public' &&
+            !weddingData.rsvp.guests.some((guest) => guest.id === previewGuestId)
+        ) {
+            setPreviewGuestId('public');
+        }
+    }, [previewGuestId, weddingData.rsvp.guests]);
 
     useEffect(() => {
         if (initialWedding) {
@@ -322,7 +359,19 @@ export default function Dashboard({
         return previewWedding;
     }, [previewMode, weddingData]);
 
-    const previewKey = useMemo(() => JSON.stringify(previewData), [previewData]);
+    const previewGuest = useMemo(() => (
+        previewGuestId === 'public'
+            ? undefined
+            : previewData.rsvp.guests.find((guest) => guest.id === previewGuestId)
+    ), [previewData.rsvp.guests, previewGuestId]);
+    const previewVisibleEvents = useMemo(() => (
+        previewGuest ? getEventsForGuest(previewData, previewGuest) : undefined
+    ), [previewData, previewGuest]);
+    const previewKey = useMemo(() => JSON.stringify({
+        previewData,
+        previewGuestId,
+        visibleEventIds: previewVisibleEvents?.map((event) => event.id) ?? [],
+    }), [previewData, previewGuestId, previewVisibleEvents]);
     const guestSummary = useMemo(() => ({
         totalGuests: weddingData.rsvp.guests.length,
         totalInvitedCount: weddingData.rsvp.guests.reduce((total, guest) => total + guest.invitedCount, 0),
@@ -413,10 +462,12 @@ export default function Dashboard({
         setHasUnsavedChanges(true);
         setSaveStatus('');
         setSaveError('');
+        setSaveErrorDetail('');
     };
 
     const handleSaveDraft = async () => {
         setSaveError('');
+        setSaveErrorDetail('');
         setSaveStatus('Saving...');
 
         if (supabaseWeddingId) {
@@ -441,14 +492,25 @@ export default function Dashboard({
                 setSaveStatus('');
                 setSaveError(result.error.toLowerCase().includes('duplicate') || result.error.toLowerCase().includes('unique')
                     ? 'This slug is already in use. Please choose another slug.'
-                    : 'Could not save wedding details.');
+                    : result.error);
                 return;
             }
 
             const eventsResult = await saveSupabaseEvents(supabaseWeddingId, weddingData.events);
             if (eventsResult.error) {
-                console.warn('Could not save events', eventsResult.error);
+                console.error('Could not save events', {
+                    error: eventsResult.error,
+                    weddingId: supabaseWeddingId,
+                    mode,
+                    events: weddingData.events.map((event) => ({
+                        id: event.id,
+                        eventName: event.eventName,
+                        eventKey: event.eventKey,
+                        eventVisualKey: event.eventVisualKey,
+                    })),
+                });
                 setSaveStatus('');
+                setSaveErrorDetail(eventsResult.error);
                 setSaveError(`Could not save events.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
@@ -474,6 +536,7 @@ export default function Dashboard({
         setHasUnsavedChanges(false);
         setSaveStatus('');
         setSaveError('');
+        setSaveErrorDetail('');
     };
 
     const clearMockRsvpResponses = () => {
@@ -540,6 +603,9 @@ export default function Dashboard({
         const mediaSource = weddingData.events[0];
         const newEvent: WeddingEvent = {
             id: `event-${Date.now()}`,
+            eventKey: '',
+            eventVisualKey: '',
+            eventTextStyle: 'auto',
             eventName: 'New Event',
             date: '1st January 2027',
             startTime: '7:00 PM',
@@ -926,6 +992,7 @@ export default function Dashboard({
                         {hasUnsavedChanges ? 'Unsaved changes' : saveStatus || 'Draft ready'}
                     </span>
                     {saveError && <em>{saveError}</em>}
+                    {showTechnicalSaveDetail && <em className="technical-detail">Technical detail: {saveErrorDetail}</em>}
                     <button type="button" onClick={handleResetDraft}>Reset Draft</button>
                     {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                 </div>
@@ -968,9 +1035,15 @@ export default function Dashboard({
                                 helperText="Payment and publishing status will be managed by admin/payment flow later."
                             />
                             <InfoBlock label="Payment" value={weddingData.wedding.paymentStatus} />
-                            <InfoBlock label="Theme" value={weddingData.wedding.themeKey} />
                         </div>
                         <div className="form-grid dashboard-shell-fields">
+                            <SelectField
+                                label="Theme"
+                                value={weddingData.wedding.themeKey}
+                                options={themeKeyOptions}
+                                optionLabels={themeDisplayLabels}
+                                onChange={updateThemeKey}
+                            />
                             <TextField
                                 label="Slug"
                                 value={weddingData.wedding.slug}
@@ -1044,14 +1117,35 @@ export default function Dashboard({
                                         <h3>{event.eventName || `Event ${index + 1}`}</h3>
                                         <button type="button" onClick={() => deleteEvent(index)}>Delete</button>
                                     </div>
-                                    <div className="form-grid">
-                                        <TextField label="Event name" value={event.eventName} error={validation.events[index]?.eventName} onChange={(value) => updateEvent(index, 'eventName', value)} />
-                                        <TextField label="Date" value={event.date} error={validation.events[index]?.date} onChange={(value) => updateEvent(index, 'date', value)} />
-                                        <TextField label="Start time" value={event.startTime} error={validation.events[index]?.startTime} onChange={(value) => updateEvent(index, 'startTime', value)} />
-                                        <TextField label="Venue name" value={event.venueName} error={validation.events[index]?.venueName} onChange={(value) => updateEvent(index, 'venueName', value)} />
-                                        <TextField label="City" value={event.city} onChange={(value) => updateEvent(index, 'city', value)} />
-                                        <TextField label="Maps URL" value={event.mapsUrl} onChange={(value) => updateEvent(index, 'mapsUrl', value)} />
-                                        <TextField label="Dress code" value={event.dressCode} onChange={(value) => updateEvent(index, 'dressCode', value)} />
+                                    <div className="event-editor-body">
+                                        <div className="event-editor-fields form-grid">
+                                            <TextField label="Event name" value={event.eventName} error={validation.events[index]?.eventName} onChange={(value) => updateEvent(index, 'eventName', value)} />
+                                            <SelectField
+                                                label="Event type"
+                                                value={event.eventKey ?? ''}
+                                                options={eventTypeOptions}
+                                                optionLabels={eventTypeLabels}
+                                                onChange={(value) => updateEvent(index, 'eventKey', value)}
+                                            />
+                                            <SelectField
+                                                label="Text Style"
+                                                value={event.eventTextStyle ?? 'auto'}
+                                                options={eventTextStyleOptions}
+                                                optionLabels={eventTextStyleLabels}
+                                                onChange={(value) => updateEvent(index, 'eventTextStyle', value as WeddingEvent['eventTextStyle'])}
+                                            />
+                                            <TextField label="Date" value={event.date} error={validation.events[index]?.date} onChange={(value) => updateEvent(index, 'date', value)} />
+                                            <TextField label="Start time" value={event.startTime} error={validation.events[index]?.startTime} onChange={(value) => updateEvent(index, 'startTime', value)} />
+                                            <TextField label="Venue name" value={event.venueName} error={validation.events[index]?.venueName} onChange={(value) => updateEvent(index, 'venueName', value)} />
+                                            <TextField label="City" value={event.city} onChange={(value) => updateEvent(index, 'city', value)} />
+                                            <TextField label="Maps URL" value={event.mapsUrl} onChange={(value) => updateEvent(index, 'mapsUrl', value)} />
+                                            <TextField label="Dress code" value={event.dressCode} onChange={(value) => updateEvent(index, 'dressCode', value)} />
+                                        </div>
+                                        <EventVisualPicker
+                                            event={event}
+                                            themeKey={weddingData.wedding.themeKey}
+                                            onSelect={(visualKey) => updateEvent(index, 'eventVisualKey', visualKey)}
+                                        />
                                     </div>
                                 </div>
                             ))}
@@ -1328,9 +1422,10 @@ export default function Dashboard({
                         </div>
                         <div className="form-grid">
                             <SelectField
-                                label="Theme key"
+                                label="Theme"
                                 value={weddingData.wedding.themeKey}
                                 options={themeKeyOptions}
+                                optionLabels={themeDisplayLabels}
                                 onChange={updateThemeKey}
                             />
                             <TextField label="Hero video" value={weddingData.hero.videoSrc} onChange={(value) => updateHero('videoSrc', value)} />
@@ -1338,6 +1433,23 @@ export default function Dashboard({
                             <TextField label="Reveal image" value={weddingData.hero.revealImageSrc} onChange={(value) => updateHero('revealImageSrc', value)} />
                             <TextField label="Music audio" value={weddingData.music.audioSrc} onChange={(value) => updateMusic('audioSrc', value)} />
                             <TextField label="Music title" value={weddingData.music.title} onChange={(value) => updateMusic('title', value)} />
+                        </div>
+                        <div className="dashboard-theme-options">
+                            {themeKeyOptions.map((option) => (
+                                <button
+                                    key={option}
+                                    type="button"
+                                    className={weddingData.wedding.themeKey === option ? 'selected' : ''}
+                                    onClick={() => updateThemeKey(option)}
+                                >
+                                    <strong>{themeDisplayLabels[option] ?? option}</strong>
+                                    <span>
+                                        {option === 'theme-2'
+                                            ? 'Scroll-style invite with cinematic reveal, story sections, and carousel closing.'
+                                            : 'Classic palace-door invite with elegant event sections.'}
+                                    </span>
+                                </button>
+                            ))}
                         </div>
                     </div>
                 )}
@@ -1354,14 +1466,44 @@ export default function Dashboard({
                                 value={previewMode}
                                 options={['public', 'rsvp']}
                                 optionLabels={{
-                                    public: 'Nyota Classic preview',
-                                    rsvp: 'Nyota Plus preview',
+                                    public: 'Public/basic preview',
+                                    rsvp: 'RSVP/Complete package preview',
                                 }}
                                 onChange={(value) => setPreviewMode(value as PreviewMode)}
                             />
+                            <SelectField
+                                label="Preview as guest"
+                                value={previewGuestId}
+                                options={['public', ...weddingData.rsvp.guests.map((guest) => guest.id)]}
+                                optionLabels={{
+                                    public: 'Public preview / No guest',
+                                    ...Object.fromEntries(weddingData.rsvp.guests.map((guest) => [
+                                        guest.id,
+                                        guest.guestName || 'Unnamed guest',
+                                    ])),
+                                }}
+                                onChange={(value) => {
+                                    setPreviewGuestId(value);
+                                    if (value !== 'public') {
+                                        setPreviewMode('rsvp');
+                                    }
+                                }}
+                            />
                         </div>
+                        {previewGuest && (
+                            <p className="dashboard-note">
+                                Previewing {previewGuest.guestName || 'selected guest'} with {previewVisibleEvents?.length ?? 0} invited event{previewVisibleEvents?.length === 1 ? '' : 's'}.
+                            </p>
+                        )}
                         <div className="dashboard-preview-frame">
-                            <InviteExperience key={previewKey} data={previewData} embedded />
+                            <InviteExperience
+                                key={previewKey}
+                                data={previewData}
+                                embedded
+                                guest={previewGuest}
+                                visibleEvents={previewVisibleEvents}
+                                personalizedInviteMode={Boolean(previewGuest)}
+                            />
                         </div>
                     </div>
                 )}
@@ -1376,6 +1518,229 @@ function InfoBlock({ label, value }: { label: string; value: string }) {
             <span>{label}</span>
             <strong>{value}</strong>
         </div>
+    );
+}
+
+function EventVisualPicker({
+    event,
+    themeKey,
+    onSelect,
+}: {
+    event: WeddingEvent;
+    themeKey: string;
+    onSelect: (visualKey: string) => void;
+}) {
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [themeFilter, setThemeFilter] = useState('current');
+    const [categoryFilter, setCategoryFilter] = useState('all');
+    const currentThemeVisuals = getEventVisualsForTheme(themeKey);
+    const hasCurrentThemeVisuals = currentThemeVisuals.length > 0;
+    const visibleThemeFilter = themeFilter === 'current' && !hasCurrentThemeVisuals ? 'all' : themeFilter;
+    const recommendedVisual = getRecommendedVisualForEvent(event.eventName, event.eventKey, themeKey);
+    const selectedVisual = getEventVisualByKey(event.eventVisualKey) ?? recommendedVisual;
+    const selectedKey = event.eventVisualKey ?? '';
+    const categoryFilterOptions = [
+        { key: 'all', label: 'All' },
+        { key: 'haldi', label: 'Haldi' },
+        { key: 'mehendi', label: 'Mehendi' },
+        { key: 'sangeet', label: 'Sangeet / Music' },
+        { key: 'wedding', label: 'Wedding / Nikaah' },
+        { key: 'reception', label: 'Reception / Walima' },
+        { key: 'custom', label: 'Generic' },
+    ];
+    const availableThemeFilters = Array.from(new Map(
+        eventVisuals.map((visual) => [visual.themeKey, visual.themeLabel])
+    ));
+    const themeFilterOptions = [
+        { key: 'current', label: 'Current theme' },
+        ...availableThemeFilters
+            .filter(([visualThemeKey]) => visualThemeKey !== themeKey)
+            .map(([visualThemeKey, label]) => ({ key: visualThemeKey, label })),
+        { key: 'all', label: 'All themes' },
+    ];
+    const themeFilteredVisuals = visibleThemeFilter === 'all'
+        ? eventVisuals
+        : visibleThemeFilter === 'current'
+            ? currentThemeVisuals
+            : eventVisuals.filter((visual) => visual.themeKey === visibleThemeFilter);
+    const filteredVisuals = categoryFilter === 'all'
+        ? themeFilteredVisuals
+        : themeFilteredVisuals.filter((visual) => visual.eventType === categoryFilter);
+    const previewImage = selectedVisual?.imageSrc ?? event.backgroundImageSrc;
+    const previewObjectPosition = selectedVisual?.previewObjectPosition ?? 'center center';
+    const resolvedTextStyle = event.eventTextStyle === 'light' || event.eventTextStyle === 'dark'
+        ? event.eventTextStyle
+        : selectedVisual?.defaultTextStyle ?? 'dark';
+    const previewEvent = {
+        ...event,
+        eventName: event.eventName || 'Wedding Event',
+        date: event.date || 'Date',
+        startTime: event.startTime || 'Time',
+        venueName: event.venueName || 'Venue name',
+        city: event.city || 'City',
+    };
+
+    useEffect(() => {
+        setThemeFilter(getEventVisualsForTheme(themeKey).length ? 'current' : 'all');
+        setCategoryFilter('all');
+    }, [themeKey]);
+
+    return (
+        <div className="event-visual-picker">
+            <div>
+                <span className="event-preview-label">Scaled preview of the event section</span>
+                <div className={`event-live-preview event-live-preview-${resolvedTextStyle}`}>
+                    <img
+                        className="event-live-preview-image"
+                        src={previewImage}
+                        alt=""
+                        style={{ objectPosition: previewObjectPosition }}
+                    />
+                    <div className="event-live-preview-scrim" />
+                    <div className="event-live-preview-overlay">
+                        <span>Event Preview</span>
+                        <h4>{previewEvent.eventName}</h4>
+                        <p>{[previewEvent.date, previewEvent.startTime].filter(Boolean).join(' / ')}</p>
+                        <strong>{previewEvent.venueName}</strong>
+                        <em>{previewEvent.city}</em>
+                    </div>
+                </div>
+            </div>
+
+            <div className="event-visual-picker-summary">
+                <div>
+                    <span>Selected visual</span>
+                    <strong>{selectedKey ? selectedVisual?.label ?? 'Selected visual' : 'Auto recommendation'}</strong>
+                    <p>{selectedKey ? 'This visual is saved with the event.' : recommendedVisual ? `Auto uses ${recommendedVisual.label}.` : 'Auto uses the fallback visual.'}</p>
+                </div>
+                {eventVisuals.length > 0 && (
+                    <button
+                        className="dashboard-primary-btn secondary"
+                        type="button"
+                        onClick={() => setIsPickerOpen(true)}
+                    >
+                        Change Visual
+                    </button>
+                )}
+            </div>
+
+            {eventVisuals.length === 0 && (
+                <p className="dashboard-note compact">
+                    Event visual cards are available for Scroll Opening Invite. This theme will use its existing event media fields.
+                </p>
+            )}
+
+            {isPickerOpen && eventVisuals.length > 0 && (
+                <div className="event-visual-modal-backdrop" role="presentation" onClick={() => setIsPickerOpen(false)}>
+                    <div
+                        className="event-visual-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Choose event visual"
+                        onClick={(clickEvent) => clickEvent.stopPropagation()}
+                    >
+                        <div className="event-visual-modal-header">
+                            <div>
+                                <span>Choose event visual</span>
+                                <strong>{event.eventName || 'Wedding Event'}</strong>
+                                {themeFilter === 'current' && !hasCurrentThemeVisuals && (
+                                    <p>No visuals exist for the current theme yet, so all theme visuals are shown.</p>
+                                )}
+                            </div>
+                            <button type="button" onClick={() => setIsPickerOpen(false)}>Close</button>
+                        </div>
+
+                        <div className="event-visual-filter-group">
+                            <span>Theme</span>
+                            <div className="event-visual-filters" role="list" aria-label="Filter event visuals by theme">
+                                {themeFilterOptions.map((filter) => (
+                                    <button
+                                        key={filter.key}
+                                        className={themeFilter === filter.key ? 'active' : ''}
+                                        type="button"
+                                        onClick={() => setThemeFilter(filter.key)}
+                                    >
+                                        {filter.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="event-visual-filter-group">
+                            <span>Event category</span>
+                            <div className="event-visual-filters" role="list" aria-label="Filter event visuals by category">
+                                {categoryFilterOptions.map((filter) => (
+                                    <button
+                                        key={filter.key}
+                                        className={categoryFilter === filter.key ? 'active' : ''}
+                                        type="button"
+                                        onClick={() => setCategoryFilter(filter.key)}
+                                    >
+                                        {filter.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="event-visual-card-grid modal-grid">
+                            <EventVisualCard
+                                visual={recommendedVisual}
+                                label="Auto recommendation"
+                                helper={recommendedVisual ? `${recommendedVisual.themeLabel} / ${recommendedVisual.label}` : 'Uses fallback visual'}
+                                selected={!selectedKey}
+                                onClick={() => {
+                                    onSelect('');
+                                    setIsPickerOpen(false);
+                                }}
+                            />
+                            {filteredVisuals.map((visual) => (
+                                <EventVisualCard
+                                    key={visual.key}
+                                    visual={visual}
+                                    label={visual.label}
+                                    helper={`${visual.themeLabel} / ${eventTypeLabels[visual.eventType] ?? visual.eventType}`}
+                                    selected={selectedKey === visual.key}
+                                    onClick={() => {
+                                        onSelect(visual.key);
+                                        setIsPickerOpen(false);
+                                    }}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function EventVisualCard({
+    visual,
+    label,
+    helper,
+    selected,
+    onClick,
+}: {
+    visual?: EventVisual;
+    label: string;
+    helper: string;
+    selected: boolean;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            className={`event-visual-card ${selected ? 'selected' : ''}`}
+            type="button"
+            onClick={onClick}
+        >
+            {visual ? (
+                <img src={visual.imageSrc} alt="" />
+            ) : (
+                <span className="event-visual-card-empty">Auto</span>
+            )}
+            <strong>{label}</strong>
+            <span>{helper}</span>
+        </button>
     );
 }
 

@@ -3,6 +3,7 @@ import './Admin.css';
 import { useAuth } from '../context/AuthContext';
 import {
     getPackageDisplayLabel,
+    getThemeDisplayLabel,
     mockAdminWeddingsStorageKey,
     mockDashboardDraftStorageKey,
     mockRsvpResponsesStorageKey,
@@ -703,7 +704,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                         <dl className="admin-summary-list">
                                                             <div>
                                                                 <dt>Theme</dt>
-                                                                <dd>{wedding.themeKey}</dd>
+                                                                <dd>{getThemeDisplayLabel(wedding.themeKey)}</dd>
                                                             </div>
                                                             <div>
                                                                 <dt>Events</dt>

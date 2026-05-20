@@ -65,6 +65,8 @@ interface SupabaseEventRow {
   id: string;
   wedding_id: string;
   event_key: string | null;
+  event_visual_key: string | null;
+  event_text_style: WeddingEvent['eventTextStyle'] | null;
   event_name: string;
   date_label: string | null;
   start_time_label: string | null;
@@ -141,6 +143,9 @@ const readMealOptions = (
 
 const mapEventRow = (row: SupabaseEventRow): WeddingEvent => ({
   id: row.id,
+  eventKey: row.event_key ?? '',
+  eventVisualKey: row.event_visual_key ?? '',
+  eventTextStyle: row.event_text_style ?? 'auto',
   eventName: row.event_name,
   date: row.date_label ?? '',
   startTime: row.start_time_label ?? '',
@@ -332,6 +337,9 @@ export async function loadSupabasePersonalizedInvite(slug: string, inviteCode: s
 const eventToRow = (weddingId: string, event: WeddingEvent, sortOrder: number) => ({
   id: event.id,
   wedding_id: weddingId,
+  event_key: event.eventKey?.trim() || null,
+  event_visual_key: event.eventVisualKey?.trim() || null,
+  event_text_style: event.eventTextStyle ?? 'auto',
   event_name: event.eventName.trim() || 'Untitled Event',
   date_label: event.date,
   start_time_label: event.startTime,

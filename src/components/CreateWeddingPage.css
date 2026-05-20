@@ -69,7 +69,8 @@
     text-transform: uppercase;
 }
 
-.create-wedding-form input {
+.create-wedding-form input,
+.create-wedding-form select {
     width: 100%;
     border: 1px solid rgba(0, 0, 0, 0.14);
     border-radius: 8px;
@@ -106,6 +107,10 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
+}
+
+.theme-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .package-option {

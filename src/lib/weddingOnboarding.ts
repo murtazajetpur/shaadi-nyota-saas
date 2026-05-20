@@ -125,6 +125,12 @@ export const updateWeddingShell = async (input: UpdateWeddingShellInput) => {
     .eq('id', input.weddingId);
 
   if (error) {
+    if (error.code === '23503' && error.message.includes('weddings_theme_key_fkey')) {
+      return {
+        error: `Theme "${input.themeKey}" is not available in Supabase yet. Run supabase/seed.sql so the themes table includes this theme.`,
+      };
+    }
+
     return {
       error: error.code === '23505'
         ? 'This slug is already taken. Please choose another.'

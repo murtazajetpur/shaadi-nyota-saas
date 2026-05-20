@@ -17,6 +17,7 @@ Shaadi Nyota is a Supabase-backed Vite React MVP for premium wedding invitation 
 - [Migration Status](./MIGRATION_STATUS.md)
 - [Deployment Notes](./DEPLOYMENT_NOTES.md)
 - [Smoke Test Checklist](./SMOKE_TEST_CHECKLIST.md)
+- [Themes](./THEMES.md)
 
 ## Local Development
 
@@ -33,4 +34,3 @@ VITE_SUPABASE_ANON_KEY=
 ```
 
 Do not put Supabase service role keys in frontend env vars.
-
