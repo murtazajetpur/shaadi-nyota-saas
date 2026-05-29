@@ -17,6 +17,7 @@ interface InviteExperienceProps {
   guest?: WeddingGuest;
   visibleEvents?: WeddingEvent[];
   personalizedInviteMode?: boolean;
+  enableResponsiveOpeningVideo?: boolean;
 }
 
 export default function InviteExperience({
@@ -26,6 +27,7 @@ export default function InviteExperience({
   guest,
   visibleEvents,
   personalizedInviteMode = false,
+  enableResponsiveOpeningVideo = true,
 }: InviteExperienceProps) {
   if (data.wedding.themeKey === 'theme-2') {
     return (
@@ -36,6 +38,7 @@ export default function InviteExperience({
         guest={guest}
         visibleEvents={visibleEvents}
         personalizedInviteMode={personalizedInviteMode}
+        enableResponsiveOpeningVideo={enableResponsiveOpeningVideo}
       />
     );
   }
@@ -97,7 +100,7 @@ export default function InviteExperience({
 
       {heroDone && (
         <>
-          <Section1 ganeshaVisible={ganeshaVisible} hero={data.hero} />
+          <Section1 ganeshaVisible={ganeshaVisible} hero={data.hero} settled />
           <Suspense fallback={null}>
             {data.couple.enabled && <Section2 couple={data.couple} />}
             <Section3 events={eventsToShow} />
@@ -123,6 +126,7 @@ export default function InviteExperience({
           onHeroStart={() => setHeroStarted(true)}
           onGaneshaReveal={handleGaneshaReveal}
           onHeroComplete={handleHeroComplete}
+          enableResponsiveVideo={enableResponsiveOpeningVideo}
         />
       )}
     </div>

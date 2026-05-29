@@ -38,6 +38,23 @@
 .s2-heading-container {
     text-align: center;
     z-index: 3;
+    max-width: min(82%, 520px);
+}
+
+.s2-story-title {
+    margin: 0.55rem 0 0;
+    font-family: var(--font-primary);
+    font-size: clamp(1.35rem, 4vw, 2.2rem);
+    color: var(--color-text);
+}
+
+.s2-story-text {
+    margin: 0.45rem auto 0;
+    max-width: 32rem;
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-size: clamp(0.88rem, 2.5vw, 1.05rem);
+    line-height: 1.55;
 }
 
 .petals-container {

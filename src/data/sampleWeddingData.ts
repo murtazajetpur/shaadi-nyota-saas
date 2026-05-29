@@ -4,6 +4,16 @@ export type PaymentStatus = 'unpaid' | 'paid' | 'manual_pending' | 'ref_pending'
 export type RsvpStatus = 'yes' | 'no' | 'maybe' | '';
 export type MealPreference = 'veg' | 'nonVeg' | 'jain' | '';
 export type EventTextStyle = 'auto' | 'light' | 'dark';
+export type EventAnimationKey =
+  | 'none'
+  | 'soft-petals'
+  | 'soft-petals-blush'
+  | 'soft-petals-yellow'
+  | 'soft-petals-gold'
+  | 'soft-petals-maroon'
+  | 'golden-glow';
+export type RevealStyle = 'envelope' | 'scroll' | 'palace-door';
+export type RevealImageType = 'blessing' | 'couple' | 'floral';
 
 export const packageDisplayLabels: Record<PackageType, string> = {
   basic: 'Nyota Classic',
@@ -29,6 +39,7 @@ export interface WeddingEvent {
   eventKey?: string;
   eventVisualKey?: string;
   eventTextStyle?: EventTextStyle;
+  eventAnimationKey?: EventAnimationKey;
   eventName: string;
   date: string;
   startTime: string;
@@ -77,11 +88,13 @@ export interface SampleWeddingData {
     pageTitle: string;
   };
   hero: {
+    revealStyle: RevealStyle;
     revealCtaText: string;
     scrollHintText: string;
     videoSrc: string;
     posterSrc: string;
     revealImageSrc: string;
+    revealImageType: RevealImageType;
     revealImageAlt: string;
     revealImageShowAtSeconds: number;
     heroFadeAtSeconds: number;
@@ -97,7 +110,10 @@ export interface SampleWeddingData {
     displayName: string;
     introLine: string;
     blessingLine: string;
+    storyTitle: string;
+    storyText: string;
     backgroundImageSrc: string;
+    imageAlt: string;
   };
   events: WeddingEvent[];
   rsvp: {
@@ -124,8 +140,11 @@ export interface SampleWeddingData {
     guests: WeddingGuest[];
   };
   closing: {
+    enabled: boolean;
+    includePhotos: boolean;
     coupleDisplayName: string;
     closingLine: string;
+    message: string;
     carouselImages: string[];
     frameImageSrc: string;
   };
@@ -133,13 +152,15 @@ export interface SampleWeddingData {
 
 const sharedThemeMedia = {
   hero: {
+    revealStyle: 'envelope' as RevealStyle,
     revealCtaText: 'Tap to Reveal',
     scrollHintText: '',
     videoSrc: '/assets/hero-v1.mp4',
     posterSrc: '/assets/hero-poster-v1.jpeg',
     revealImageSrc: '/assets/Ganesha Image.png',
+    revealImageType: 'blessing' as RevealImageType,
     revealImageAlt: 'Lord Ganesha',
-    revealImageShowAtSeconds: 5.0,
+    revealImageShowAtSeconds: 5.5,
     heroFadeAtSeconds: 7.95,
   },
   music: {
@@ -170,13 +191,47 @@ const sharedThemeMedia = {
     },
   },
   closing: {
-    carouselImages: [
-      '/assets/carousel1.png',
-      '/assets/carousel2.png',
-      '/assets/carousel3.png',
-    ],
+    enabled: true,
+    includePhotos: false,
+    closingLine: 'With love',
+    message: 'Looking forward to celebrating our important days with you.',
+    carouselImages: [],
     frameImageSrc: '/assets/heart-frame.png',
   },
+};
+
+const theme2OpeningReveal = {
+  hero: {
+    revealStyle: 'scroll' as RevealStyle,
+    revealCtaText: 'Tap to Reveal',
+    scrollHintText: '',
+    videoSrc: '/assets/theme-2/main-hero-video.mp4',
+    posterSrc: '/assets/theme-2/hero-poster.png',
+    revealImageSrc: '/assets/opening-reveal/envelope/revealed-images/revealed-generic-classic-01.png',
+    revealImageType: 'floral' as RevealImageType,
+    revealImageAlt: 'Decorative wedding reveal image',
+    revealImageShowAtSeconds: 3.8,
+    heroFadeAtSeconds: 5.5,
+  },
+  music: {
+    audioSrc: '/assets/theme-2/din-shangda-audio.mp3',
+    title: 'Din Shagna Da',
+  },
+};
+
+export const openingRevealDefaultsByTheme: Record<string, {
+  hero: SampleWeddingData['hero'];
+  music: SampleWeddingData['music'];
+}> = {
+  'palace-door-opening': {
+    hero: sharedThemeMedia.hero,
+    music: sharedThemeMedia.music,
+  },
+  'theme-2': theme2OpeningReveal,
+};
+
+export const getOpeningRevealDefaults = (themeKey: string) => {
+  return openingRevealDefaultsByTheme[themeKey] ?? openingRevealDefaultsByTheme['palace-door-opening'];
 };
 
 const tajMahalPalaceMapsUrl = 'https://www.google.com/maps/search/?api=1&query=Taj%20Mahal%20Palace%20Mumbai';
@@ -201,11 +256,15 @@ export const sampleWeddings: SampleWeddingData[] = [
       displayName: 'Murtaza & Lubna',
       introLine: 'are getting married',
       blessingLine: '',
+      storyTitle: 'Two hearts, one beautiful story',
+      storyText: 'With the blessings of our families, we invite you to celebrate this special day with us.',
       backgroundImageSrc: sharedThemeMedia.coupleBackgroundImageSrc,
+      imageAlt: 'Murtaza and Lubna wedding story',
     },
     events: [
       {
         id: 'haldi',
+        eventAnimationKey: 'golden-glow',
         eventName: 'Haldi',
         date: '28th December 2026',
         startTime: '10:00 AM',
@@ -219,6 +278,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'mehendi',
+        eventAnimationKey: 'soft-petals',
         eventName: 'Mehendi',
         date: '28th December 2026',
         startTime: '4:00 PM',
@@ -232,6 +292,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'sangeet',
+        eventAnimationKey: 'golden-glow',
         eventName: 'Sangeet',
         date: '29th December 2026',
         startTime: '7:00 PM',
@@ -245,6 +306,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'wedding',
+        eventAnimationKey: 'soft-petals',
         eventName: 'Wedding',
         date: '30th December 2026',
         startTime: '9:00 AM',
@@ -258,6 +320,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'reception',
+        eventAnimationKey: 'golden-glow',
         eventName: 'Reception',
         date: '31st December 2026',
         startTime: '7:00 PM',
@@ -305,7 +368,6 @@ export const sampleWeddings: SampleWeddingData[] = [
     },
     closing: {
       coupleDisplayName: 'Murtaza & Lubna',
-      closingLine: 'With love',
       ...sharedThemeMedia.closing,
     },
   },
@@ -327,11 +389,15 @@ export const sampleWeddings: SampleWeddingData[] = [
       displayName: 'Ali & Sara',
       introLine: 'are getting married',
       blessingLine: '',
+      storyTitle: 'Two hearts, one beautiful story',
+      storyText: 'With the blessings of our families, we invite you to celebrate this special day with us.',
       backgroundImageSrc: sharedThemeMedia.coupleBackgroundImageSrc,
+      imageAlt: 'Ali and Sara wedding story',
     },
     events: [
       {
         id: 'haldi',
+        eventAnimationKey: 'golden-glow',
         eventName: 'Haldi',
         date: '12th February 2027',
         startTime: '11:00 AM',
@@ -345,6 +411,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'mehendi',
+        eventAnimationKey: 'soft-petals',
         eventName: 'Mehendi',
         date: '12th February 2027',
         startTime: '5:00 PM',
@@ -358,6 +425,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'sangeet',
+        eventAnimationKey: 'golden-glow',
         eventName: 'Sangeet',
         date: '13th February 2027',
         startTime: '8:00 PM',
@@ -371,6 +439,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'wedding',
+        eventAnimationKey: 'soft-petals',
         eventName: 'Nikaah',
         date: '14th February 2027',
         startTime: '10:30 AM',
@@ -384,6 +453,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'reception',
+        eventAnimationKey: 'golden-glow',
         eventName: 'Reception',
         date: '14th February 2027',
         startTime: '7:30 PM',
@@ -440,7 +510,6 @@ export const sampleWeddings: SampleWeddingData[] = [
     },
     closing: {
       coupleDisplayName: 'Ali & Sara',
-      closingLine: 'With love',
       ...sharedThemeMedia.closing,
     },
   },

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import './Hero.css';
 import type { SampleWeddingData } from '../data/sampleWeddingData';
+import { getOpeningRevealCrossfadeProgress } from '../data/openingReveal';
+import { useOpeningRevealVideoSrc } from '../hooks/useOpeningRevealVideoSrc';
 
 interface HeroProps {
     hero: SampleWeddingData['hero'];
@@ -8,20 +10,28 @@ interface HeroProps {
     onHeroStart: () => void;
     onGaneshaReveal: () => void;
     onHeroComplete: () => void;
+    enableResponsiveVideo?: boolean;
 }
 
-export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onHeroComplete }: HeroProps) {
+export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onHeroComplete, enableResponsiveVideo = true }: HeroProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const responsiveVideoSrc = useOpeningRevealVideoSrc(hero.videoSrc);
+    const videoSrc = enableResponsiveVideo ? responsiveVideoSrc : hero.videoSrc;
     const [isPlaying, setIsPlaying] = useState(false);
     const [ctaFadingOut, setCtaFadingOut] = useState(false);
-    const [isFadingOut, setIsFadingOut] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
+    const [revealImageOpacity, setRevealImageOpacity] = useState(0);
     const revealedRef = useRef(false);
-    const fadingOutRef = useRef(false);
 
     const handleVideoReady = () => {
         setIsVideoReady(true);
     };
+
+    useEffect(() => {
+        if (!hero.revealImageSrc) return;
+        const revealImage = new Image();
+        revealImage.src = hero.revealImageSrc;
+    }, [hero.revealImageSrc]);
 
     const handleTap = () => {
         if (!isPlaying && !ctaFadingOut) {
@@ -84,20 +94,13 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
     const checkTime = () => {
         if (videoRef.current && isPlaying) {
             const time = videoRef.current.currentTime;
+            const duration = videoRef.current.duration;
 
-            if (time >= hero.revealImageShowAtSeconds && !revealedRef.current) {
+            const progress = getOpeningRevealCrossfadeProgress(time, duration);
+            setRevealImageOpacity(progress);
+            if (progress > 0 && !revealedRef.current) {
                 revealedRef.current = true;
                 onGaneshaReveal();
-            }
-
-            if (time >= hero.heroFadeAtSeconds && !fadingOutRef.current) {
-                fadingOutRef.current = true;
-                setIsFadingOut(true);
-
-                // CSS transition is 0.7s to 0.9s
-                setTimeout(() => {
-                    onHeroComplete();
-                }, 700);
             }
         }
     };
@@ -110,14 +113,14 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
             animationFrame = requestAnimationFrame(loop);
         };
 
-        if (isPlaying && !fadingOutRef.current) {
+        if (isPlaying) {
             animationFrame = requestAnimationFrame(loop);
         }
         return () => cancelAnimationFrame(animationFrame);
-    }, [isPlaying, hero.heroFadeAtSeconds, hero.revealImageShowAtSeconds, onGaneshaReveal, onHeroComplete]);
+    }, [isPlaying, onGaneshaReveal]);
 
     return (
-        <div className={`hero-container ${isFadingOut ? 'fade-out' : ''}`}>
+        <div className="hero-container">
             <video
                 ref={videoRef}
                 playsInline
@@ -125,28 +128,33 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
                 className="hero-video"
                 preload="auto"
                 poster={hero.posterSrc}
-                src={hero.videoSrc}
+                src={videoSrc}
                 onPlay={handleVideoPlay}
                 onTimeUpdate={checkTime}
                 onCanPlay={handleVideoReady}
                 onLoadedData={handleVideoReady}
                 onEnded={() => {
-                    // Fallback if video is shorter than 8.0 for some reason
-                    if (!fadingOutRef.current) {
-                        fadingOutRef.current = true;
-                        setIsFadingOut(true);
-                        setTimeout(() => onHeroComplete(), 700);
+                    if (!revealedRef.current) {
+                        revealedRef.current = true;
+                        onGaneshaReveal();
                     }
+                    setRevealImageOpacity(1);
+                    onHeroComplete();
                 }}
+            />
+
+            <img
+                className="hero-reveal-image"
+                src={hero.revealImageSrc}
+                alt={hero.revealImageAlt}
+                style={{ opacity: revealImageOpacity }}
             />
 
             <div
                 className={`video-loading-overlay ${isVideoReady ? 'fade-out' : ''}`}
                 style={{ backgroundImage: `url('${hero.posterSrc}')` }}
                 onClick={handleTap}
-            >
-                {/* Empty overlay just for poster background and click interception */}
-            </div>
+            />
 
             {!isPlaying && (
                 <div className={`hero-cta-overlay ${ctaFadingOut ? 'fading-out' : ''}`} onClick={handleTap}>

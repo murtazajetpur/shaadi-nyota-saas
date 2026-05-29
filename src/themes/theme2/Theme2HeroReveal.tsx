@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SampleWeddingData } from '../../data/sampleWeddingData';
+import { getOpeningRevealCrossfadeProgress } from '../../data/openingReveal';
 import { theme2Assets } from './theme2Assets';
 import { getTheme2CoupleImage } from './theme2Utils';
+import { useOpeningRevealVideoSrc } from '../../hooks/useOpeningRevealVideoSrc';
 
 interface Theme2HeroRevealProps {
   hero: SampleWeddingData['hero'];
@@ -9,6 +11,7 @@ interface Theme2HeroRevealProps {
   onStarted: () => void;
   onDone: () => void;
   onPlayAudio: () => void;
+  enableResponsiveVideo?: boolean;
 }
 
 export default function Theme2HeroReveal({
@@ -17,17 +20,19 @@ export default function Theme2HeroReveal({
   onStarted,
   onDone,
   onPlayAudio,
+  enableResponsiveVideo = true,
 }: Theme2HeroRevealProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const [posterOpacity, setPosterOpacity] = useState(1);
-  const [videoOpacity, setVideoOpacity] = useState(1);
   const [mandapOpacity, setMandapOpacity] = useState(0);
-  const [showHero, setShowHero] = useState(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const timerRef = useRef<number[]>([]);
+  const animationFrameRef = useRef<number | null>(null);
   const mandapImage = getTheme2CoupleImage(couple.backgroundImageSrc);
   const videoSrc = hero.videoSrc && !hero.videoSrc.includes('/assets/hero-v1.mp4') ? hero.videoSrc : theme2Assets.heroVideo;
+  const responsiveVideoSrc = useOpeningRevealVideoSrc(videoSrc);
+  const selectedVideoSrc = enableResponsiveVideo ? responsiveVideoSrc : videoSrc;
   const posterSrc = hero.posterSrc && !hero.posterSrc.includes('/assets/hero-poster-v1') ? hero.posterSrc : theme2Assets.heroPoster;
+  const revealImage = hero.revealImageSrc || mandapImage;
 
   const handleTap = () => {
     if (isRevealed) return;
@@ -38,36 +43,64 @@ export default function Theme2HeroReveal({
     onPlayAudio();
     onStarted();
 
-    timerRef.current.push(window.setTimeout(() => setMandapOpacity(1), 3800));
-    timerRef.current.push(window.setTimeout(() => setVideoOpacity(0), 5000));
-    timerRef.current.push(window.setTimeout(() => setShowHero(false), 4500));
-    timerRef.current.push(window.setTimeout(onDone, 5500));
   };
 
   useEffect(() => {
+    if (revealImage) {
+      const image = new Image();
+      image.src = revealImage;
+    }
     return () => {
-      timerRef.current.forEach(window.clearTimeout);
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+      }
     };
-  }, []);
+  }, [revealImage]);
+
+  useEffect(() => {
+    if (!isRevealed) return undefined;
+
+    const tick = () => {
+      if (!videoRef.current) return;
+      const progress = getOpeningRevealCrossfadeProgress(videoRef.current.currentTime, videoRef.current.duration);
+      setMandapOpacity(progress);
+      if (progress < 1) {
+        animationFrameRef.current = window.requestAnimationFrame(tick);
+      }
+    };
+
+    animationFrameRef.current = window.requestAnimationFrame(tick);
+    return () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [isRevealed]);
 
   return (
-    <div className={`theme2-hero-reveal ${!showHero ? 'theme2-reveal-fade-out' : ''}`} onClick={handleTap}>
+    <div className="theme2-hero-reveal" onClick={handleTap}>
       <img
-        src={mandapImage}
+        src={revealImage}
         className="theme2-hero-poster"
-        style={{ opacity: mandapOpacity, transition: 'opacity 1.2s ease-out', zIndex: 10 }}
+        style={{ opacity: mandapOpacity, transition: 'opacity 120ms linear', zIndex: 12 }}
         alt={couple.displayName}
       />
 
       <video
+        key={selectedVideoSrc}
         ref={videoRef}
         className="theme2-hero-video"
         playsInline
         muted={false}
         poster={posterSrc}
-        style={{ opacity: videoOpacity, transition: 'opacity 0.8s ease-out', zIndex: 11 }}
+        style={{ zIndex: 11 }}
+        onEnded={() => {
+          setMandapOpacity(1);
+          onDone();
+        }}
       >
-        <source src={videoSrc} type="video/mp4" />
+        <source src={selectedVideoSrc} type="video/mp4" />
       </video>
 
       <div
@@ -77,19 +110,9 @@ export default function Theme2HeroReveal({
           opacity: posterOpacity,
           transition: 'opacity 0.8s ease-out',
           pointerEvents: isRevealed ? 'none' : 'auto',
-          overflow: 'hidden',
-          background: '#000',
+          backgroundImage: `url(${posterSrc})`,
         }}
-      >
-        <img src={posterSrc} className="theme2-hero-poster" style={{ position: 'absolute' }} alt={couple.displayName} />
-        <div className="theme2-hero-vignette" />
-        <div className="theme2-hero-overlay-top" style={{ opacity: posterOpacity }}>
-          <div className="theme2-hero-invitation">You are cordially invited to the wedding of</div>
-        </div>
-        <div className="theme2-hero-overlay-bottom" style={{ opacity: posterOpacity }}>
-          <div className="theme2-hero-names">{couple.groomName}<br />&amp; {couple.brideName}</div>
-        </div>
-      </div>
+      />
 
       <button
         className="theme2-tap-to-reveal"

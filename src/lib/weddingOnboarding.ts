@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import {
+  getOpeningRevealDefaults,
   sampleWeddingData,
   type PackageType,
   type SampleWeddingData,
@@ -80,6 +81,9 @@ export const buildWeddingShellFromRow = (row: OwnedWeddingRow): SampleWeddingDat
       groomName: row.groom_name || '',
       displayName,
       enabled: true,
+      introLine: '',
+      storyTitle: '',
+      storyText: '',
     },
     rsvp: {
       ...fallback.rsvp,
@@ -183,24 +187,31 @@ export const createWeddingShell = async (input: CreateWeddingInput) => {
   }
 
   const defaults = sampleWeddingData;
+  const openingRevealDefaults = getOpeningRevealDefaults(input.themeKey);
   const { error: settingsError } = await supabase
     .from('wedding_settings')
     .insert({
       wedding_id: wedding.id,
-      hero_reveal_cta_text: defaults.hero.revealCtaText,
-      hero_scroll_hint_text: defaults.hero.scrollHintText,
-      hero_video_src: defaults.hero.videoSrc,
-      hero_poster_src: defaults.hero.posterSrc,
-      hero_reveal_image_src: defaults.hero.revealImageSrc,
-      hero_reveal_image_alt: defaults.hero.revealImageAlt,
-      hero_reveal_image_show_at_seconds: defaults.hero.revealImageShowAtSeconds,
-      hero_fade_at_seconds: defaults.hero.heroFadeAtSeconds,
-      music_audio_src: defaults.music.audioSrc,
-      music_title: defaults.music.title,
+      hero_reveal_style: openingRevealDefaults.hero.revealStyle,
+      hero_reveal_cta_text: openingRevealDefaults.hero.revealCtaText,
+      hero_scroll_hint_text: openingRevealDefaults.hero.scrollHintText,
+      hero_video_src: openingRevealDefaults.hero.videoSrc,
+      hero_poster_src: openingRevealDefaults.hero.posterSrc,
+      hero_reveal_image_src: openingRevealDefaults.hero.revealImageSrc,
+      hero_reveal_image_type: openingRevealDefaults.hero.revealImageType,
+      hero_reveal_image_alt: openingRevealDefaults.hero.revealImageAlt,
+      hero_reveal_image_show_at_seconds: openingRevealDefaults.hero.revealImageShowAtSeconds,
+      hero_fade_at_seconds: openingRevealDefaults.hero.heroFadeAtSeconds,
+      music_audio_src: openingRevealDefaults.music.audioSrc,
+      music_title: openingRevealDefaults.music.title,
       couple_enabled: true,
-      couple_intro_line: defaults.couple.introLine,
+      couple_intro_line: '',
       couple_blessing_line: defaults.couple.blessingLine,
       couple_background_image_src: defaults.couple.backgroundImageSrc,
+      story_title: '',
+      story_text: '',
+      story_image_src: defaults.couple.backgroundImageSrc,
+      story_image_alt: defaults.couple.imageAlt,
       rsvp_enabled: defaults.rsvp.enabled,
       rsvp_title: defaults.rsvp.title,
       rsvp_subtitle: defaults.rsvp.subtitle,
@@ -215,8 +226,11 @@ export const createWeddingShell = async (input: CreateWeddingInput) => {
       rsvp_meal_preference_enabled: defaults.rsvp.mealPreferenceEnabled,
       rsvp_meal_options: defaults.rsvp.mealOptions,
       rsvp_success_message: defaults.rsvp.successMessage,
+      closing_include_photos: defaults.closing.includePhotos,
+      closing_layout: defaults.closing.includePhotos ? 'gallery' : 'simple',
       closing_line: defaults.closing.closingLine,
       closing_couple_display_name: input.displayName,
+      closing_message: defaults.closing.message,
       closing_carousel_images: defaults.closing.carouselImages,
       closing_frame_image_src: defaults.closing.frameImageSrc,
     });

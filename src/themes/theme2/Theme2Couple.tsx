@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SampleWeddingData } from '../../data/sampleWeddingData';
+import { theme2Assets } from './theme2Assets';
 import { getTheme2CoupleImage } from './theme2Utils';
 
 interface Theme2CoupleProps {
@@ -25,19 +26,25 @@ export default function Theme2Couple({ couple, isHeroDone }: Theme2CoupleProps) 
   }, [inView, isHeroDone]);
 
   return (
-    <div className="theme2-section" ref={sectionRef}>
+    <div className="theme2-section theme2-our-story-section" ref={sectionRef}>
       <img
-        src={getTheme2CoupleImage(couple.backgroundImageSrc)}
-        className="theme2-section-bg"
-        alt={couple.displayName}
+        src={theme2Assets.storyBackground}
+        className="theme2-section-bg theme2-our-story-bg"
+        alt=""
         loading="lazy"
       />
-      <div className="theme2-section-overlay theme2-overlay-couple" />
-      <div className={`theme2-section-content ${isVisible ? 'visible' : ''}`} style={{ marginTop: '16dvh' }}>
-        <h1 className="theme2-display-font theme2-fade-up cascade-1">{couple.groomName}</h1>
-        <span className="theme2-ampersand theme2-fade-up cascade-2">&amp;</span>
-        <h1 className="theme2-display-font theme2-fade-up cascade-3">{couple.brideName}</h1>
-        <h2 className="theme2-body-font theme2-fade-up cascade-4">{couple.introLine || 'are getting married'}</h2>
+      <img
+        src={getTheme2CoupleImage(couple.backgroundImageSrc)}
+        className="theme2-our-story-portrait"
+        alt={couple.imageAlt || couple.displayName}
+        loading="lazy"
+      />
+      <div className="theme2-section-overlay theme2-our-story-overlay" />
+      <div className={`theme2-section-content theme2-our-story-content ${isVisible ? 'visible' : ''}`}>
+        {couple.displayName.trim() && <span className="theme2-our-story-names theme2-fade-up cascade-1">{couple.displayName}</span>}
+        {couple.introLine.trim() && <span className="theme2-our-story-intro theme2-fade-up cascade-2">{couple.introLine}</span>}
+        {couple.storyTitle.trim() && <h1 className="theme2-script-font theme2-fade-up cascade-3">{couple.storyTitle}</h1>}
+        {couple.storyText.trim() && <p className="theme2-our-story-copy theme2-fade-up cascade-4">{couple.storyText}</p>}
       </div>
     </div>
   );

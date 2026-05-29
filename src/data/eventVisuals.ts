@@ -1,4 +1,5 @@
 import type { WeddingEvent } from './sampleWeddingData';
+import { assetRegistry, legacyEventAssetIdMap, resolveAssetPath, type RegistryAsset } from './assetRegistry';
 
 export interface EventVisual {
   key: string;
@@ -7,76 +8,68 @@ export interface EventVisual {
   themeKey: string;
   themeLabel: string;
   imageSrc: string;
+  style?: string;
   defaultTextStyle: 'light' | 'dark';
   previewObjectPosition?: string;
   publicObjectPosition?: string;
 }
 
-export const eventVisuals: EventVisual[] = [
-  {
-    key: 'theme2-haldi',
-    label: 'Haldi',
-    eventType: 'haldi',
-    themeKey: 'theme-2',
-    themeLabel: 'Scroll Opening Invite',
-    imageSrc: '/assets/theme-2/haldi.png',
-    defaultTextStyle: 'dark',
-    previewObjectPosition: '50% 72%',
-  },
-  {
-    key: 'theme2-mehendi',
-    label: 'Mehendi',
-    eventType: 'mehendi',
-    themeKey: 'theme-2',
-    themeLabel: 'Scroll Opening Invite',
-    imageSrc: '/assets/theme-2/mehendi.png',
-    defaultTextStyle: 'dark',
-    previewObjectPosition: 'center center',
-  },
-  {
-    key: 'theme2-sangeet',
-    label: 'Sangeet / Music',
-    eventType: 'sangeet',
-    themeKey: 'theme-2',
-    themeLabel: 'Scroll Opening Invite',
-    imageSrc: '/assets/theme-2/sangeet.png',
-    defaultTextStyle: 'light',
-    previewObjectPosition: 'center center',
-  },
-  {
-    key: 'theme2-shaadi',
-    label: 'Wedding / Nikaah',
-    eventType: 'wedding',
-    themeKey: 'theme-2',
-    themeLabel: 'Scroll Opening Invite',
-    imageSrc: '/assets/theme-2/shaadi.png',
-    defaultTextStyle: 'dark',
-    previewObjectPosition: 'center center',
-  },
-  {
-    key: 'theme2-reception',
-    label: 'Reception / Walima',
-    eventType: 'reception',
-    themeKey: 'theme-2',
-    themeLabel: 'Scroll Opening Invite',
-    imageSrc: '/assets/theme-2/reception.png',
-    defaultTextStyle: 'dark',
-    previewObjectPosition: 'center center',
-  },
-  {
-    key: 'theme2-generic',
-    label: 'Generic Floral',
-    eventType: 'custom',
-    themeKey: 'theme-2',
-    themeLabel: 'Scroll Opening Invite',
-    imageSrc: '/assets/theme-2/background.png',
-    defaultTextStyle: 'dark',
-    previewObjectPosition: 'center center',
-  },
-];
+const themeLabelByKey: Record<string, string> = {
+  'palace-door-opening': 'Classic Envelope',
+  'theme-2': 'Scroll Opening Invite',
+  'newly-created': 'New Event Library',
+  'asset-library': 'Event Library',
+};
+
+const styleTextStyleDefaults: Record<string, 'light' | 'dark'> = {
+  faceless: 'dark',
+  premium: 'dark',
+  sketch: 'dark',
+};
+
+const categoryTextStyleDefaults: Record<string, 'light' | 'dark'> = {
+  sangeet: 'light',
+};
+
+const toEventType = (category: RegistryAsset['category']) => (
+  category === 'generic' ? 'generic' : category
+);
+
+const toRegistryEventVisual = (asset: RegistryAsset): EventVisual => {
+  const sourceTheme = asset.sourceTheme ?? asset.style;
+  const defaultTextStyle = categoryTextStyleDefaults[asset.category] ?? styleTextStyleDefaults[asset.style] ?? 'dark';
+
+  return {
+    key: asset.id,
+    label: asset.label,
+    eventType: toEventType(asset.category),
+    themeKey: sourceTheme,
+    themeLabel: themeLabelByKey[sourceTheme] ?? asset.style,
+    imageSrc: resolveAssetPath(asset.src),
+    style: asset.style,
+    defaultTextStyle,
+    previewObjectPosition: asset.id === 'event-haldi-premium-05' ? '50% 72%' : 'center center',
+  };
+};
+
+const registryEventVisuals = Object.values(assetRegistry.sections.events)
+  .flat()
+  .filter((asset) => asset.type === 'image' || asset.type === 'background')
+  .map(toRegistryEventVisual);
+
+const legacyTheme2VisualKeyMap: Record<string, string> = {
+  'theme2-haldi': 'event-haldi-premium-05',
+  'theme2-mehendi': 'event-mehendi-premium-09',
+  'theme2-sangeet': 'event-sangeet-premium-14',
+  'theme2-shaadi': 'event-wedding-premium-35',
+  'theme2-reception': 'event-reception-premium-21',
+  'theme2-generic': 'event-generic-premium-12',
+};
+
+export const eventVisuals: EventVisual[] = registryEventVisuals;
 
 export const getEventVisualByKey = (key?: string) => (
-  eventVisuals.find((visual) => visual.key === key)
+  eventVisuals.find((visual) => visual.key === (key ? legacyTheme2VisualKeyMap[key] ?? legacyEventAssetIdMap[key] ?? key : key))
 );
 
 export const getEventVisualsForTheme = (themeKey: string) => (
@@ -94,6 +87,47 @@ const eventTypeToTheme2VisualKey: Record<string, string> = {
   walima: 'theme2-reception',
   generic: 'theme2-generic',
   custom: 'theme2-generic',
+};
+
+const eventTypeToRegistryCategory: Record<string, string> = {
+  custom: 'generic',
+  generic: 'generic',
+  haldi: 'haldi',
+  mehendi: 'mehendi',
+  nikaah: 'wedding',
+  nikah: 'wedding',
+  reception: 'reception',
+  sangeet: 'sangeet',
+  walima: 'reception',
+  wedding: 'wedding',
+};
+
+const getRecommendedCategoryFromText = (value: string) => {
+  const key = value.toLowerCase();
+  if (key.includes('haldi') || key.includes('turmeric')) return 'haldi';
+  if (key.includes('mehendi') || key.includes('mehndi') || key.includes('henna')) return 'mehendi';
+  if (
+    key.includes('sangeet') ||
+    key.includes('music') ||
+    key.includes('dance') ||
+    key.includes('qawwali') ||
+    key.includes('carnival')
+  ) {
+    return 'sangeet';
+  }
+  if (
+    key.includes('wedding') ||
+    key.includes('shaadi') ||
+    key.includes('nikaah') ||
+    key.includes('nikah') ||
+    key.includes('ceremony')
+  ) {
+    return 'wedding';
+  }
+  if (key.includes('reception') || key.includes('walima') || key.includes('dinner')) {
+    return 'reception';
+  }
+  return 'generic';
 };
 
 const getRecommendedTheme2KeyFromText = (value: string) => {
@@ -129,9 +163,20 @@ export const getRecommendedVisualForEvent = (
   eventKey: WeddingEvent['eventKey'],
   themeKey: string
 ) => {
-  if (themeKey !== 'theme-2') return undefined;
-
   const normalizedEventKey = eventKey?.trim().toLowerCase();
-  const visualKey = normalizedEventKey ? eventTypeToTheme2VisualKey[normalizedEventKey] : undefined;
-  return getEventVisualByKey(visualKey ?? getRecommendedTheme2KeyFromText(eventName));
+
+  if (themeKey === 'theme-2') {
+    const visualKey = normalizedEventKey ? eventTypeToTheme2VisualKey[normalizedEventKey] : undefined;
+    return getEventVisualByKey(visualKey ?? getRecommendedTheme2KeyFromText(eventName));
+  }
+
+  const category = normalizedEventKey
+    ? eventTypeToRegistryCategory[normalizedEventKey] ?? getRecommendedCategoryFromText(eventName)
+    : getRecommendedCategoryFromText(eventName);
+  const currentThemeVisual = eventVisuals.find((visual) => (
+    visual.eventType === category && visual.themeKey === themeKey
+  ));
+  if (currentThemeVisual) return currentThemeVisual;
+
+  return eventVisuals.find((visual) => visual.eventType === category);
 };

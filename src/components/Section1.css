@@ -64,6 +64,12 @@
     animation: simpleArrivalPhase 3.0s ease-out 0s forwards;
 }
 
+.ganesha-stage.settled .ganesha-full-img {
+    opacity: 1;
+    transform: scale(1);
+    object-position: center center;
+}
+
 @keyframes simpleArrivalPhase {
     0% {
         opacity: 0;

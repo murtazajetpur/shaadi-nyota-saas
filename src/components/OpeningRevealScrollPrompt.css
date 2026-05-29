@@ -1,0 +1,82 @@
+.opening-reveal-scroll-prompt {
+    position: absolute;
+    bottom: max(32px, 6%);
+    left: 50%;
+    z-index: 30;
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    transform: translateX(-50%);
+    color: #171313;
+    text-shadow: 0 1px 10px rgba(255, 255, 255, 0.48);
+    opacity: 0;
+    animation: openingRevealPromptIn 900ms ease-out 240ms forwards;
+    pointer-events: none;
+}
+
+.opening-reveal-scroll-prompt span {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.86rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.opening-reveal-scroll-prompt i {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-right: 1.5px solid rgba(23, 19, 19, 0.92);
+    border-bottom: 1.5px solid rgba(23, 19, 19, 0.92);
+    transform: rotate(45deg);
+    animation: openingRevealArrowFloat 1.8s ease-in-out infinite;
+}
+
+.opening-reveal-scroll-prompt.compact {
+    bottom: 6%;
+    gap: 7px;
+}
+
+.opening-reveal-scroll-prompt.compact span {
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+}
+
+.opening-reveal-scroll-prompt.compact i {
+    width: 8px;
+    height: 8px;
+}
+
+@keyframes openingRevealPromptIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 8px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+@keyframes openingRevealArrowFloat {
+    0%, 100% {
+        transform: translateY(0) rotate(45deg);
+        opacity: 0.58;
+    }
+    50% {
+        transform: translateY(6px) rotate(45deg);
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .opening-reveal-scroll-prompt {
+        opacity: 1;
+        animation: none;
+    }
+
+    .opening-reveal-scroll-prompt i {
+        animation: none;
+    }
+}

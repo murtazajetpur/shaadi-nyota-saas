@@ -3,6 +3,8 @@ import {
   getWeddingBySlug,
   type MealPreference,
   type PackageType,
+  type RevealImageType,
+  type RevealStyle,
   type PaymentStatus,
   type RsvpStatus,
   type SampleWeddingData,
@@ -11,6 +13,7 @@ import {
   type WeddingGuest,
   type WeddingStatus,
 } from '../data/sampleWeddingData';
+import { normalizeEventAnimationKey } from '../data/eventAnimations';
 import { supabase } from './supabaseClient';
 
 export type WebsiteStatus = 'draft' | 'published' | 'suspended';
@@ -34,11 +37,13 @@ export interface SupabaseWeddingRow {
 }
 
 interface SupabaseWeddingSettingsRow {
+  hero_reveal_style: RevealStyle | null;
   hero_reveal_cta_text: string | null;
   hero_scroll_hint_text: string | null;
   hero_video_src: string | null;
   hero_poster_src: string | null;
   hero_reveal_image_src: string | null;
+  hero_reveal_image_type: RevealImageType | null;
   hero_reveal_image_alt: string | null;
   hero_reveal_image_show_at_seconds: number | null;
   hero_fade_at_seconds: number | null;
@@ -48,6 +53,10 @@ interface SupabaseWeddingSettingsRow {
   couple_intro_line: string | null;
   couple_blessing_line: string | null;
   couple_background_image_src: string | null;
+  story_title: string | null;
+  story_text: string | null;
+  story_image_src: string | null;
+  story_image_alt: string | null;
   rsvp_enabled: boolean | null;
   rsvp_title: string | null;
   rsvp_subtitle: string | null;
@@ -55,9 +64,14 @@ interface SupabaseWeddingSettingsRow {
   rsvp_meal_preference_enabled: boolean | null;
   rsvp_meal_options: Record<string, unknown> | null;
   rsvp_success_message: unknown;
+  closing_enabled: boolean | null;
+  closing_layout: 'simple' | 'gallery' | null;
+  closing_include_photos: boolean | null;
   closing_line: string | null;
   closing_couple_display_name: string | null;
+  closing_message: string | null;
   closing_carousel_images: unknown;
+  closing_gallery_images?: unknown;
   closing_frame_image_src: string | null;
 }
 
@@ -67,6 +81,7 @@ interface SupabaseEventRow {
   event_key: string | null;
   event_visual_key: string | null;
   event_text_style: WeddingEvent['eventTextStyle'] | null;
+  event_animation_key: WeddingEvent['eventAnimationKey'] | null;
   event_name: string;
   date_label: string | null;
   start_time_label: string | null;
@@ -112,10 +127,37 @@ const fallbackWedding = () => {
 
 const valueOr = <T>(value: T | null | undefined, fallback: T) => value ?? fallback;
 
+const parseJsonStringArray = (value: unknown): string[] | null => {
+  if (!Array.isArray(value)) return null;
+
+  const paths = value
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      if (
+        item &&
+        typeof item === 'object' &&
+        'src' in item &&
+        typeof (item as { src?: unknown }).src === 'string'
+      ) {
+        return (item as { src: string }).src;
+      }
+      return '';
+    })
+    .filter(Boolean);
+
+  return paths;
+};
+
 const readJsonStringArray = (value: unknown, fallback: string[]) => {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
-    ? value
-    : fallback;
+  return parseJsonStringArray(value) ?? fallback;
+};
+
+const readFirstJsonStringArray = (values: unknown[], fallback: string[]) => {
+  const parsedValues = values
+    .map(parseJsonStringArray)
+    .filter((value): value is string[] => Boolean(value));
+  const firstWithImages = parsedValues.find((value) => value.length > 0);
+  return firstWithImages ?? parsedValues[0] ?? fallback;
 };
 
 const readJsonLabels = (
@@ -141,11 +183,28 @@ const readMealOptions = (
   ...(value ?? {}),
 }) as SampleWeddingData['rsvp']['mealOptions'];
 
+const normalizeRevealImageShowAtSeconds = (
+  revealStyle: SampleWeddingData['hero']['revealStyle'],
+  revealImageShowAtSeconds: number,
+  videoSrc: string
+) => {
+  if ((revealStyle === 'envelope' || videoSrc.includes('/assets/hero-v1.mp4')) && revealImageShowAtSeconds === 5.0) {
+    return 5.5;
+  }
+
+  return revealImageShowAtSeconds;
+};
+
+const normalizeEventTextStyle = (value?: string | null): WeddingEvent['eventTextStyle'] => (
+  value === 'light' || value === 'dark' ? value : 'auto'
+);
+
 const mapEventRow = (row: SupabaseEventRow): WeddingEvent => ({
   id: row.id,
   eventKey: row.event_key ?? '',
   eventVisualKey: row.event_visual_key ?? '',
-  eventTextStyle: row.event_text_style ?? 'auto',
+  eventTextStyle: normalizeEventTextStyle(row.event_text_style),
+  eventAnimationKey: normalizeEventAnimationKey(row.event_animation_key),
   eventName: row.event_name,
   date: row.date_label ?? '',
   startTime: row.start_time_label ?? '',
@@ -183,8 +242,16 @@ const mapWeddingBundle = (
   invites: SupabaseGuestEventInviteRow[] = []
 ): SampleWeddingData => {
   const fallback = fallbackWedding();
-  const displayName = wedding.display_name || [wedding.groom_name, wedding.bride_name].filter(Boolean).join(' & ') || fallback.couple.displayName;
+  const displayName = wedding.display_name ?? ([wedding.groom_name, wedding.bride_name].filter(Boolean).join(' & ') || fallback.couple.displayName);
   const rsvpLabels = readJsonLabels(settings?.rsvp_labels ?? null, fallback.rsvp);
+  const revealStyle = valueOr(settings?.hero_reveal_style, fallback.hero.revealStyle);
+  const heroVideoSrc = valueOr(settings?.hero_video_src, fallback.hero.videoSrc);
+  const revealImageShowAtSeconds = Number(valueOr(settings?.hero_reveal_image_show_at_seconds, fallback.hero.revealImageShowAtSeconds));
+
+  const closingGalleryImages = readFirstJsonStringArray(
+    [settings?.closing_carousel_images, settings?.closing_gallery_images],
+    fallback.closing.carouselImages
+  );
 
   return {
     ...fallback,
@@ -197,13 +264,15 @@ const mapWeddingBundle = (
       pageTitle: wedding.page_title || `${displayName} | Shaadi Nyota`,
     },
     hero: {
+      revealStyle,
       revealCtaText: valueOr(settings?.hero_reveal_cta_text, fallback.hero.revealCtaText),
       scrollHintText: valueOr(settings?.hero_scroll_hint_text, fallback.hero.scrollHintText),
-      videoSrc: valueOr(settings?.hero_video_src, fallback.hero.videoSrc),
+      videoSrc: heroVideoSrc,
       posterSrc: valueOr(settings?.hero_poster_src, fallback.hero.posterSrc),
       revealImageSrc: valueOr(settings?.hero_reveal_image_src, fallback.hero.revealImageSrc),
+      revealImageType: valueOr(settings?.hero_reveal_image_type, fallback.hero.revealImageType),
       revealImageAlt: valueOr(settings?.hero_reveal_image_alt, fallback.hero.revealImageAlt),
-      revealImageShowAtSeconds: Number(valueOr(settings?.hero_reveal_image_show_at_seconds, fallback.hero.revealImageShowAtSeconds)),
+      revealImageShowAtSeconds: normalizeRevealImageShowAtSeconds(revealStyle, revealImageShowAtSeconds, heroVideoSrc),
       heroFadeAtSeconds: Number(valueOr(settings?.hero_fade_at_seconds, fallback.hero.heroFadeAtSeconds)),
     },
     music: {
@@ -215,9 +284,12 @@ const mapWeddingBundle = (
       brideName: wedding.bride_name ?? fallback.couple.brideName,
       groomName: wedding.groom_name ?? fallback.couple.groomName,
       displayName,
-      introLine: valueOr(settings?.couple_intro_line, fallback.couple.introLine),
+      introLine: settings?.couple_intro_line ?? '',
       blessingLine: valueOr(settings?.couple_blessing_line, fallback.couple.blessingLine),
-      backgroundImageSrc: valueOr(settings?.couple_background_image_src, fallback.couple.backgroundImageSrc),
+      storyTitle: settings?.story_title ?? '',
+      storyText: settings?.story_text ?? '',
+      backgroundImageSrc: valueOr(settings?.story_image_src, valueOr(settings?.couple_background_image_src, fallback.couple.backgroundImageSrc)),
+      imageAlt: valueOr(settings?.story_image_alt, fallback.couple.imageAlt),
     },
     events: events.map(mapEventRow),
     rsvp: {
@@ -232,9 +304,12 @@ const mapWeddingBundle = (
       guests: mapGuestRows(guests, invites),
     },
     closing: {
+      enabled: settings?.closing_enabled ?? fallback.closing.enabled,
+      includePhotos: settings?.closing_include_photos ?? (settings?.closing_layout ? settings.closing_layout === 'gallery' : closingGalleryImages.length > 0 || fallback.closing.includePhotos),
       coupleDisplayName: valueOr(settings?.closing_couple_display_name, displayName),
       closingLine: valueOr(settings?.closing_line, fallback.closing.closingLine),
-      carouselImages: readJsonStringArray(settings?.closing_carousel_images, fallback.closing.carouselImages),
+      message: valueOr(settings?.closing_message, fallback.closing.message),
+      carouselImages: closingGalleryImages,
       frameImageSrc: valueOr(settings?.closing_frame_image_src, fallback.closing.frameImageSrc),
     },
   };
@@ -334,12 +409,17 @@ export async function loadSupabasePersonalizedInvite(slug: string, inviteCode: s
   };
 }
 
-const eventToRow = (weddingId: string, event: WeddingEvent, sortOrder: number) => ({
+const isMissingEventAnimationColumnError = (message?: string | null) => (
+  Boolean(message?.toLowerCase().includes('event_animation_key'))
+);
+
+const eventToRow = (weddingId: string, event: WeddingEvent, sortOrder: number, includeAnimationKey = true) => ({
   id: event.id,
   wedding_id: weddingId,
   event_key: event.eventKey?.trim() || null,
   event_visual_key: event.eventVisualKey?.trim() || null,
-  event_text_style: event.eventTextStyle ?? 'auto',
+  event_text_style: normalizeEventTextStyle(event.eventTextStyle),
+  ...(includeAnimationKey ? { event_animation_key: normalizeEventAnimationKey(event.eventAnimationKey) } : {}),
   event_name: event.eventName.trim() || 'Untitled Event',
   date_label: event.date,
   start_time_label: event.startTime,
@@ -356,14 +436,19 @@ const eventToRow = (weddingId: string, event: WeddingEvent, sortOrder: number) =
 
 export async function createSupabaseEvent(weddingId: string, event: WeddingEvent, sortOrder: number) {
   if (!supabase) return { event: null, error: 'Supabase is not configured.' };
-  const { data, error } = await supabase
+  const supabaseClient = supabase;
+  const insertEvent = (includeAnimationKey = true) => supabaseClient
     .from('events')
     .insert({
-      ...eventToRow(weddingId, event, sortOrder),
+      ...eventToRow(weddingId, event, sortOrder, includeAnimationKey),
       id: undefined,
     })
     .select('*')
     .single();
+  let { data, error } = await insertEvent();
+  if (isMissingEventAnimationColumnError(error?.message)) {
+    ({ data, error } = await insertEvent(false));
+  }
 
   return error
     ? { event: null, error: error.message }
@@ -372,8 +457,9 @@ export async function createSupabaseEvent(weddingId: string, event: WeddingEvent
 
 export async function saveSupabaseEvents(weddingId: string, events: WeddingEvent[]) {
   if (!supabase) return { error: 'Supabase is not configured.' };
+  const supabaseClient = supabase;
 
-  const { data: existingRows, error: existingError } = await supabase
+  const { data: existingRows, error: existingError } = await supabaseClient
     .from('events')
     .select('id')
     .eq('wedding_id', weddingId);
@@ -386,7 +472,7 @@ export async function saveSupabaseEvents(weddingId: string, events: WeddingEvent
     .filter((id) => !nextIds.has(id));
 
   if (idsToDelete.length) {
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await supabaseClient
       .from('events')
       .delete()
       .eq('wedding_id', weddingId)
@@ -396,11 +482,119 @@ export async function saveSupabaseEvents(weddingId: string, events: WeddingEvent
 
   if (!events.length) return { error: '' };
 
-  const { error } = await supabase
+  const upsertEvents = (includeAnimationKey = true) => supabaseClient
     .from('events')
-    .upsert(events.map((event, index) => eventToRow(weddingId, event, index)), { onConflict: 'id' });
+    .upsert(events.map((event, index) => eventToRow(weddingId, event, index, includeAnimationKey)), { onConflict: 'id' });
+  let { error } = await upsertEvents();
+  if (isMissingEventAnimationColumnError(error?.message)) {
+    ({ error } = await upsertEvents(false));
+  }
 
   return { error: error?.message ?? '' };
+}
+
+const getSchemaCacheMissingColumn = (errorMessage?: string) => {
+  if (!errorMessage?.includes('schema cache')) return '';
+  const match = errorMessage.match(/'([^']+)' column/);
+  return match?.[1] ?? '';
+};
+
+const closingSettingsColumns = new Set([
+  'closing_include_photos',
+  'closing_layout',
+  'closing_line',
+  'closing_couple_display_name',
+  'closing_message',
+  'closing_frame_image_src',
+  'closing_carousel_images',
+  'closing_gallery_images',
+]);
+
+export async function saveSupabaseWeddingSettings(weddingId: string, wedding: SampleWeddingData) {
+  if (!supabase) return { error: 'Supabase is not configured.' };
+
+  const basePayload = {
+    wedding_id: weddingId,
+    hero_reveal_style: wedding.hero.revealStyle,
+    hero_reveal_cta_text: wedding.hero.revealCtaText,
+    hero_scroll_hint_text: wedding.hero.scrollHintText,
+    hero_video_src: wedding.hero.videoSrc,
+    hero_poster_src: wedding.hero.posterSrc,
+    hero_reveal_image_src: wedding.hero.revealImageSrc,
+    hero_reveal_image_type: wedding.hero.revealImageType,
+    hero_reveal_image_alt: wedding.hero.revealImageAlt,
+    hero_reveal_image_show_at_seconds: wedding.hero.revealImageShowAtSeconds,
+    hero_fade_at_seconds: wedding.hero.heroFadeAtSeconds,
+    music_audio_src: wedding.music.audioSrc,
+    music_title: wedding.music.title,
+    couple_enabled: wedding.couple.enabled,
+    couple_intro_line: wedding.couple.introLine,
+    couple_blessing_line: wedding.couple.blessingLine,
+    couple_background_image_src: wedding.couple.backgroundImageSrc,
+    story_title: wedding.couple.storyTitle,
+    story_text: wedding.couple.storyText,
+    story_image_src: wedding.couple.backgroundImageSrc,
+    story_image_alt: wedding.couple.imageAlt,
+    rsvp_enabled: wedding.rsvp.enabled,
+    rsvp_title: wedding.rsvp.title,
+    rsvp_subtitle: wedding.rsvp.subtitle,
+    rsvp_labels: {
+      nameQuestion: wedding.rsvp.nameQuestion,
+      namePlaceholder: wedding.rsvp.namePlaceholder,
+      attendanceQuestion: wedding.rsvp.attendanceQuestion,
+      phoneQuestion: wedding.rsvp.phoneQuestion,
+      phonePlaceholder: wedding.rsvp.phonePlaceholder,
+      responseOptions: wedding.rsvp.responseOptions,
+    },
+    rsvp_meal_preference_enabled: wedding.rsvp.mealPreferenceEnabled,
+    rsvp_meal_options: wedding.rsvp.mealOptions,
+    rsvp_success_message: wedding.rsvp.successMessage,
+    closing_include_photos: wedding.closing.includePhotos,
+    closing_layout: wedding.closing.includePhotos ? 'gallery' : 'simple',
+    closing_line: wedding.closing.closingLine,
+    closing_couple_display_name: wedding.closing.coupleDisplayName,
+    closing_message: wedding.closing.message,
+    closing_frame_image_src: wedding.closing.frameImageSrc,
+  };
+
+  const payload: Record<string, unknown> = {
+    ...basePayload,
+    // Write both names when available. Older projects may have either column.
+    closing_carousel_images: wedding.closing.carouselImages,
+    closing_gallery_images: wedding.closing.carouselImages,
+  };
+  const removedColumns = new Set<string>();
+
+  for (let attempt = 0; attempt <= closingSettingsColumns.size; attempt += 1) {
+    const { error } = await supabase
+      .from('wedding_settings')
+      .upsert(payload, { onConflict: 'wedding_id' });
+
+    if (!error) {
+      const hasGalleryImages = wedding.closing.carouselImages.filter(Boolean).length > 0;
+      if (
+        hasGalleryImages &&
+        removedColumns.has('closing_carousel_images') &&
+        removedColumns.has('closing_gallery_images')
+      ) {
+        return {
+          error: 'Closing Gallery photos could not be saved because wedding_settings is missing both closing_carousel_images and closing_gallery_images. Run the latest Closing Gallery migration SQL.',
+        };
+      }
+      return { error: '' };
+    }
+
+    const missingColumn = getSchemaCacheMissingColumn(error.message);
+    if (missingColumn && closingSettingsColumns.has(missingColumn) && missingColumn in payload) {
+      delete payload[missingColumn];
+      removedColumns.add(missingColumn);
+      continue;
+    }
+
+    return { error: error.message };
+  }
+
+  return { error: 'Could not save wedding settings because required wedding_settings columns are missing.' };
 }
 
 export async function deleteSupabaseEvent(eventId: string) {

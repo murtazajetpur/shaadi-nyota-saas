@@ -1,6 +1,10 @@
-import { Fragment, useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import './Dashboard.css';
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import InviteExperience from './InviteExperience';
+import OpeningRevealScrollPrompt from './OpeningRevealScrollPrompt';
+import { EventSection as Theme1EventPreviewSection } from './Section3';
+import { Theme2EventFrame } from '../themes/theme2/Theme2EventSection';
+import '../themes/theme2/theme2.css';
+import './Dashboard.css';
 import { useAuth } from '../context/AuthContext';
 import { updateWeddingShell } from '../lib/weddingOnboarding';
 import {
@@ -14,6 +18,7 @@ import {
     replaceSupabaseGuestInvites,
     saveSupabaseEvents,
     saveSupabaseGuests,
+    saveSupabaseWeddingSettings,
 } from '../lib/supabaseWeddingData';
 import {
     defaultDashboardWeddingSlug,
@@ -21,7 +26,6 @@ import {
     mockAdminWeddingsStorageKey,
     mockDashboardDraftStorageKey,
     mockRsvpResponsesStorageKey,
-    getEventsForGuest,
     getWeddingBySlug,
     hasRsvpAccess,
     sampleWeddingData,
@@ -29,32 +33,117 @@ import {
     type StoredRsvpResponse,
     type WeddingEvent,
     type WeddingGuest,
-    themeDisplayLabels,
 } from '../data/sampleWeddingData';
 import {
     eventVisuals,
     getEventVisualByKey,
-    getEventVisualsForTheme,
     getRecommendedVisualForEvent,
     type EventVisual,
 } from '../data/eventVisuals';
+import {
+    eventAnimationOptionLabels,
+    eventAnimationOptions,
+    getEventAnimationLabel,
+    isEventAnimationRecommended,
+    normalizeEventAnimationKey,
+} from '../data/eventAnimations';
+import { getOpeningRevealCrossfadeProgress, openingRevealCrossfadeSeconds } from '../data/openingReveal';
+import {
+    getAllClosingGalleryPresetPhotos,
+    getAllOpeningRevealAnimations,
+    getAllRevealedImages,
+    getAllStoryImages,
+    getAudioAssets,
+    resolveAssetPath,
+} from '../data/assetRegistry';
+import { getTheme2CoupleImage } from '../themes/theme2/theme2Utils';
+import { supabase } from '../lib/supabaseClient';
 
-type DashboardTab = 'overview' | 'couple' | 'events' | 'guests' | 'rsvp' | 'theme' | 'preview';
-type PreviewMode = 'public' | 'rsvp';
+type DashboardTab = 'overview' | 'opening-reveal' | 'our-story' | 'couple' | 'events' | 'guests' | 'rsvp' | 'closing-gallery' | 'preview';
 type CsvImportMode = 'append' | 'replace';
 type DashboardMode = 'couple' | 'admin';
 
-const dashboardTabs: Array<{ id: DashboardTab; label: string }> = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'couple', label: 'Couple' },
-    { id: 'events', label: 'Events' },
-    { id: 'guests', label: 'Guests' },
-    { id: 'rsvp', label: 'RSVP Dashboard' },
-    { id: 'theme', label: 'Theme' },
-    { id: 'preview', label: 'Preview' },
+const dashboardTabGroups: Array<{ label: string; tabs: Array<{ id: DashboardTab; label: string }> }> = [
+    {
+        label: 'Wedding Website',
+        tabs: [{ id: 'overview', label: 'Overview' }],
+    },
+    {
+        label: 'Content',
+        tabs: [
+            { id: 'opening-reveal', label: 'Opening Reveal' },
+            { id: 'our-story', label: 'Our Story' },
+            { id: 'events', label: 'Events' },
+            { id: 'closing-gallery', label: 'Closing Gallery' },
+        ],
+    },
+    {
+        label: 'Guests',
+        tabs: [
+            { id: 'guests', label: 'Guests' },
+            { id: 'rsvp', label: 'RSVP Responses' },
+        ],
+    },
+    {
+        label: 'Review',
+        tabs: [{ id: 'preview', label: 'Preview' }],
+    },
 ];
 
-const themeKeyOptions = ['palace-door-opening', 'theme-2'];
+const revealAnimationOptions = getAllOpeningRevealAnimations().map((option) => ({
+    key: option.id,
+    label: option.label,
+    revealStyle: option.revealStyle,
+    videoSrc: resolveAssetPath(option.videoSrc),
+    posterSrc: resolveAssetPath(option.posterSrc),
+    revealImageShowAtSeconds: option.revealImageShowAtSeconds,
+    heroFadeAtSeconds: option.heroFadeAtSeconds,
+    themeLabel: option.disabled ? 'Coming soon' : 'Reveal Animation',
+    disabled: option.disabled,
+    helper: option.helper,
+}));
+const revealedImageOptions = getAllRevealedImages().map((option) => ({
+    key: option.id,
+    label: option.label,
+    imageType: option.imageType,
+    imageSrc: resolveAssetPath(option.src),
+    altText: option.altText,
+    themeLabel: 'Reveal Image Library',
+    helper: option.helper,
+}));
+const storyImageOptions = getAllStoryImages().map((option) => ({
+    key: option.id,
+    label: option.label,
+    imageSrc: resolveAssetPath(option.src),
+    altText: option.altText,
+    themeLabel: 'Our Story Library',
+}));
+const closingImagePresets = getAllClosingGalleryPresetPhotos().map((option) => ({
+    key: option.id,
+    label: option.label,
+    imageSrc: resolveAssetPath(option.src),
+    themeLabel: option.sourceTheme === 'theme-2' ? 'Scroll Opening Invite' : 'Palace Door Opening',
+}));
+const musicOptions = Array.from(
+    new Map(getAudioAssets().map((option) => [resolveAssetPath(option.src), option])).values()
+).map((option) => ({
+    value: resolveAssetPath(option.src),
+    label: option.label,
+}));
+const musicOptionLabels = Object.fromEntries(musicOptions.map((option) => [option.value, option.label]));
+const closingGalleryBucket = 'wedding-assets';
+const closingGalleryMaxImages = 3;
+const closingGalleryCarouselIntervalMs = 2500;
+const revealStyleLabels: Record<string, string> = {
+    envelope: 'Envelope Opening',
+    scroll: 'Scroll Opening',
+    'palace-door': 'Palace Door Opening',
+};
+const revealImageTypeLabels: Record<string, string> = {
+    blessing: 'Blessing',
+    couple: 'Couple Image',
+    floral: 'Decorative',
+};
 const eventTypeOptions = ['', 'haldi', 'mehendi', 'sangeet', 'wedding', 'reception', 'custom'];
 const eventTypeLabels: Record<string, string> = {
     '': 'Auto',
@@ -64,6 +153,12 @@ const eventTypeLabels: Record<string, string> = {
     wedding: 'Wedding / Nikaah',
     reception: 'Reception / Walima',
     custom: 'Custom',
+    generic: 'Generic',
+};
+const eventVisualStyleLabels: Record<string, string> = {
+    premium: 'Premium',
+    sketch: 'Sketch',
+    faceless: 'Faceless',
 };
 const eventTextStyleOptions = ['auto', 'light', 'dark'];
 const eventTextStyleLabels: Record<string, string> = {
@@ -71,7 +166,12 @@ const eventTextStyleLabels: Record<string, string> = {
     light: 'Light text',
     dark: 'Dark text',
 };
+const eventAnimationKeys = eventAnimationOptions.map((option) => option.id);
 const dashboardBaseWedding = getWeddingBySlug(defaultDashboardWeddingSlug) ?? sampleWeddingData;
+const isScrollReveal = (hero: SampleWeddingData['hero']) => (
+    hero.revealStyle === 'scroll' ||
+    hero.videoSrc.includes('/assets/theme-2/main-hero-video.mp4')
+);
 
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => {
     return JSON.parse(JSON.stringify(wedding)) as SampleWeddingData;
@@ -168,6 +268,25 @@ const createUniqueInviteCode = (existingCodes: Set<string>) => {
 
 const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
     const defaults = cloneWedding(dashboardBaseWedding);
+    const mergedCouple = {
+        ...defaults.couple,
+        ...wedding.couple,
+    };
+    const defaultEventMedia = defaults.events[0];
+    const normalizedEvents: WeddingEvent[] = wedding.events?.length
+        ? wedding.events.map((event, index) => {
+            const fallbackEvent = defaults.events[index] ?? defaultEventMedia;
+            const eventTextStyle: WeddingEvent['eventTextStyle'] = event.eventTextStyle === 'light' || event.eventTextStyle === 'dark' ? event.eventTextStyle : 'auto';
+            return {
+                ...fallbackEvent,
+                ...event,
+                eventKey: event.eventKey ?? '',
+                eventVisualKey: event.eventVisualKey ?? '',
+                eventTextStyle,
+                eventAnimationKey: normalizeEventAnimationKey(event.eventAnimationKey),
+            };
+        })
+        : defaults.events;
 
     return {
         ...defaults,
@@ -187,8 +306,10 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
             ...wedding.music,
         },
         couple: {
-            ...defaults.couple,
-            ...wedding.couple,
+            ...mergedCouple,
+            introLine: wedding.couple?.introLine ?? '',
+            storyTitle: wedding.couple?.storyTitle ?? '',
+            storyText: wedding.couple?.storyText ?? '',
         },
         rsvp: {
             ...defaults.rsvp,
@@ -207,7 +328,7 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
             ...defaults.closing,
             ...wedding.closing,
         },
-        events: wedding.events?.length ? wedding.events : defaults.events,
+        events: normalizedEvents,
     };
 };
 
@@ -224,6 +345,44 @@ const loadInitialWedding = () => {
         window.localStorage.removeItem(mockDashboardDraftStorageKey);
         return applyAdminFields(cloneWedding(dashboardBaseWedding));
     }
+};
+
+const dashboardDraftStoragePrefix = 'shaadi-nyota-dashboard-draft';
+
+const createDashboardDraftStorageKey = (mode: DashboardMode, weddingId?: string, slug?: string) => (
+    `${dashboardDraftStoragePrefix}:${mode}:${weddingId || slug || 'fallback'}`
+);
+
+type DashboardDraftSnapshot = {
+    savedAt: string;
+    wedding: SampleWeddingData;
+};
+
+const readDashboardDraft = (storageKey: string) => {
+    try {
+        const storedDraft = window.localStorage.getItem(storageKey);
+        if (!storedDraft) return null;
+        const parsed = JSON.parse(storedDraft) as DashboardDraftSnapshot | SampleWeddingData;
+        const wedding = 'wedding' in parsed && 'savedAt' in parsed
+            ? parsed.wedding
+            : parsed as SampleWeddingData;
+        return normalizeWedding(wedding);
+    } catch {
+        window.localStorage.removeItem(storageKey);
+        return null;
+    }
+};
+
+const writeDashboardDraft = (storageKey: string, wedding: SampleWeddingData) => {
+    const draft: DashboardDraftSnapshot = {
+        savedAt: new Date().toISOString(),
+        wedding,
+    };
+    window.localStorage.setItem(storageKey, JSON.stringify(draft));
+};
+
+const clearDashboardDraft = (storageKey: string) => {
+    window.localStorage.removeItem(storageKey);
 };
 
 const loadStoredRsvpResponses = () => {
@@ -251,20 +410,30 @@ export default function Dashboard({
     mode?: DashboardMode;
 }) {
     const { user, isConfigured, signOut } = useAuth();
+    const dashboardDraftStorageKey = supabaseWeddingId
+        ? createDashboardDraftStorageKey(mode, supabaseWeddingId, initialWedding?.wedding.slug)
+        : mockDashboardDraftStorageKey;
+    const restoredDashboardDraft = supabaseWeddingId ? readDashboardDraft(dashboardDraftStorageKey) : null;
     const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
-    const [weddingData, setWeddingData] = useState<SampleWeddingData>(() => initialWedding ?? loadInitialWedding());
-    const [previewMode, setPreviewMode] = useState<PreviewMode>('public');
-    const [previewGuestId, setPreviewGuestId] = useState('public');
+    const [weddingData, setWeddingData] = useState<SampleWeddingData>(() => (
+        restoredDashboardDraft ?? (initialWedding ? normalizeWedding(initialWedding) : loadInitialWedding())
+    ));
     const [guestSearchQuery, setGuestSearchQuery] = useState('');
     const [guestImportMode, setGuestImportMode] = useState<CsvImportMode>('append');
     const [guestImportWarnings, setGuestImportWarnings] = useState<string[]>([]);
+    const [closingImagePickerTarget, setClosingImagePickerTarget] = useState<number | 'add' | null>(null);
+    const [isClosingImageUploading, setIsClosingImageUploading] = useState(false);
     const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
+    const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
     const [rsvpResponses, setRsvpResponses] = useState<StoredRsvpResponse[]>(loadStoredRsvpResponses);
     const [isRsvpLoading, setIsRsvpLoading] = useState(false);
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(restoredDashboardDraft));
     const [saveStatus, setSaveStatus] = useState('');
     const [saveError, setSaveError] = useState('');
     const [saveErrorDetail, setSaveErrorDetail] = useState('');
+    const weddingDataRef = useRef(weddingData);
+    const hasUnsavedChangesRef = useRef(Boolean(restoredDashboardDraft));
+    const activeDraftStorageKeyRef = useRef(dashboardDraftStorageKey);
     const isAdminMode = mode === 'admin';
     const showTechnicalSaveDetail = import.meta.env.DEV && Boolean(saveErrorDetail);
     const adminRlsHint = ' Admin access requires RLS policies allowing admins to read and update weddings, events, guests, guest_event_invites, and RSVP responses.';
@@ -278,6 +447,25 @@ export default function Dashboard({
             document.body.style.overflow = previousBodyOverflow;
         };
     }, [title]);
+
+    useEffect(() => {
+        weddingDataRef.current = weddingData;
+    }, [weddingData]);
+
+    useEffect(() => {
+        hasUnsavedChangesRef.current = hasUnsavedChanges;
+    }, [hasUnsavedChanges]);
+
+    useEffect(() => {
+        const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+            if (!hasUnsavedChangesRef.current) return;
+            event.preventDefault();
+            event.returnValue = '';
+        };
+
+        window.addEventListener('beforeunload', warnBeforeUnload);
+        return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+    }, []);
 
     useEffect(() => {
         if (activeTab === 'rsvp') {
@@ -303,20 +491,32 @@ export default function Dashboard({
     }, [activeTab, supabaseWeddingId, weddingData.wedding.slug, weddingData.rsvp.guests]);
 
     useEffect(() => {
-        if (
-            previewGuestId !== 'public' &&
-            !weddingData.rsvp.guests.some((guest) => guest.id === previewGuestId)
-        ) {
-            setPreviewGuestId('public');
-        }
-    }, [previewGuestId, weddingData.rsvp.guests]);
+        setSelectedGuestIds((current) => current.filter((id) => (
+            weddingData.rsvp.guests.some((guest) => guest.id === id)
+        )));
+    }, [weddingData.rsvp.guests]);
 
     useEffect(() => {
         if (initialWedding) {
-            setWeddingData(initialWedding);
+            const draftScopeChanged = activeDraftStorageKeyRef.current !== dashboardDraftStorageKey;
+            activeDraftStorageKeyRef.current = dashboardDraftStorageKey;
+            if (!draftScopeChanged && hasUnsavedChangesRef.current) return;
+            const restoredDraft = supabaseWeddingId ? readDashboardDraft(dashboardDraftStorageKey) : null;
+            if (restoredDraft) {
+                setWeddingData(restoredDraft);
+                weddingDataRef.current = restoredDraft;
+                setHasUnsavedChanges(true);
+                hasUnsavedChangesRef.current = true;
+                setSaveStatus('Unsaved draft restored');
+                return;
+            }
+            const nextWedding = normalizeWedding(initialWedding);
+            setWeddingData(nextWedding);
+            weddingDataRef.current = nextWedding;
             setHasUnsavedChanges(false);
+            hasUnsavedChangesRef.current = false;
         }
-    }, [initialWedding]);
+    }, [dashboardDraftStorageKey, initialWedding, supabaseWeddingId]);
 
     const validation = useMemo(() => {
         return {
@@ -353,25 +553,7 @@ export default function Dashboard({
         return coupleAndSlugWarnings + eventWarnings + guestWarnings;
     }, [validation]);
 
-    const previewData = useMemo(() => {
-        const previewWedding = cloneWedding(weddingData);
-        previewWedding.wedding.packageType = previewMode === 'rsvp' ? 'rsvp' : 'basic';
-        return previewWedding;
-    }, [previewMode, weddingData]);
-
-    const previewGuest = useMemo(() => (
-        previewGuestId === 'public'
-            ? undefined
-            : previewData.rsvp.guests.find((guest) => guest.id === previewGuestId)
-    ), [previewData.rsvp.guests, previewGuestId]);
-    const previewVisibleEvents = useMemo(() => (
-        previewGuest ? getEventsForGuest(previewData, previewGuest) : undefined
-    ), [previewData, previewGuest]);
-    const previewKey = useMemo(() => JSON.stringify({
-        previewData,
-        previewGuestId,
-        visibleEventIds: previewVisibleEvents?.map((event) => event.id) ?? [],
-    }), [previewData, previewGuestId, previewVisibleEvents]);
+    const previewKey = useMemo(() => JSON.stringify(weddingData), [weddingData]);
     const guestSummary = useMemo(() => ({
         totalGuests: weddingData.rsvp.guests.length,
         totalInvitedCount: weddingData.rsvp.guests.reduce((total, guest) => total + guest.invitedCount, 0),
@@ -389,6 +571,9 @@ export default function Dashboard({
                 ));
             });
     }, [guestSearchQuery, weddingData.rsvp.guests]);
+    const areAllFilteredGuestsSelected = filteredGuestRows.length > 0 && filteredGuestRows.every(({ guest }) => (
+        selectedGuestIds.includes(guest.id)
+    ));
     const rsvpAnalytics = useMemo(() => {
         const relevantResponses = rsvpResponses.filter((response) => response.weddingSlug === weddingData.wedding.slug);
         const getResponse = (guest: WeddingGuest, eventId: string) => relevantResponses.find((response) => (
@@ -458,7 +643,17 @@ export default function Dashboard({
     }, [rsvpResponses, weddingData]);
 
     const updateWeddingData = (updater: (current: SampleWeddingData) => SampleWeddingData) => {
-        setWeddingData(updater);
+        setWeddingData((current) => {
+            const nextWedding = updater(current);
+            weddingDataRef.current = nextWedding;
+            if (supabaseWeddingId) {
+                writeDashboardDraft(dashboardDraftStorageKey, nextWedding);
+            } else {
+                window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(nextWedding));
+            }
+            return nextWedding;
+        });
+        hasUnsavedChangesRef.current = true;
         setHasUnsavedChanges(true);
         setSaveStatus('');
         setSaveError('');
@@ -466,6 +661,7 @@ export default function Dashboard({
     };
 
     const handleSaveDraft = async () => {
+        const weddingToSave = weddingDataRef.current;
         setSaveError('');
         setSaveErrorDetail('');
         setSaveStatus('Saving...');
@@ -479,12 +675,12 @@ export default function Dashboard({
 
             const result = await updateWeddingShell({
                 weddingId: supabaseWeddingId,
-                brideName: weddingData.couple.brideName.trim(),
-                groomName: weddingData.couple.groomName.trim(),
-                displayName: weddingData.couple.displayName.trim(),
-                slug: weddingData.wedding.slug.trim(),
-                themeKey: weddingData.wedding.themeKey.trim(),
-                pageTitle: weddingData.wedding.pageTitle.trim(),
+                brideName: weddingToSave.couple.brideName.trim(),
+                groomName: weddingToSave.couple.groomName.trim(),
+                displayName: weddingToSave.couple.displayName.trim(),
+                slug: weddingToSave.wedding.slug.trim(),
+                themeKey: weddingToSave.wedding.themeKey.trim(),
+                pageTitle: weddingToSave.wedding.pageTitle.trim(),
             });
 
             if (result.error) {
@@ -496,17 +692,31 @@ export default function Dashboard({
                 return;
             }
 
-            const eventsResult = await saveSupabaseEvents(supabaseWeddingId, weddingData.events);
+            const settingsResult = await saveSupabaseWeddingSettings(supabaseWeddingId, weddingToSave);
+            if (settingsResult.error) {
+                console.error('Could not save wedding settings', {
+                    error: settingsResult.error,
+                    weddingId: supabaseWeddingId,
+                    mode,
+                });
+                setSaveStatus('');
+                setSaveErrorDetail(settingsResult.error);
+                setSaveError(`Could not save wedding settings. If you recently added builder sections, run the latest Supabase migration SQL and try again.${isAdminMode ? adminRlsHint : ''}`);
+                return;
+            }
+
+            const eventsResult = await saveSupabaseEvents(supabaseWeddingId, weddingToSave.events);
             if (eventsResult.error) {
                 console.error('Could not save events', {
                     error: eventsResult.error,
                     weddingId: supabaseWeddingId,
                     mode,
-                    events: weddingData.events.map((event) => ({
+                    events: weddingToSave.events.map((event) => ({
                         id: event.id,
                         eventName: event.eventName,
                         eventKey: event.eventKey,
                         eventVisualKey: event.eventVisualKey,
+                        eventAnimationKey: event.eventAnimationKey,
                     })),
                 });
                 setSaveStatus('');
@@ -515,7 +725,7 @@ export default function Dashboard({
                 return;
             }
 
-            const guestsResult = await saveSupabaseGuests(supabaseWeddingId, weddingData.rsvp.guests);
+            const guestsResult = await saveSupabaseGuests(supabaseWeddingId, weddingToSave.rsvp.guests);
             if (guestsResult.error) {
                 console.warn('Could not save guests', guestsResult.error);
                 setSaveStatus('');
@@ -524,15 +734,30 @@ export default function Dashboard({
             }
         }
 
-        window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(weddingData));
+        if (supabaseWeddingId) {
+            clearDashboardDraft(dashboardDraftStorageKey);
+        } else {
+            window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(weddingToSave));
+        }
+        hasUnsavedChangesRef.current = false;
         setHasUnsavedChanges(false);
         setSaveStatus('Saved');
     };
 
-    const handleResetDraft = () => {
+    const handleResetDraft = async () => {
+        clearDashboardDraft(dashboardDraftStorageKey);
         window.localStorage.removeItem(mockDashboardDraftStorageKey);
-        setWeddingData(cloneWedding(initialWedding ?? dashboardBaseWedding));
-        setPreviewMode('public');
+        if (supabaseWeddingId) {
+            const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
+            const nextWedding = refreshed.wedding ?? normalizeWedding(initialWedding ?? dashboardBaseWedding);
+            setWeddingData(nextWedding);
+            weddingDataRef.current = nextWedding;
+        } else {
+            const nextWedding = cloneWedding(initialWedding ?? dashboardBaseWedding);
+            setWeddingData(nextWedding);
+            weddingDataRef.current = nextWedding;
+        }
+        hasUnsavedChangesRef.current = false;
         setHasUnsavedChanges(false);
         setSaveStatus('');
         setSaveError('');
@@ -563,14 +788,82 @@ export default function Dashboard({
         }));
     };
 
-    const updateThemeKey = (themeKey: string) => {
+    const updateClosing = <Key extends keyof SampleWeddingData['closing']>(
+        key: Key,
+        value: SampleWeddingData['closing'][Key]
+    ) => {
         updateWeddingData((current) => ({
             ...current,
-            wedding: {
-                ...current.wedding,
-                themeKey,
+            closing: {
+                ...current.closing,
+                [key]: value,
             },
         }));
+    };
+
+    const setClosingGalleryImage = (target: number | 'add', imageSrc: string) => {
+        updateWeddingData((current) => {
+            const images = current.closing.carouselImages.filter(Boolean);
+            if (target === 'add') {
+                if (!images.includes(imageSrc)) {
+                    images.push(imageSrc);
+                }
+            } else {
+                images[target] = imageSrc;
+            }
+            return {
+                ...current,
+                closing: {
+                    ...current.closing,
+                    includePhotos: true,
+                    carouselImages: images.slice(0, closingGalleryMaxImages),
+                },
+            };
+        });
+        setClosingImagePickerTarget(null);
+    };
+
+    const removeClosingGalleryImage = (index: number) => {
+        updateWeddingData((current) => ({
+            ...current,
+            closing: {
+                ...current.closing,
+                carouselImages: current.closing.carouselImages.filter((_, imageIndex) => imageIndex !== index),
+            },
+        }));
+    };
+
+    const uploadClosingGalleryImage = async (file: File) => {
+        if (!supabaseWeddingId || !supabase) {
+            setSaveError('Could not upload image. Supabase Storage is only available for saved Supabase weddings.');
+            return;
+        }
+        if (closingImagePickerTarget === null) return;
+
+        setSaveError('');
+        setIsClosingImageUploading(true);
+        const safeName = file.name
+            .toLowerCase()
+            .replace(/[^a-z0-9.]+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+        const storagePath = `weddings/${supabaseWeddingId}/closing-gallery/${Date.now()}-${safeName || 'photo'}`;
+        const { error: uploadError } = await supabase.storage
+            .from(closingGalleryBucket)
+            .upload(storagePath, file, {
+                cacheControl: '3600',
+                upsert: false,
+            });
+
+        if (uploadError) {
+            setIsClosingImageUploading(false);
+            setSaveError(`Could not upload image. ${uploadError.message}`);
+            return;
+        }
+
+        const { data } = supabase.storage.from(closingGalleryBucket).getPublicUrl(storagePath);
+        setClosingGalleryImage(closingImagePickerTarget, data.publicUrl);
+        setIsClosingImageUploading(false);
     };
 
     const updateWeddingShellField = <Key extends keyof SampleWeddingData['wedding']>(
@@ -606,6 +899,7 @@ export default function Dashboard({
             eventKey: '',
             eventVisualKey: '',
             eventTextStyle: 'auto',
+            eventAnimationKey: 'none',
             eventName: 'New Event',
             date: '1st January 2027',
             startTime: '7:00 PM',
@@ -891,7 +1185,10 @@ export default function Dashboard({
             }
             const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
             if (refreshed.wedding) {
-                setWeddingData(refreshed.wedding);
+                const nextWedding = normalizeWedding(refreshed.wedding);
+                setWeddingData(nextWedding);
+                writeDashboardDraft(dashboardDraftStorageKey, nextWedding);
+                hasUnsavedChangesRef.current = true;
                 setHasUnsavedChanges(true);
                 setSaveStatus('');
                 setSaveError('');
@@ -960,15 +1257,96 @@ export default function Dashboard({
         }));
     };
 
-    const updateMusic = <Key extends keyof SampleWeddingData['music']>(
-        key: Key,
-        value: SampleWeddingData['music'][Key]
-    ) => {
+    const applyMusic = (audioSrc: string) => {
+        const selectedMusic = musicOptions.find((option) => option.value === audioSrc);
         updateWeddingData((current) => ({
             ...current,
             music: {
                 ...current.music,
-                [key]: value,
+                audioSrc,
+                title: selectedMusic?.label ?? current.music.title,
+            },
+        }));
+    };
+
+    const toggleGuestSelection = (guestId: string) => {
+        setSelectedGuestIds((current) => (
+            current.includes(guestId)
+                ? current.filter((id) => id !== guestId)
+                : [...current, guestId]
+        ));
+    };
+
+    const toggleAllFilteredGuests = () => {
+        const filteredIds = filteredGuestRows.map(({ guest }) => guest.id);
+        setSelectedGuestIds((current) => (
+            areAllFilteredGuestsSelected
+                ? current.filter((id) => !filteredIds.includes(id))
+                : Array.from(new Set([...current, ...filteredIds]))
+        ));
+    };
+
+    const deleteSelectedGuests = async () => {
+        const guestsToDelete = weddingData.rsvp.guests.filter((guest) => selectedGuestIds.includes(guest.id));
+        if (!guestsToDelete.length) return;
+        if (!window.confirm(`Delete ${guestsToDelete.length} selected guest${guestsToDelete.length === 1 ? '' : 's'}?`)) return;
+
+        if (supabaseWeddingId) {
+            const results = await Promise.all(guestsToDelete.map((guest) => deleteSupabaseGuest(guest.id)));
+            const failedResult = results.find((result) => result.error);
+            if (failedResult?.error) {
+                console.warn('Could not delete selected guests', failedResult.error);
+                setSaveError(`Could not delete selected guests.${isAdminMode ? adminRlsHint : ''}`);
+                return;
+            }
+        }
+
+        const deletedIds = new Set(guestsToDelete.map((guest) => guest.id));
+        updateWeddingData((current) => ({
+            ...current,
+            rsvp: {
+                ...current.rsvp,
+                guests: current.rsvp.guests.filter((guest) => !deletedIds.has(guest.id)),
+            },
+        }));
+        setSelectedGuestIds([]);
+        setExpandedGuestId((current) => current && deletedIds.has(current) ? null : current);
+    };
+
+    const applyRevealAnimation = (option: (typeof revealAnimationOptions)[number]) => {
+        if (option.disabled) return;
+        updateWeddingData((current) => ({
+            ...current,
+            hero: {
+                ...current.hero,
+                revealStyle: option.revealStyle,
+                videoSrc: option.videoSrc,
+                posterSrc: option.posterSrc,
+                revealImageShowAtSeconds: option.revealImageShowAtSeconds,
+                heroFadeAtSeconds: option.heroFadeAtSeconds,
+            },
+        }));
+    };
+
+    const applyRevealedImage = (option: (typeof revealedImageOptions)[number]) => {
+        updateWeddingData((current) => ({
+            ...current,
+            hero: {
+                ...current.hero,
+                revealImageSrc: option.imageSrc,
+                revealImageType: option.imageType,
+                revealImageAlt: option.altText,
+            },
+        }));
+    };
+
+    const applyStoryImage = (option: (typeof storyImageOptions)[number]) => {
+        updateWeddingData((current) => ({
+            ...current,
+            couple: {
+                ...current.couple,
+                backgroundImageSrc: option.imageSrc,
+                imageAlt: option.altText,
             },
         }));
     };
@@ -997,15 +1375,20 @@ export default function Dashboard({
                     {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                 </div>
                 <nav className="dashboard-tabs" aria-label="Dashboard sections">
-                    {dashboardTabs.map((tab) => (
-                        <button
-                            key={tab.id}
-                            className={activeTab === tab.id ? 'active' : ''}
-                            onClick={() => setActiveTab(tab.id)}
-                            type="button"
-                        >
-                            {tab.label}
-                        </button>
+                    {dashboardTabGroups.map((group) => (
+                        <div className="dashboard-tab-group" key={group.label}>
+                            <p className="dashboard-tab-group-label">{group.label}</p>
+                            {group.tabs.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    className={activeTab === tab.id ? 'active' : ''}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    type="button"
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
                     ))}
                 </nav>
             </aside>
@@ -1027,7 +1410,7 @@ export default function Dashboard({
                                 label="Plan"
                                 value={getPackageDisplayLabel(weddingData.wedding.packageType)}
                                 helperText="Plan changes will be handled from checkout/admin in a later phase."
-                                actionLabel="Request upgrade"
+                                actionLabel={weddingData.wedding.packageType === 'whatsapp' ? undefined : 'Request upgrade'}
                             />
                             <ReadOnlyBadgeCard
                                 label="Status"
@@ -1037,13 +1420,6 @@ export default function Dashboard({
                             <InfoBlock label="Payment" value={weddingData.wedding.paymentStatus} />
                         </div>
                         <div className="form-grid dashboard-shell-fields">
-                            <SelectField
-                                label="Theme"
-                                value={weddingData.wedding.themeKey}
-                                options={themeKeyOptions}
-                                optionLabels={themeDisplayLabels}
-                                onChange={updateThemeKey}
-                            />
                             <TextField
                                 label="Slug"
                                 value={weddingData.wedding.slug}
@@ -1064,6 +1440,153 @@ export default function Dashboard({
                                 ? 'Core wedding, event, guest, and RSVP data is saved securely.'
                                 : 'Development fallback mode is active because Supabase is not configured.'}
                         </p>
+                    </div>
+                )}
+
+                {activeTab === 'opening-reveal' && (
+                    <div className="dashboard-panel opening-reveal-panel">
+                        <div className="dashboard-panel-header dashboard-panel-header-row">
+                            <div>
+                                <p className="dashboard-eyebrow">Opening Reveal</p>
+                                <h2>Edit the invite intro</h2>
+                            </div>
+                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
+                                Save Opening Reveal
+                            </button>
+                        </div>
+                        <p className="dashboard-note">
+                            Opening Reveal combines the first animation with the image guests see when the animation completes.
+                        </p>
+
+                        <div className="opening-reveal-layout">
+                            <div className="opening-reveal-editor-groups">
+                                <section className="opening-reveal-group">
+                                    <div className="opening-reveal-group-header">
+                                        <span>Reveal Animation</span>
+                                        <p>Choose the opening sequence, poster, tap text, and music.</p>
+                                    </div>
+                                    <div className="opening-reveal-option-grid">
+                                        {revealAnimationOptions.map((option) => (
+                                            <OpeningRevealOptionCard
+                                                key={option.key}
+                                                label={option.label}
+                                                helper={option.helper}
+                                                meta={option.themeLabel}
+                                                imageSrc={option.posterSrc}
+                                                selected={weddingData.hero.revealStyle === option.revealStyle && weddingData.hero.videoSrc === option.videoSrc}
+                                                disabled={option.disabled}
+                                                onClick={() => applyRevealAnimation(option)}
+                                            />
+                                        ))}
+                                    </div>
+                                    <div className="form-grid opening-reveal-fields">
+                                        <TextField label="Tap to Reveal Text" value={weddingData.hero.revealCtaText} onChange={(value) => updateHero('revealCtaText', value)} />
+                                        <SelectField
+                                            label="Music / Audio"
+                                            value={resolveAssetPath(weddingData.music.audioSrc)}
+                                            options={musicOptions.map((option) => option.value)}
+                                            optionLabels={musicOptionLabels}
+                                            onChange={applyMusic}
+                                        />
+                                    </div>
+                                </section>
+
+                                <section className="opening-reveal-group">
+                                    <div className="opening-reveal-group-header">
+                                        <span>Revealed Image</span>
+                                        <p>This image appears after the opening animation completes.</p>
+                                    </div>
+                                    <div className="opening-reveal-option-grid">
+                                        {revealedImageOptions.map((option) => (
+                                            <OpeningRevealOptionCard
+                                                key={option.key}
+                                                label={option.label}
+                                                helper={option.helper}
+                                                meta={option.themeLabel}
+                                                imageSrc={option.imageSrc}
+                                                selected={weddingData.hero.revealImageSrc === option.imageSrc}
+                                                onClick={() => applyRevealedImage(option)}
+                                            />
+                                        ))}
+                                    </div>
+                                </section>
+                            </div>
+
+                            <OpeningRevealPreview
+                                hero={weddingData.hero}
+                                couple={weddingData.couple}
+                                musicTitle={weddingData.music.title}
+                                musicSrc={weddingData.music.audioSrc}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'our-story' && (
+                    <div className="dashboard-panel our-story-panel">
+                        <div className="dashboard-panel-header dashboard-panel-header-row">
+                            <div>
+                                <p className="dashboard-eyebrow">Our Story</p>
+                                <h2>Edit the couple story</h2>
+                            </div>
+                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
+                                Save Our Story
+                            </button>
+                        </div>
+                        <p className="dashboard-note">
+                            Our Story uses one shared data model across all themes. Themes only change how this content is presented.
+                        </p>
+
+                        <div className="our-story-layout">
+                            <div className="our-story-editor-groups">
+                                <section className="our-story-group">
+                                    <label className="dashboard-check">
+                                        <input
+                                            type="checkbox"
+                                            checked={weddingData.couple.enabled}
+                                            onChange={(event) => updateCouple('enabled', event.target.checked)}
+                                        />
+                                        Show Our Story
+                                    </label>
+                                    <div className="form-grid">
+                                        <TextField label="Couple Display Name" value={weddingData.couple.displayName} onChange={(value) => updateCouple('displayName', value)} />
+                                        <TextField label="Subtitle" value={weddingData.couple.introLine} onChange={(value) => updateCouple('introLine', value)} />
+                                        <TextField label="Story Title" value={weddingData.couple.storyTitle} onChange={(value) => updateCouple('storyTitle', value)} />
+                                    </div>
+                                    <label className="dashboard-field">
+                                        <span>Story Text</span>
+                                        <textarea
+                                            value={weddingData.couple.storyText}
+                                            onChange={(event) => updateCouple('storyText', event.target.value)}
+                                            rows={5}
+                                        />
+                                    </label>
+                                </section>
+
+                                <section className="our-story-group">
+                                    <div className="opening-reveal-group-header">
+                                        <span>Story Image</span>
+                                        <p>Choose the visual that appears in your story section.</p>
+                                    </div>
+                                    <div className="our-story-image-grid">
+                                        {storyImageOptions.map((option) => (
+                                            <button
+                                                key={option.key}
+                                                className={`story-image-card ${resolveAssetPath(weddingData.couple.backgroundImageSrc) === option.imageSrc ? 'selected' : ''}`}
+                                                type="button"
+                                                onClick={() => applyStoryImage(option)}
+                                            >
+                                                <img src={resolveAssetPath(option.imageSrc)} alt="" />
+                                                <strong>{option.label}</strong>
+                                                <span>{option.themeLabel}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </section>
+                            </div>
+
+                            <OurStoryPreview couple={weddingData.couple} themeKey={weddingData.wedding.themeKey} />
+                        </div>
                     </div>
                 )}
 
@@ -1104,6 +1627,11 @@ export default function Dashboard({
                                 <h2>Wedding events</h2>
                             </div>
                             <div className="dashboard-header-actions">
+                                {selectedGuestIds.length > 0 && (
+                                    <button className="dashboard-primary-btn secondary delete-selected-btn" type="button" onClick={deleteSelectedGuests}>
+                                        Delete selected ({selectedGuestIds.length})
+                                    </button>
+                                )}
                                 <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
                                     Save Events
                                 </button>
@@ -1134,16 +1662,23 @@ export default function Dashboard({
                                                 optionLabels={eventTextStyleLabels}
                                                 onChange={(value) => updateEvent(index, 'eventTextStyle', value as WeddingEvent['eventTextStyle'])}
                                             />
+                                            <SelectField
+                                                label="Event Animation"
+                                                value={normalizeEventAnimationKey(event.eventAnimationKey)}
+                                                options={eventAnimationKeys}
+                                                optionLabels={eventAnimationOptionLabels}
+                                                onChange={(value) => updateEvent(index, 'eventAnimationKey', value as WeddingEvent['eventAnimationKey'])}
+                                            />
                                             <TextField label="Date" value={event.date} error={validation.events[index]?.date} onChange={(value) => updateEvent(index, 'date', value)} />
                                             <TextField label="Start time" value={event.startTime} error={validation.events[index]?.startTime} onChange={(value) => updateEvent(index, 'startTime', value)} />
                                             <TextField label="Venue name" value={event.venueName} error={validation.events[index]?.venueName} onChange={(value) => updateEvent(index, 'venueName', value)} />
                                             <TextField label="City" value={event.city} onChange={(value) => updateEvent(index, 'city', value)} />
-                                            <TextField label="Maps URL" value={event.mapsUrl} onChange={(value) => updateEvent(index, 'mapsUrl', value)} />
-                                            <TextField label="Dress code" value={event.dressCode} onChange={(value) => updateEvent(index, 'dressCode', value)} />
+                                            <TextField label="Google Maps link (optional)" value={event.mapsUrl} onChange={(value) => updateEvent(index, 'mapsUrl', value)} />
                                         </div>
                                         <EventVisualPicker
                                             event={event}
                                             themeKey={weddingData.wedding.themeKey}
+                                            coupleDisplayName={weddingData.couple.displayName}
                                             onSelect={(visualKey) => updateEvent(index, 'eventVisualKey', visualKey)}
                                         />
                                     </div>
@@ -1223,6 +1758,15 @@ export default function Dashboard({
                             <table className="guest-table">
                                 <thead>
                                     <tr>
+                                        <th className="guest-select-column">
+                                            <input
+                                                aria-label="Select all visible guests"
+                                                className="guest-select-checkbox"
+                                                type="checkbox"
+                                                checked={areAllFilteredGuestsSelected}
+                                                onChange={toggleAllFilteredGuests}
+                                            />
+                                        </th>
                                         <th>Guest / Family Name</th>
                                         <th>Phone</th>
                                         <th>Invited Count</th>
@@ -1236,6 +1780,15 @@ export default function Dashboard({
                                     {filteredGuestRows.map(({ guest, guestIndex }) => (
                                         <Fragment key={guest.id}>
                                             <tr>
+                                                <td className="guest-select-column">
+                                                    <input
+                                                        aria-label={`Select ${guest.guestName || 'guest'}`}
+                                                        className="guest-select-checkbox"
+                                                        type="checkbox"
+                                                        checked={selectedGuestIds.includes(guest.id)}
+                                                        onChange={() => toggleGuestSelection(guest.id)}
+                                                    />
+                                                </td>
                                                 <td>
                                                     <input
                                                         className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
@@ -1294,7 +1847,7 @@ export default function Dashboard({
                                             </tr>
                                             {expandedGuestId === guest.id && (
                                                 <tr className="guest-events-row" key={`${guest.id}-events`}>
-                                                    <td colSpan={7}>
+                                                    <td colSpan={8}>
                                                         <div className="guest-event-options compact">
                                                             {weddingData.events.map((event) => (
                                                                 <label key={event.id}>
@@ -1409,47 +1962,123 @@ export default function Dashboard({
                     </div>
                 )}
 
-                {activeTab === 'theme' && (
-                    <div className="dashboard-panel">
+                {activeTab === 'closing-gallery' && (
+                    <div className="dashboard-panel closing-gallery-panel">
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
-                                <p className="dashboard-eyebrow">Theme</p>
-                                <h2>Theme media</h2>
+                                <p className="dashboard-eyebrow">Closing Gallery</p>
+                                <h2>Edit the final thank-you section</h2>
                             </div>
                             <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                Save Theme Settings
+                                Save Closing Gallery
                             </button>
                         </div>
-                        <div className="form-grid">
-                            <SelectField
-                                label="Theme"
-                                value={weddingData.wedding.themeKey}
-                                options={themeKeyOptions}
-                                optionLabels={themeDisplayLabels}
-                                onChange={updateThemeKey}
+                        <p className="dashboard-note">
+                            Closing Gallery appears at the end of the invite. The thank-you section always uses the theme background; couple photos are optional.
+                        </p>
+
+                        <div className="closing-gallery-layout">
+                            <div className="closing-gallery-editor-groups">
+                                <section className="closing-gallery-group">
+                                    <label className="dashboard-check">
+                                        <input
+                                            type="checkbox"
+                                            checked={weddingData.closing.includePhotos}
+                                            onChange={(event) => updateClosing('includePhotos', event.target.checked)}
+                                        />
+                                        Include Couple Photos
+                                    </label>
+                                    <div className="form-grid">
+                                        <TextField label="Closing Line" value={weddingData.closing.closingLine} onChange={(value) => updateClosing('closingLine', value)} />
+                                        <TextField label="Couple Display Name" value={weddingData.closing.coupleDisplayName} onChange={(value) => updateClosing('coupleDisplayName', value)} />
+                                    </div>
+                                    <label className="dashboard-field">
+                                        <span>Thank You Message</span>
+                                        <textarea
+                                            value={weddingData.closing.message}
+                                            onChange={(event) => updateClosing('message', event.target.value)}
+                                            rows={4}
+                                        />
+                                    </label>
+                                </section>
+
+                                {weddingData.closing.includePhotos && (
+                                    <section className="closing-gallery-group">
+                                        <div className="opening-reveal-group-header">
+                                            <span>Gallery Images</span>
+                                            <p>Add up to three photos. Choose a preset or upload an image from your computer.</p>
+                                        </div>
+                                        <div className="closing-selected-grid">
+                                            {weddingData.closing.carouselImages.filter(Boolean).slice(0, closingGalleryMaxImages).map((imageSrc, imageIndex) => (
+                                                <article className="closing-selected-card" key={`${imageSrc}-${imageIndex}`}>
+                                                    <img src={resolveAssetPath(imageSrc)} alt="" />
+                                                    <div>
+                                                        <strong>Photo {imageIndex + 1}</strong>
+                                                        <span>{imageSrc.startsWith('/assets/') ? 'Preset image' : 'Uploaded image'}</span>
+                                                    </div>
+                                                    <div className="closing-selected-actions">
+                                                        <button type="button" onClick={() => setClosingImagePickerTarget(imageIndex)}>Replace</button>
+                                                        <button type="button" onClick={() => removeClosingGalleryImage(imageIndex)}>Remove</button>
+                                                    </div>
+                                                </article>
+                                            ))}
+                                            {weddingData.closing.carouselImages.filter(Boolean).length === 0 && (
+                                                <p className="dashboard-note compact">No photos selected yet.</p>
+                                            )}
+                                        </div>
+                                        {weddingData.closing.carouselImages.filter(Boolean).length < closingGalleryMaxImages && (
+                                            <button className="dashboard-primary-btn secondary" type="button" onClick={() => setClosingImagePickerTarget('add')}>
+                                                Add Photo
+                                            </button>
+                                        )}
+                                        {closingImagePickerTarget !== null && (
+                                            <div className="closing-picker-panel">
+                                                <div className="closing-picker-header">
+                                                    <div>
+                                                        <strong>{closingImagePickerTarget === 'add' ? 'Add photo' : 'Replace photo'}</strong>
+                                                        <span>Choose a preset or upload your own image.</span>
+                                                    </div>
+                                                    <button type="button" onClick={() => setClosingImagePickerTarget(null)}>Close</button>
+                                                </div>
+                                                <label className="closing-upload-control">
+                                                    <span>{isClosingImageUploading ? 'Uploading...' : 'Upload Image'}</span>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        disabled={isClosingImageUploading}
+                                                        onChange={(event) => {
+                                                            const file = event.target.files?.[0];
+                                                            if (file) {
+                                                                void uploadClosingGalleryImage(file);
+                                                            }
+                                                            event.target.value = '';
+                                                        }}
+                                                    />
+                                                </label>
+                                                <div className="closing-image-grid">
+                                                    {closingImagePresets.map((option) => (
+                                                        <button
+                                                            key={option.key}
+                                                            className="story-image-card"
+                                                            type="button"
+                                                            onClick={() => setClosingGalleryImage(closingImagePickerTarget, option.imageSrc)}
+                                                        >
+                                                            <img src={resolveAssetPath(option.imageSrc)} alt="" />
+                                                            <strong>{option.label}</strong>
+                                                            <span>{option.themeLabel}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </section>
+                                )}
+                            </div>
+
+                            <ClosingGalleryPreview
+                                closing={weddingData.closing}
+                                themeKey={weddingData.wedding.themeKey}
                             />
-                            <TextField label="Hero video" value={weddingData.hero.videoSrc} onChange={(value) => updateHero('videoSrc', value)} />
-                            <TextField label="Hero poster" value={weddingData.hero.posterSrc} onChange={(value) => updateHero('posterSrc', value)} />
-                            <TextField label="Reveal image" value={weddingData.hero.revealImageSrc} onChange={(value) => updateHero('revealImageSrc', value)} />
-                            <TextField label="Music audio" value={weddingData.music.audioSrc} onChange={(value) => updateMusic('audioSrc', value)} />
-                            <TextField label="Music title" value={weddingData.music.title} onChange={(value) => updateMusic('title', value)} />
-                        </div>
-                        <div className="dashboard-theme-options">
-                            {themeKeyOptions.map((option) => (
-                                <button
-                                    key={option}
-                                    type="button"
-                                    className={weddingData.wedding.themeKey === option ? 'selected' : ''}
-                                    onClick={() => updateThemeKey(option)}
-                                >
-                                    <strong>{themeDisplayLabels[option] ?? option}</strong>
-                                    <span>
-                                        {option === 'theme-2'
-                                            ? 'Scroll-style invite with cinematic reveal, story sections, and carousel closing.'
-                                            : 'Classic palace-door invite with elegant event sections.'}
-                                    </span>
-                                </button>
-                            ))}
                         </div>
                     </div>
                 )}
@@ -1458,57 +2087,463 @@ export default function Dashboard({
                     <div className="dashboard-panel preview-panel">
                         <div className="dashboard-panel-header">
                             <p className="dashboard-eyebrow">Preview</p>
-                            <h2>Guest invite preview</h2>
+                            <h2>Wedding website preview</h2>
                         </div>
-                        <div className="preview-mode-control">
-                            <SelectField
-                                label="Preview mode"
-                                value={previewMode}
-                                options={['public', 'rsvp']}
-                                optionLabels={{
-                                    public: 'Public/basic preview',
-                                    rsvp: 'RSVP/Complete package preview',
-                                }}
-                                onChange={(value) => setPreviewMode(value as PreviewMode)}
-                            />
-                            <SelectField
-                                label="Preview as guest"
-                                value={previewGuestId}
-                                options={['public', ...weddingData.rsvp.guests.map((guest) => guest.id)]}
-                                optionLabels={{
-                                    public: 'Public preview / No guest',
-                                    ...Object.fromEntries(weddingData.rsvp.guests.map((guest) => [
-                                        guest.id,
-                                        guest.guestName || 'Unnamed guest',
-                                    ])),
-                                }}
-                                onChange={(value) => {
-                                    setPreviewGuestId(value);
-                                    if (value !== 'public') {
-                                        setPreviewMode('rsvp');
-                                    }
-                                }}
-                            />
-                        </div>
-                        {previewGuest && (
-                            <p className="dashboard-note">
-                                Previewing {previewGuest.guestName || 'selected guest'} with {previewVisibleEvents?.length ?? 0} invited event{previewVisibleEvents?.length === 1 ? '' : 's'}.
-                            </p>
-                        )}
+                        <p className="dashboard-note">This preview reflects the complete website content currently selected in the builder.</p>
                         <div className="dashboard-preview-frame">
                             <InviteExperience
                                 key={previewKey}
-                                data={previewData}
+                                data={weddingData}
                                 embedded
-                                guest={previewGuest}
-                                visibleEvents={previewVisibleEvents}
-                                personalizedInviteMode={Boolean(previewGuest)}
+                                enableResponsiveOpeningVideo={false}
                             />
                         </div>
                     </div>
                 )}
             </section>
         </main>
+    );
+}
+
+function OpeningRevealOptionCard({
+    label,
+    helper,
+    meta,
+    imageSrc,
+    selected,
+    disabled = false,
+    onClick,
+}: {
+    label: string;
+    helper: string;
+    meta: string;
+    imageSrc: string;
+    selected: boolean;
+    disabled?: boolean;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            className={`or-option-card ${selected ? 'selected' : ''}`}
+            type="button"
+            disabled={disabled}
+            onClick={onClick}
+        >
+            {imageSrc ? (
+                <img src={resolveAssetPath(imageSrc)} alt="" />
+            ) : (
+                <span className="or-option-placeholder">Soon</span>
+            )}
+            <strong>{label}</strong>
+            <span>{meta}</span>
+            <p>{helper}</p>
+        </button>
+    );
+}
+
+function OpeningRevealPreview({
+    hero,
+    couple,
+    musicTitle,
+    musicSrc,
+}: {
+    hero: SampleWeddingData['hero'];
+    couple: SampleWeddingData['couple'];
+    musicTitle: string;
+    musicSrc: string;
+}) {
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
+    const [previewState, setPreviewState] = useState<'poster' | 'playing' | 'paused' | 'revealed'>('poster');
+    const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
+    const [revealTriggeredAt, setRevealTriggeredAt] = useState<number | null>(null);
+    const [revealImageOpacity, setRevealImageOpacity] = useState(0);
+    const [previewAudioEnabled, setPreviewAudioEnabled] = useState(false);
+    const hasVideo = Boolean(hero.videoSrc.trim());
+    const hasPoster = Boolean(hero.posterSrc.trim());
+    const resolvedMusicSrc = resolveAssetPath(musicSrc);
+    const hasMusic = Boolean(resolvedMusicSrc.trim());
+    const isScrollOpeningPreview = isScrollReveal(hero);
+    const revealLayerVisible = true;
+    const revealedImageSrc = resolveAssetPath(hero.revealImageSrc || (isScrollOpeningPreview ? getTheme2CoupleImage(couple.backgroundImageSrc) : ''));
+    const revealedImageAlt = hero.revealImageAlt || couple.displayName || 'Revealed image';
+    const hasRevealImage = Boolean(revealedImageSrc.trim());
+
+    useEffect(() => {
+        setPreviewState('poster');
+        setPreviewCurrentTime(0);
+        setRevealTriggeredAt(null);
+        setRevealImageOpacity(0);
+        if (videoRef.current) {
+            videoRef.current.pause();
+            videoRef.current.currentTime = 0;
+        }
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+        setPreviewAudioEnabled(false);
+        if (animationFrameRef.current) {
+            window.cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+        }
+    }, [hero.videoSrc, hero.posterSrc, hero.revealImageSrc, hero.revealCtaText, couple.backgroundImageSrc, musicSrc]);
+
+    useEffect(() => () => {
+        audioRef.current?.pause();
+    }, []);
+
+    useEffect(() => {
+        if (previewState !== 'playing') {
+            if (animationFrameRef.current) {
+                window.cancelAnimationFrame(animationFrameRef.current);
+                animationFrameRef.current = null;
+            }
+            return undefined;
+        }
+
+        const tick = () => {
+            if (!videoRef.current) return;
+            const currentTime = videoRef.current.currentTime;
+            setPreviewCurrentTime(currentTime);
+
+            const duration = videoRef.current.duration;
+            const progress = getOpeningRevealCrossfadeProgress(currentTime, duration);
+            setRevealImageOpacity(progress);
+            if (progress > 0 && revealTriggeredAt === null) {
+                setRevealTriggeredAt(currentTime);
+            }
+
+            animationFrameRef.current = window.requestAnimationFrame(tick);
+        };
+
+        animationFrameRef.current = window.requestAnimationFrame(tick);
+
+        return () => {
+            if (animationFrameRef.current) {
+                window.cancelAnimationFrame(animationFrameRef.current);
+                animationFrameRef.current = null;
+            }
+        };
+    }, [previewState, revealTriggeredAt]);
+
+    const playPreview = (restart = false) => {
+        if (!hasVideo) {
+            setPreviewState('revealed');
+            return;
+        }
+
+        setPreviewState('playing');
+        window.setTimeout(() => {
+            if (!videoRef.current) return;
+            if (restart) {
+                videoRef.current.currentTime = 0;
+                if (audioRef.current) audioRef.current.currentTime = 0;
+            }
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(() => {
+                audioRef.current?.pause();
+                setPreviewState('revealed');
+            });
+            if (previewAudioEnabled && audioRef.current) {
+                audioRef.current.play().catch(() => setPreviewAudioEnabled(false));
+            }
+        }, 0);
+    };
+
+    const pausePreview = () => {
+        if (videoRef.current && previewState === 'playing') {
+            videoRef.current.pause();
+            audioRef.current?.pause();
+            setPreviewCurrentTime(videoRef.current.currentTime);
+            setPreviewState('paused');
+        }
+    };
+
+    const replayPreview = () => {
+        if (videoRef.current) {
+            videoRef.current.pause();
+            videoRef.current.currentTime = 0;
+        }
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+        setPreviewCurrentTime(0);
+        setRevealTriggeredAt(null);
+        setRevealImageOpacity(0);
+        setPreviewState('poster');
+    };
+
+    const handlePreviewClick = () => {
+        if (previewState === 'poster') {
+            playPreview(true);
+            return;
+        }
+        if (previewState === 'playing') {
+            pausePreview();
+            return;
+        }
+        if (previewState === 'paused') {
+            playPreview(false);
+            return;
+        }
+        replayPreview();
+    };
+
+    const togglePreviewAudio = () => {
+        if (!audioRef.current || !hasMusic) return;
+        if (previewAudioEnabled) {
+            audioRef.current.pause();
+            setPreviewAudioEnabled(false);
+            return;
+        }
+
+        setPreviewAudioEnabled(true);
+        if (previewState === 'playing') {
+            audioRef.current.play().catch(() => setPreviewAudioEnabled(false));
+        }
+    };
+
+    return (
+        <aside className="or-preview-card">
+            <span className="event-preview-label">Opening Reveal preview</span>
+            <div
+                className={[
+                    'or-preview-frame',
+                    `or-preview-frame-${previewState}`,
+                    'or-preview-frame-crossfade',
+                    revealLayerVisible ? 'or-preview-frame-reveal-visible' : '',
+                ].filter(Boolean).join(' ')}
+                role="button"
+                tabIndex={0}
+                aria-label="Opening Reveal preview frame"
+                onClick={handlePreviewClick}
+                onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handlePreviewClick();
+                    }
+                }}
+            >
+                {hasPoster ? (
+                    <img className="or-preview-poster" src={resolveAssetPath(hero.posterSrc)} alt="" />
+                ) : (
+                    <div className="or-preview-empty">Poster image missing</div>
+                )}
+                {hasVideo && (
+                    <video
+                        ref={videoRef}
+                        className="or-preview-video"
+                        src={resolveAssetPath(hero.videoSrc)}
+                        poster={resolveAssetPath(hero.posterSrc)}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        onEnded={() => {
+                            audioRef.current?.pause();
+                            setRevealTriggeredAt(videoRef.current?.currentTime ?? null);
+                            setRevealImageOpacity(1);
+                            setPreviewState('revealed');
+                        }}
+                    />
+                )}
+                {hasMusic && (
+                    <>
+                        <audio ref={audioRef} src={resolvedMusicSrc} preload="metadata" loop />
+                        <button
+                            className={`or-preview-audio-toggle ${previewAudioEnabled ? 'is-on' : ''}`}
+                            type="button"
+                            aria-pressed={previewAudioEnabled}
+                            aria-label={previewAudioEnabled ? 'Turn preview music off' : 'Turn preview music on'}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                togglePreviewAudio();
+                            }}
+                        >
+                            Music {previewAudioEnabled ? 'On' : 'Off'}
+                        </button>
+                    </>
+                )}
+                <div className="or-preview-scrim" />
+                {previewState === 'poster' && (
+                    <div className="or-preview-cta">
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                playPreview(true);
+                            }}
+                        >
+                            {hero.revealCtaText || 'Tap to Reveal'}
+                        </button>
+                    </div>
+                )}
+                {previewState === 'paused' && (
+                    <div className="or-preview-paused">
+                        <span>Paused</span>
+                        <strong>Tap to resume</strong>
+                    </div>
+                )}
+                {revealLayerVisible && (
+                    <div
+                        className="or-preview-image-stage"
+                        style={{ opacity: previewState === 'revealed' ? 1 : revealImageOpacity }}
+                    >
+                        {hasRevealImage ? (
+                            <img src={revealedImageSrc} alt={revealedImageAlt} />
+                        ) : (
+                            <div className="or-preview-empty">Revealed image missing</div>
+                        )}
+                        {previewState === 'revealed' && (
+                            <>
+                                <OpeningRevealScrollPrompt compact />
+                                <button
+                                    className="or-preview-replay"
+                                    type="button"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        replayPreview();
+                                    }}
+                                >
+                                    Play Again
+                                </button>
+                            </>
+                        )}
+                    </div>
+                )}
+            </div>
+            <div className="or-preview-meta">
+                <strong>{revealStyleLabels[hero.revealStyle] ?? hero.revealStyle}</strong>
+                <span>{revealImageTypeLabels[hero.revealImageType] ?? hero.revealImageType}</span>
+                <p>Reveal image softly enters during the final {openingRevealCrossfadeSeconds.toFixed(2)}s of the video.</p>
+                <p>
+                    Preview clock: {previewCurrentTime.toFixed(2)}s
+                    {revealTriggeredAt !== null ? ` / image triggered at ${revealTriggeredAt.toFixed(2)}s` : ''}
+                </p>
+                <p>Music is off by default in the editor. Use the in-frame control to hear it.</p>
+                {musicTitle && <p>Music: {musicTitle}</p>}
+            </div>
+        </aside>
+    );
+}
+
+function OurStoryPreview({
+    couple,
+    themeKey,
+}: {
+    couple: SampleWeddingData['couple'];
+    themeKey: string;
+}) {
+    const isTheme2 = themeKey === 'theme-2';
+    const storyImage = resolveAssetPath(isTheme2 ? getTheme2CoupleImage(couple.backgroundImageSrc) : couple.backgroundImageSrc);
+    const storyBackdrop = resolveAssetPath(isTheme2 ? '/assets/theme-2/story-bg.png' : storyImage);
+
+    return (
+        <aside className="story-preview-card">
+            <span className="event-preview-label">Scaled preview of the Our Story section</span>
+            <div className={`story-preview-frame ${isTheme2 ? 'theme2' : 'theme1'}`}>
+                {couple.enabled ? (
+                    <>
+                        <img className="story-preview-bg" src={storyBackdrop} alt="" />
+                        {isTheme2 && <img className="story-preview-portrait" src={storyImage} alt={couple.imageAlt || couple.displayName} />}
+                        <div className="story-preview-overlay" />
+                        {isTheme2 ? (
+                            <div className="story-preview-theme2-content">
+                                {couple.displayName.trim() && <strong>{couple.displayName}</strong>}
+                                {couple.introLine.trim() && <p>{couple.introLine}</p>}
+                                {couple.storyTitle.trim() && <h2>{couple.storyTitle}</h2>}
+                                {couple.storyText.trim() && <span>{couple.storyText}</span>}
+                            </div>
+                        ) : (
+                            <div className="story-preview-theme1-content">
+                                {couple.displayName.trim() && <strong>{couple.displayName}</strong>}
+                                {couple.introLine.trim() && <p>{couple.introLine}</p>}
+                                {couple.storyTitle.trim() && <h2>{couple.storyTitle}</h2>}
+                                {couple.storyText.trim() && <span>{couple.storyText}</span>}
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="story-preview-empty">Our Story section is hidden.</div>
+                )}
+            </div>
+        </aside>
+    );
+}
+
+function ClosingGalleryPreview({
+    closing,
+    themeKey,
+}: {
+    closing: SampleWeddingData['closing'];
+    themeKey: string;
+}) {
+    const isTheme2 = themeKey === 'theme-2';
+    const galleryImages = closing.carouselImages.filter(Boolean).map(resolveAssetPath).slice(0, closingGalleryMaxImages);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const primaryImage = galleryImages[currentIndex] ?? '';
+
+    useEffect(() => {
+        setCurrentIndex(0);
+    }, [galleryImages.length]);
+
+    useEffect(() => {
+        if (!closing.includePhotos || galleryImages.length <= 1) return undefined;
+        const timer = window.setInterval(() => {
+            setCurrentIndex((index) => (index + 1) % galleryImages.length);
+        }, closingGalleryCarouselIntervalMs);
+        return () => window.clearInterval(timer);
+    }, [closing.includePhotos, galleryImages.length]);
+
+    return (
+        <aside className="closing-preview-card">
+            <span className="event-preview-label">Scaled preview of the Closing Gallery section</span>
+            <div className={`closing-preview-frame ${isTheme2 ? 'theme2' : 'theme1'} ${closing.includePhotos ? 'with-photos' : 'no-photos'}`}>
+                {isTheme2 && <img className="closing-preview-bg" src={resolveAssetPath('/assets/theme-2/background.png')} alt="" />}
+                <div className="closing-preview-overlay" />
+                <div className="closing-preview-content">
+                    <p className="closing-preview-line">{closing.closingLine || 'With love'}</p>
+                    <span className="closing-preview-message">{closing.message || 'Looking forward to celebrating our important days with you.'}</span>
+                    {closing.includePhotos && primaryImage && (
+                        <div className="closing-preview-gallery">
+                            {isTheme2 ? (
+                                <div className="closing-preview-theme2-frame">
+                                    <div className="closing-preview-theme2-window">
+                                        {galleryImages.map((src, imageIndex) => (
+                                            <img
+                                                key={src}
+                                                src={src}
+                                                alt=""
+                                                className={imageIndex === currentIndex ? 'active' : ''}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="closing-preview-circle-gallery">
+                                    {galleryImages.map((src, imageIndex) => (
+                                        <img
+                                            key={src}
+                                            src={src}
+                                            alt=""
+                                            className={imageIndex === currentIndex ? 'active' : ''}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                            <div className="closing-preview-dots">
+                                {galleryImages.map((src) => (
+                                    <i key={src} className={src === primaryImage ? 'active' : ''} />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <h2 className="closing-preview-names">{closing.coupleDisplayName || 'Couple Name'}</h2>
+                </div>
+            </div>
+        </aside>
     );
 }
 
@@ -1524,21 +2559,21 @@ function InfoBlock({ label, value }: { label: string; value: string }) {
 function EventVisualPicker({
     event,
     themeKey,
+    coupleDisplayName,
     onSelect,
 }: {
     event: WeddingEvent;
     themeKey: string;
+    coupleDisplayName: string;
     onSelect: (visualKey: string) => void;
 }) {
     const [isPickerOpen, setIsPickerOpen] = useState(false);
-    const [themeFilter, setThemeFilter] = useState('current');
     const [categoryFilter, setCategoryFilter] = useState('all');
-    const currentThemeVisuals = getEventVisualsForTheme(themeKey);
-    const hasCurrentThemeVisuals = currentThemeVisuals.length > 0;
-    const visibleThemeFilter = themeFilter === 'current' && !hasCurrentThemeVisuals ? 'all' : themeFilter;
+    const [styleFilter, setStyleFilter] = useState('all');
     const recommendedVisual = getRecommendedVisualForEvent(event.eventName, event.eventKey, themeKey);
     const selectedVisual = getEventVisualByKey(event.eventVisualKey) ?? recommendedVisual;
     const selectedKey = event.eventVisualKey ?? '';
+    const selectedVisualKey = selectedVisual?.key ?? selectedKey;
     const categoryFilterOptions = [
         { key: 'all', label: 'All' },
         { key: 'haldi', label: 'Haldi' },
@@ -1546,31 +2581,28 @@ function EventVisualPicker({
         { key: 'sangeet', label: 'Sangeet / Music' },
         { key: 'wedding', label: 'Wedding / Nikaah' },
         { key: 'reception', label: 'Reception / Walima' },
-        { key: 'custom', label: 'Generic' },
+        { key: 'generic', label: 'Generic' },
     ];
-    const availableThemeFilters = Array.from(new Map(
-        eventVisuals.map((visual) => [visual.themeKey, visual.themeLabel])
+    const availableStyles = Array.from(new Set(
+        eventVisuals
+            .map((visual) => visual.style)
+            .filter((style): style is string => Boolean(style))
+    )).sort((a, b) => (
+        (eventVisualStyleLabels[a] ?? a).localeCompare(eventVisualStyleLabels[b] ?? b)
     ));
-    const themeFilterOptions = [
-        { key: 'current', label: 'Current theme' },
-        ...availableThemeFilters
-            .filter(([visualThemeKey]) => visualThemeKey !== themeKey)
-            .map(([visualThemeKey, label]) => ({ key: visualThemeKey, label })),
-        { key: 'all', label: 'All themes' },
+    const styleFilterOptions = [
+        { key: 'all', label: 'All styles' },
+        ...availableStyles.map((style) => ({
+            key: style,
+            label: eventVisualStyleLabels[style] ?? style,
+        })),
     ];
-    const themeFilteredVisuals = visibleThemeFilter === 'all'
-        ? eventVisuals
-        : visibleThemeFilter === 'current'
-            ? currentThemeVisuals
-            : eventVisuals.filter((visual) => visual.themeKey === visibleThemeFilter);
     const filteredVisuals = categoryFilter === 'all'
-        ? themeFilteredVisuals
-        : themeFilteredVisuals.filter((visual) => visual.eventType === categoryFilter);
-    const previewImage = selectedVisual?.imageSrc ?? event.backgroundImageSrc;
-    const previewObjectPosition = selectedVisual?.previewObjectPosition ?? 'center center';
-    const resolvedTextStyle = event.eventTextStyle === 'light' || event.eventTextStyle === 'dark'
-        ? event.eventTextStyle
-        : selectedVisual?.defaultTextStyle ?? 'dark';
+        ? eventVisuals
+        : eventVisuals.filter((visual) => visual.eventType === categoryFilter);
+    const styleFilteredVisuals = styleFilter === 'all'
+        ? filteredVisuals
+        : filteredVisuals.filter((visual) => visual.style === styleFilter);
     const previewEvent = {
         ...event,
         eventName: event.eventName || 'Wedding Event',
@@ -1581,28 +2613,32 @@ function EventVisualPicker({
     };
 
     useEffect(() => {
-        setThemeFilter(getEventVisualsForTheme(themeKey).length ? 'current' : 'all');
         setCategoryFilter('all');
+        setStyleFilter('all');
     }, [themeKey]);
 
     return (
         <div className="event-visual-picker">
             <div>
                 <span className="event-preview-label">Scaled preview of the event section</span>
-                <div className={`event-live-preview event-live-preview-${resolvedTextStyle}`}>
-                    <img
-                        className="event-live-preview-image"
-                        src={previewImage}
-                        alt=""
-                        style={{ objectPosition: previewObjectPosition }}
-                    />
-                    <div className="event-live-preview-scrim" />
-                    <div className="event-live-preview-overlay">
-                        <span>Event Preview</span>
-                        <h4>{previewEvent.eventName}</h4>
-                        <p>{[previewEvent.date, previewEvent.startTime].filter(Boolean).join(' / ')}</p>
-                        <strong>{previewEvent.venueName}</strong>
-                        <em>{previewEvent.city}</em>
+                <div className="event-live-preview">
+                    <div className="event-live-preview-surface phone-canvas">
+                        {themeKey === 'theme-2' ? (
+                            <div className="theme2-embedded event-live-preview-theme2">
+                                <Theme2EventFrame
+                                    event={previewEvent}
+                                    coupleDisplayName={coupleDisplayName}
+                                    isVisible
+                                    showActions
+                                    className="event-live-preview-theme-section"
+                                />
+                            </div>
+                        ) : (
+                            <Theme1EventPreviewSection
+                                event={previewEvent}
+                                showParticles={false}
+                            />
+                        )}
                     </div>
                 </div>
             </div>
@@ -1612,6 +2648,10 @@ function EventVisualPicker({
                     <span>Selected visual</span>
                     <strong>{selectedKey ? selectedVisual?.label ?? 'Selected visual' : 'Auto recommendation'}</strong>
                     <p>{selectedKey ? 'This visual is saved with the event.' : recommendedVisual ? `Auto uses ${recommendedVisual.label}.` : 'Auto uses the fallback visual.'}</p>
+                    <p>
+                        Animation: {getEventAnimationLabel(event.eventAnimationKey)}
+                        {isEventAnimationRecommended(event.eventAnimationKey, event.eventKey, event.eventName) ? ' (recommended)' : ''}
+                    </p>
                 </div>
                 {eventVisuals.length > 0 && (
                     <button
@@ -1643,27 +2683,8 @@ function EventVisualPicker({
                             <div>
                                 <span>Choose event visual</span>
                                 <strong>{event.eventName || 'Wedding Event'}</strong>
-                                {themeFilter === 'current' && !hasCurrentThemeVisuals && (
-                                    <p>No visuals exist for the current theme yet, so all theme visuals are shown.</p>
-                                )}
                             </div>
                             <button type="button" onClick={() => setIsPickerOpen(false)}>Close</button>
-                        </div>
-
-                        <div className="event-visual-filter-group">
-                            <span>Theme</span>
-                            <div className="event-visual-filters" role="list" aria-label="Filter event visuals by theme">
-                                {themeFilterOptions.map((filter) => (
-                                    <button
-                                        key={filter.key}
-                                        className={themeFilter === filter.key ? 'active' : ''}
-                                        type="button"
-                                        onClick={() => setThemeFilter(filter.key)}
-                                    >
-                                        {filter.label}
-                                    </button>
-                                ))}
-                            </div>
                         </div>
 
                         <div className="event-visual-filter-group">
@@ -1682,24 +2703,40 @@ function EventVisualPicker({
                             </div>
                         </div>
 
+                        <div className="event-visual-filter-group">
+                            <span>Style</span>
+                            <div className="event-visual-filters" role="list" aria-label="Filter event visuals by style">
+                                {styleFilterOptions.map((filter) => (
+                                    <button
+                                        key={filter.key}
+                                        className={styleFilter === filter.key ? 'active' : ''}
+                                        type="button"
+                                        onClick={() => setStyleFilter(filter.key)}
+                                    >
+                                        {filter.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="event-visual-card-grid modal-grid">
                             <EventVisualCard
                                 visual={recommendedVisual}
                                 label="Auto recommendation"
-                                helper={recommendedVisual ? `${recommendedVisual.themeLabel} / ${recommendedVisual.label}` : 'Uses fallback visual'}
+                                helper={recommendedVisual ? `${eventVisualStyleLabels[recommendedVisual.style ?? ''] ?? recommendedVisual.style ?? 'Style'} / ${recommendedVisual.label}` : 'Uses fallback visual'}
                                 selected={!selectedKey}
                                 onClick={() => {
                                     onSelect('');
                                     setIsPickerOpen(false);
                                 }}
                             />
-                            {filteredVisuals.map((visual) => (
+                            {styleFilteredVisuals.map((visual) => (
                                 <EventVisualCard
                                     key={visual.key}
                                     visual={visual}
                                     label={visual.label}
-                                    helper={`${visual.themeLabel} / ${eventTypeLabels[visual.eventType] ?? visual.eventType}`}
-                                    selected={selectedKey === visual.key}
+                                    helper={`${eventVisualStyleLabels[visual.style ?? ''] ?? visual.style ?? 'Style'} / ${eventTypeLabels[visual.eventType] ?? visual.eventType}`}
+                                    selected={selectedVisualKey === visual.key}
                                     onClick={() => {
                                         onSelect(visual.key);
                                         setIsPickerOpen(false);
@@ -1734,7 +2771,7 @@ function EventVisualCard({
             onClick={onClick}
         >
             {visual ? (
-                <img src={visual.imageSrc} alt="" />
+                <img src={resolveAssetPath(visual.imageSrc)} alt="" />
             ) : (
                 <span className="event-visual-card-empty">Auto</span>
             )}

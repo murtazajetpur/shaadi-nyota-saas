@@ -1,0 +1,1364 @@
+@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap');
+
+.wedding-preview-index,
+.wedding-preview-status,
+.wedding-preview-variation {
+  --wdp-ivory: #fffdf8;
+  --wdp-champagne: #f4eddf;
+  --wdp-gold: #bd9151;
+  --wdp-soft-gold: #dbc49a;
+  --wdp-maroon: #702e32;
+  --wdp-text: #302824;
+  --wdp-muted: #705e54;
+  min-height: 100vh;
+  color: var(--wdp-text);
+  background: var(--wdp-ivory);
+  font-family: 'Poppins', sans-serif;
+}
+
+.wedding-preview-index {
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: clamp(44px, 7vw, 84px) clamp(20px, 6vw, 74px);
+  background:
+    linear-gradient(120deg, rgba(244, 237, 223, .92), rgba(255, 253, 248, .98)),
+    repeating-linear-gradient(135deg, rgba(189, 145, 81, .035) 0 1px, transparent 1px 10px),
+    #fbf4e7;
+}
+
+.wedding-preview-index-header {
+  max-width: 720px;
+  margin: 0 auto 30px;
+  text-align: center;
+}
+
+.wedding-preview-index-header p,
+.wdp-kicker {
+  margin: 0 0 13px;
+  color: var(--wdp-maroon);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 2.8px;
+  text-transform: uppercase;
+}
+
+.wedding-preview-index-header h1 {
+  margin: 0 0 10px;
+  font-family: 'Playfair Display', 'Cormorant Garamond', serif;
+  font-size: clamp(34px, 6vw, 53px);
+  font-weight: 400;
+  line-height: 1.12;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.wedding-preview-index-header span {
+  display: block;
+  color: var(--wdp-muted);
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+.wedding-preview-notice {
+  width: min(720px, 100%);
+  margin: 0 auto 36px;
+  padding: 13px 18px;
+  border: 1px solid rgba(189, 145, 81, .35);
+  border-radius: 8px;
+  color: var(--wdp-muted);
+  background: rgba(255, 253, 248, .72);
+  font-size: 13px;
+  text-align: center;
+}
+
+.wedding-preview-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+  gap: 16px;
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.wedding-preview-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 250px;
+  padding: 27px 23px 22px;
+  border: 1px solid rgba(189, 145, 81, .32);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, .92);
+  box-shadow: 0 14px 34px rgba(70, 43, 30, .07);
+  min-width: 0;
+}
+
+.wedding-preview-card-number {
+  color: var(--wdp-maroon);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.wedding-preview-card h2 {
+  margin: 22px 0 12px;
+  font-family: 'Playfair Display', 'Cormorant Garamond', serif;
+  font-size: 25px;
+  font-weight: 400;
+  line-height: 1.23;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.wedding-preview-card p {
+  flex: 1;
+  margin: 0 0 28px;
+  color: var(--wdp-muted);
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.wedding-preview-card a,
+.wedding-preview-status a {
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+  color: var(--wdp-maroon);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.wedding-preview-card a span {
+  font-size: 20px;
+  transition: transform .25s ease;
+}
+
+.wedding-preview-card a:hover span {
+  transform: translateX(4px);
+}
+
+.wedding-preview-status {
+  display: grid;
+  place-content: center;
+  gap: 15px;
+  padding: 28px;
+  text-align: center;
+  background: var(--wdp-champagne);
+  overflow-x: hidden;
+}
+
+.wedding-preview-status h1 {
+  margin: 0;
+  font-family: 'Playfair Display', serif;
+  font-size: 34px;
+  font-weight: 400;
+}
+
+.wedding-preview-status p {
+  max-width: min(420px, calc(100vw - 44px));
+  margin: 0;
+  color: var(--wdp-muted);
+  overflow-wrap: break-word;
+}
+
+.wedding-preview-variation {
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 0;
+  background: #f4eddf;
+}
+
+.wdp-review-bar {
+  position: fixed;
+  z-index: 30;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  height: 62px;
+  padding: 0 max(18px, calc((100vw - 500px) / 2));
+  border-bottom: 1px solid rgba(189, 145, 81, .25);
+  background: rgba(255, 253, 248, .94);
+  backdrop-filter: blur(12px);
+}
+
+.wdp-review-bar a {
+  display: grid;
+  place-items: center;
+  width: 37px;
+  height: 37px;
+  border: 1px solid rgba(189, 145, 81, .4);
+  border-radius: 50%;
+  color: var(--wdp-maroon);
+  font-size: 20px;
+  text-decoration: none;
+}
+
+.wdp-review-bar div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wdp-review-bar span {
+  color: var(--wdp-muted);
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+
+.wdp-review-bar strong {
+  overflow: hidden;
+  color: var(--wdp-text);
+  font-family: 'Playfair Display', serif;
+  font-size: 15px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wdp-canvas {
+  position: relative;
+  width: min(100%, 460px);
+  min-height: 100vh;
+  margin: 0 auto;
+  overflow: hidden;
+  background: linear-gradient(180deg, #fffdf8, #f7eddd);
+  box-shadow: 0 0 40px rgba(43, 31, 25, .12);
+}
+
+.wdp-section,
+.wdp-hero,
+.wdp-event {
+  position: relative;
+  overflow: hidden;
+}
+
+.wdp-hero {
+  min-height: min(calc(100vh - 62px), 780px);
+  aspect-ratio: 9 / 16;
+  background: #f4e8d7;
+}
+
+.wdp-hero-control {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.wdp-hero-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.wdp-hero-reveal {
+  z-index: 2;
+  transition: opacity .08s linear;
+}
+
+.wdp-reveal-cta,
+.wdp-pause-indicator,
+.wdp-replay {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 19%;
+  transform: translateX(-50%);
+  padding: 11px 27px;
+  border: 1px solid rgba(112, 46, 50, .3);
+  border-radius: 999px;
+  color: #362b27;
+  background: rgba(255, 253, 248, .8);
+  font-family: 'Playfair Display', serif;
+  font-size: 15px;
+  white-space: nowrap;
+  box-shadow: 0 5px 20px rgba(57, 35, 25, .09);
+}
+
+.wdp-pause-indicator {
+  bottom: 12%;
+  padding: 8px 19px;
+  font-size: 13px;
+}
+
+.wdp-replay {
+  top: 22px;
+  right: 19px;
+  bottom: auto;
+  left: auto;
+  transform: none;
+  padding: 8px 15px;
+  font-size: 12px;
+  letter-spacing: .4px;
+}
+
+.wdp-scroll-prompt {
+  position: absolute;
+  z-index: 4;
+  bottom: 6%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  color: var(--wdp-maroon);
+  font-family: 'Playfair Display', serif;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+.wdp-scroll-prompt i {
+  width: 9px;
+  height: 9px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+  animation: wdp-arrow 1.8s ease-in-out infinite;
+}
+
+@keyframes wdp-arrow {
+  0%, 100% { transform: translateY(0) rotate(45deg); opacity: .45; }
+  50% { transform: translateY(5px) rotate(45deg); opacity: 1; }
+}
+
+.wdp-divider {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 62px;
+  padding: 12px 30px;
+  color: var(--wdp-gold);
+}
+
+.wdp-divider span {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, currentColor);
+  opacity: .7;
+}
+
+.wdp-divider span:last-child {
+  background: linear-gradient(90deg, currentColor, transparent);
+}
+
+.wdp-divider i {
+  width: 7px;
+  height: 7px;
+  border: 1px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.wdp-divider small {
+  color: var(--wdp-maroon);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14px;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.wdp-story {
+  min-height: 620px;
+}
+
+.wdp-story-image,
+.wdp-event-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wdp-media-backdrop {
+  display: none;
+}
+
+.wdp-story-image {
+  object-position: center bottom;
+}
+
+.wdp-story-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 253, 248, .97) 0%, rgba(255, 253, 248, .88) 35%, rgba(255, 253, 248, .18) 70%, rgba(255, 253, 248, .72) 100%);
+}
+
+.wdp-story-copy {
+  position: relative;
+  z-index: 1;
+  padding: 56px 38px 32px;
+  text-align: center;
+}
+
+.wdp-story-copy h2 {
+  margin: 0 0 20px;
+  color: var(--wdp-maroon);
+  font-family: 'Great Vibes', cursive;
+  font-size: clamp(48px, 13vw, 62px);
+  font-weight: 400;
+  line-height: 1.12;
+}
+
+.wdp-story-copy h3 {
+  margin: 0 auto 17px;
+  max-width: 340px;
+  font-family: 'Playfair Display', serif;
+  font-size: 27px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.wdp-body {
+  max-width: 350px;
+  margin: 0 auto;
+  color: var(--wdp-muted);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 19px;
+  line-height: 1.65;
+}
+
+.wdp-events {
+  position: relative;
+}
+
+.wdp-events-title {
+  display: none;
+  margin: 0;
+  color: var(--wdp-maroon);
+  font-family: 'Playfair Display', serif;
+  font-size: 30px;
+  font-weight: 400;
+  text-align: center;
+}
+
+.wdp-chapter {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin: 0 0 16px;
+  color: var(--wdp-gold);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.wdp-chapter span {
+  width: 23px;
+  height: 1px;
+  background: currentColor;
+}
+
+.wdp-event {
+  min-height: 600px;
+}
+
+.wdp-event-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(103, 48, 46, .03) 20%, rgba(103, 48, 46, .18) 54%, rgba(78, 39, 40, .7) 100%);
+}
+
+.wdp-event-dark .wdp-event-overlay {
+  background: linear-gradient(180deg, rgba(255, 252, 245, .52), rgba(255, 252, 245, .76) 67%, rgba(255, 252, 245, .94) 100%);
+}
+
+.wdp-event-index {
+  position: absolute;
+  z-index: 1;
+  top: 25px;
+  left: 26px;
+  color: rgba(255, 255, 255, .78);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 21px;
+}
+
+.wdp-event-dark .wdp-event-index {
+  color: rgba(112, 46, 50, .62);
+}
+
+.wdp-event-copy {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 35px 30px 43px;
+  color: #fffdf8;
+  text-align: center;
+}
+
+.wdp-event-dark .wdp-event-copy {
+  color: var(--wdp-text);
+}
+
+.wdp-event-copy h3 {
+  margin: 0 0 15px;
+  font-family: 'Great Vibes', cursive;
+  font-size: clamp(48px, 14vw, 60px);
+  font-weight: 400;
+  line-height: 1.05;
+}
+
+.wdp-event-copy p {
+  margin: 5px 0;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.wdp-event-copy small {
+  display: block;
+  margin-top: 18px;
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+
+.wdp-rsvp {
+  padding: 62px 37px 68px;
+  color: var(--wdp-text);
+  text-align: center;
+  background: var(--wdp-ivory);
+}
+
+.wdp-rsvp h2 {
+  margin: 0 0 13px;
+  font-family: 'Playfair Display', serif;
+  font-size: 32px;
+  font-weight: 400;
+}
+
+.wdp-rsvp > p:not(.wdp-kicker) {
+  margin: 0 auto 32px;
+  color: var(--wdp-muted);
+  font-size: 14px;
+}
+
+.wdp-rsvp-field {
+  padding: 17px 18px;
+  border-bottom: 1px solid var(--wdp-soft-gold);
+  color: #9b8b80;
+  font-size: 14px;
+  text-align: left;
+}
+
+.wdp-rsvp-actions {
+  display: flex;
+  gap: 10px;
+  margin: 28px 0 24px;
+}
+
+.wdp-rsvp-actions span {
+  flex: 1;
+  padding: 13px 6px;
+  border: 1px solid rgba(189, 145, 81, .38);
+  border-radius: 999px;
+  color: var(--wdp-maroon);
+  font-size: 13px;
+}
+
+.wdp-rsvp small {
+  color: #89796e;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.wdp-closing {
+  min-height: 640px;
+  padding: 72px 32px 52px;
+  text-align: center;
+  background: linear-gradient(180deg, #fffefa, #f7f0e4);
+}
+
+.wdp-closing-line,
+.wdp-closing h2 {
+  margin: 0;
+  color: var(--wdp-maroon);
+  font-family: 'Great Vibes', cursive;
+  font-size: 54px;
+  font-weight: 400;
+  line-height: 1.18;
+}
+
+.wdp-closing-message {
+  max-width: 330px;
+  margin: 20px auto 35px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.wdp-closing-photos {
+  position: relative;
+  width: min(72%, 286px);
+  aspect-ratio: 1 / 1.18;
+  margin: 0 auto 38px;
+}
+
+.wdp-closing-photos img {
+  width: 100%;
+  height: 100%;
+  border: 8px solid #fff;
+  border-radius: 50% 50% 46% 46%;
+  object-fit: cover;
+  box-shadow: 0 17px 30px rgba(47, 29, 23, .13);
+}
+
+.wdp-photo-dots {
+  position: absolute;
+  bottom: -23px;
+  left: 50%;
+  display: flex;
+  gap: 7px;
+  transform: translateX(-50%);
+}
+
+.wdp-photo-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(112, 46, 50, .35);
+}
+
+.wdp-photo-dots span:first-child {
+  width: 22px;
+  border-radius: 10px;
+  background: var(--wdp-maroon);
+}
+
+/* Shared cinematic motion always reveals onto a warm invitation surface. */
+.wdp-media-1 .wdp-enter,
+.wdp-media-2 .wdp-enter,
+.wdp-media-3 .wdp-enter,
+.wdp-media-4 .wdp-enter,
+.wdp-media-5 .wdp-enter,
+.wdp-cinematic-1 .wdp-enter,
+.wdp-cinematic-2 .wdp-enter,
+.wdp-cinematic-3 .wdp-enter,
+.wdp-cinematic-4 .wdp-enter,
+.wdp-cinematic-5 .wdp-enter {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity .85s ease, transform 1s cubic-bezier(.16, 1, .3, 1);
+}
+
+.wdp-media-1 .wdp-enter.wdp-visible,
+.wdp-media-2 .wdp-enter.wdp-visible,
+.wdp-media-3 .wdp-enter.wdp-visible,
+.wdp-media-4 .wdp-enter.wdp-visible,
+.wdp-media-5 .wdp-enter.wdp-visible,
+.wdp-media-1 .wdp-hero,
+.wdp-media-2 .wdp-hero,
+.wdp-media-3 .wdp-hero,
+.wdp-media-4 .wdp-hero,
+.wdp-media-5 .wdp-hero,
+.wdp-cinematic-1 .wdp-enter.wdp-visible,
+.wdp-cinematic-2 .wdp-enter.wdp-visible,
+.wdp-cinematic-3 .wdp-enter.wdp-visible,
+.wdp-cinematic-4 .wdp-enter.wdp-visible,
+.wdp-cinematic-5 .wdp-enter.wdp-visible,
+.wdp-cinematic-1 .wdp-hero,
+.wdp-cinematic-2 .wdp-hero,
+.wdp-cinematic-3 .wdp-hero,
+.wdp-cinematic-4 .wdp-hero,
+.wdp-cinematic-5 .wdp-hero {
+  opacity: 1;
+  transform: none;
+}
+
+/* Media 1: immersive cover, tuned to protect central wedding artwork. */
+.wdp-media-1 .wdp-canvas {
+  background: linear-gradient(180deg, #fffdf8, #f6ead8 48%, #fffaf2);
+}
+
+.wdp-media-1 .wdp-hero-media,
+.wdp-media-1 .wdp-story-image,
+.wdp-media-1 .wdp-event-image {
+  object-fit: cover;
+  object-position: 50% 44%;
+}
+
+.wdp-media-1 .wdp-event-image {
+  object-position: 50% 52%;
+}
+
+.wdp-media-1 .wdp-story,
+.wdp-media-1 .wdp-event,
+.wdp-media-1 .wdp-closing,
+.wdp-media-1 .wdp-rsvp {
+  border-radius: 8px;
+}
+
+.wdp-media-1 .wdp-divider {
+  min-height: 58px;
+  background: linear-gradient(180deg, transparent, rgba(244, 226, 198, .68), transparent);
+}
+
+/* Media 2: full 9:16 artwork with a warm matte, no cropping. */
+.wdp-media-2 .wdp-canvas {
+  padding: 12px;
+  background:
+    repeating-linear-gradient(135deg, rgba(189, 145, 81, .035) 0 1px, transparent 1px 12px),
+    #f5ead8;
+}
+
+.wdp-media-2 .wdp-hero,
+.wdp-media-2 .wdp-story,
+.wdp-media-2 .wdp-event {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(189, 145, 81, .28);
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 35%, rgba(255, 253, 248, .78), rgba(238, 219, 190, .88));
+}
+
+.wdp-media-2 .wdp-hero-media,
+.wdp-media-2 .wdp-story-image,
+.wdp-media-2 .wdp-event-image {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: min(100%, calc(100vh * 9 / 16));
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 18px 36px rgba(64, 42, 30, .08);
+  transform: translate(-50%, -50%);
+}
+
+.wdp-media-2 .wdp-event-overlay {
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255, 253, 248, .05), rgba(79, 36, 38, .55));
+}
+
+.wdp-media-2 .wdp-event-dark .wdp-event-overlay {
+  background: linear-gradient(180deg, rgba(255, 253, 248, .35), rgba(255, 253, 248, .84));
+}
+
+/* Media 3: no-crop opening moments, cinematic cover events. */
+.wdp-media-3 .wdp-canvas {
+  background: linear-gradient(180deg, #fffaf3, #f1e2cd 52%, #fffaf3);
+}
+
+.wdp-media-3 .wdp-hero,
+.wdp-media-3 .wdp-story {
+  display: grid;
+  place-items: center;
+  background: #f6ead8;
+}
+
+.wdp-media-3 .wdp-hero-media,
+.wdp-media-3 .wdp-story-image {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: min(100%, calc(100vh * 9 / 16));
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+}
+
+.wdp-media-3 .wdp-event-image {
+  object-fit: cover;
+  object-position: 50% 48%;
+}
+
+.wdp-media-3 .wdp-events {
+  padding: 12px;
+}
+
+.wdp-media-3 .wdp-event {
+  min-height: 610px;
+  border-radius: 8px;
+}
+
+/* Media 4: 9:16 visuals as premium invitation cards inside taller screens. */
+.wdp-media-4 .wdp-canvas {
+  padding: 14px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(219, 196, 154, .25), transparent 26%),
+    linear-gradient(180deg, #fffdf8, #f1e2cd);
+}
+
+.wdp-media-4 .wdp-hero,
+.wdp-media-4 .wdp-story,
+.wdp-media-4 .wdp-event {
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  border: 1px solid rgba(189, 145, 81, .34);
+  border-radius: 18px;
+  background: rgba(255, 253, 248, .72);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .65), 0 18px 34px rgba(75, 44, 26, .08);
+}
+
+.wdp-media-4 .wdp-hero::before,
+.wdp-media-4 .wdp-story::before,
+.wdp-media-4 .wdp-event::before {
+  position: absolute;
+  inset: 7px;
+  z-index: 3;
+  pointer-events: none;
+  border: 1px solid rgba(189, 145, 81, .22);
+  border-radius: 14px;
+  content: "";
+}
+
+.wdp-media-4 .wdp-hero-media,
+.wdp-media-4 .wdp-story-image,
+.wdp-media-4 .wdp-event-image {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: min(100%, calc(100vh * 9 / 16));
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: 9 / 16;
+  border-radius: 12px;
+  object-fit: cover;
+  object-position: 50% 44%;
+  transform: translate(-50%, -50%);
+}
+
+.wdp-media-4 .wdp-event-image {
+  object-position: 50% 50%;
+}
+
+/* Media 5: soft blurred fill plus complete centered artwork. */
+.wdp-media-5 .wdp-canvas {
+  background: linear-gradient(180deg, #fffaf3, #eadbc5 48%, #fffdf8);
+}
+
+.wdp-media-5 .wdp-hero,
+.wdp-media-5 .wdp-story,
+.wdp-media-5 .wdp-event {
+  display: grid;
+  place-items: center;
+  background: #f2e4cf;
+}
+
+.wdp-media-5 .wdp-media-backdrop {
+  position: absolute;
+  inset: -18px;
+  display: block;
+  width: calc(100% + 36px);
+  height: calc(100% + 36px);
+  object-fit: cover;
+  object-position: center;
+  filter: blur(24px) saturate(1.05);
+  opacity: .42;
+  transform: scale(1.05);
+}
+
+.wdp-media-5 .wdp-hero-media,
+.wdp-media-5 .wdp-story-image,
+.wdp-media-5 .wdp-event-image {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: min(100%, calc(100vh * 9 / 16));
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: contain;
+  box-shadow: 0 14px 36px rgba(55, 36, 25, .1);
+  transform: translate(-50%, -50%);
+}
+
+.wdp-media-5 .wdp-event-overlay {
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0), rgba(82, 38, 40, .58));
+}
+
+.wdp-media-5 .wdp-event-dark .wdp-event-overlay {
+  background: linear-gradient(180deg, rgba(255, 253, 248, .12), rgba(255, 253, 248, .86));
+}
+
+/* Cinematic 1: light crossfades and close, natural section handoffs. */
+.wdp-cinematic-1 .wdp-canvas {
+  background: linear-gradient(180deg, #fffdf8, #faf1e3 42%, #fffaf5);
+}
+
+.wdp-cinematic-1 .wdp-divider {
+  min-height: 70px;
+  margin: -14px 0;
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0), rgba(248, 233, 210, .74) 50%, rgba(255, 253, 248, 0));
+}
+
+.wdp-cinematic-1 .wdp-story,
+.wdp-cinematic-1 .wdp-event {
+  margin: 0 10px;
+  border-radius: 8px;
+}
+
+.wdp-cinematic-1 .wdp-enter {
+  transition-duration: 1s, 1s;
+}
+
+/* Cinematic 2: a steady champagne stage with gently sticky chapters. */
+.wdp-cinematic-2 .wdp-canvas {
+  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 249, 239, .96), rgba(244, 233, 215, .92)),
+    repeating-linear-gradient(135deg, rgba(189, 145, 81, .035) 0 1px, transparent 1px 11px),
+    #f7ecd9;
+}
+
+.wdp-cinematic-2 .wdp-chapter {
+  display: flex;
+}
+
+.wdp-cinematic-2 .wdp-hero,
+.wdp-cinematic-2 .wdp-story,
+.wdp-cinematic-2 .wdp-event,
+.wdp-cinematic-2 .wdp-rsvp,
+.wdp-cinematic-2 .wdp-closing {
+  border: 1px solid rgba(189, 145, 81, .3);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(88, 53, 33, .07);
+}
+
+.wdp-cinematic-2 .wdp-event-flow {
+  min-height: 710px;
+}
+
+.wdp-cinematic-2 .wdp-event {
+  position: sticky;
+  top: 74px;
+  min-height: 620px;
+}
+
+.wdp-cinematic-2 .wdp-divider {
+  min-height: 75px;
+  background: linear-gradient(180deg, transparent, rgba(246, 233, 213, .86), transparent);
+}
+
+/* Cinematic 3: celebration cards form one vertical timeline. */
+.wdp-cinematic-3 .wdp-canvas {
+  padding: 0 14px 24px;
+  background:
+    repeating-linear-gradient(0deg, rgba(112, 46, 50, .015), rgba(112, 46, 50, .015) 1px, transparent 1px, transparent 9px),
+    #fffaf2;
+}
+
+.wdp-cinematic-3 .wdp-events-title {
+  display: block;
+  margin: 22px 0 34px;
+}
+
+.wdp-cinematic-3 .wdp-events {
+  padding-left: 25px;
+}
+
+.wdp-cinematic-3 .wdp-events::before {
+  position: absolute;
+  top: 70px;
+  bottom: 30px;
+  left: 9px;
+  width: 1px;
+  content: "";
+  background: linear-gradient(var(--wdp-soft-gold), var(--wdp-gold), var(--wdp-soft-gold));
+}
+
+.wdp-cinematic-3 .wdp-event {
+  min-height: 540px;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(70, 43, 30, .07);
+}
+
+.wdp-cinematic-3 .wdp-event::before {
+  position: absolute;
+  z-index: 5;
+  top: 50px;
+  left: -21px;
+  width: 11px;
+  height: 11px;
+  border: 3px solid #fffaf2;
+  border-radius: 50%;
+  content: "";
+  background: var(--wdp-gold);
+}
+
+.wdp-cinematic-3 .wdp-event-flow .wdp-divider {
+  min-height: 44px;
+  padding-left: 0;
+  opacity: .7;
+}
+
+.wdp-cinematic-3 .wdp-story,
+.wdp-cinematic-3 .wdp-rsvp,
+.wdp-cinematic-3 .wdp-closing {
+  border-radius: 8px;
+}
+
+/* Cinematic 4: softly moving invitation layers and floral depth. */
+.wdp-cinematic-4 .wdp-canvas {
+  isolation: isolate;
+  padding: 0 12px 18px;
+  background: linear-gradient(165deg, #fffdf8, #f6e8d4 46%, #fffbf2);
+}
+
+.wdp-cinematic-4 .wdp-atmosphere {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 22%, rgba(218, 183, 127, .22), transparent 26%),
+    radial-gradient(circle at 82% 68%, rgba(195, 111, 102, .12), transparent 24%),
+    linear-gradient(135deg, rgba(219, 196, 154, .14), transparent);
+  opacity: .2;
+  animation: wdp-soft-drift 18s ease-in-out infinite alternate;
+}
+
+.wdp-cinematic-4 .wdp-hero,
+.wdp-cinematic-4 .wdp-story,
+.wdp-cinematic-4 .wdp-events,
+.wdp-cinematic-4 .wdp-rsvp,
+.wdp-cinematic-4 .wdp-closing,
+.wdp-cinematic-4 .wdp-divider {
+  z-index: 1;
+}
+
+.wdp-cinematic-4 .wdp-story,
+.wdp-cinematic-4 .wdp-event,
+.wdp-cinematic-4 .wdp-rsvp,
+.wdp-cinematic-4 .wdp-closing {
+  border: 1px solid rgba(219, 196, 154, .42);
+  border-radius: 8px;
+}
+
+.wdp-cinematic-4 .wdp-divider {
+  min-height: 74px;
+  background: linear-gradient(90deg, transparent, rgba(243, 224, 195, .45), transparent);
+}
+
+@keyframes wdp-soft-drift {
+  from { transform: translateY(-8px); }
+  to { transform: translateY(10px); }
+}
+
+/* Live-structure media-fit previews.
+   These routes render the real InviteExperience tree first, then only override media fit behavior. */
+.wedding-preview-live {
+  height: 100vh;
+  overflow: hidden;
+  padding-top: 0;
+  background: #f4eddf;
+}
+
+.wedding-preview-live .desktop-bg-blur,
+.wedding-preview-live .desktop-vignette {
+  top: 0;
+}
+
+.wedding-preview-live .app-container,
+.wedding-preview-live .theme2-app-container {
+  height: 100vh;
+  padding-top: 0;
+  box-sizing: border-box;
+}
+
+.wedding-preview-live .phone-canvas {
+  height: min(92vh, 900px);
+}
+
+.wedding-preview-live .theme2-phone-canvas-wrapper {
+  height: 100dvh;
+}
+
+.wedding-preview-live .section-wrapper,
+.wedding-preview-live .theme2-section {
+  background-color: #fffaf2;
+}
+
+/* Media 1: keep live full-bleed structure, with safer focal points. */
+.wedding-preview-live.wdp-media-1 .hero-video,
+.wedding-preview-live.wdp-media-1 .hero-reveal-image,
+.wedding-preview-live.wdp-media-1 .ganesha-full-img,
+.wedding-preview-live.wdp-media-1 .theme2-hero-video,
+.wedding-preview-live.wdp-media-1 .theme2-hero-poster,
+.wedding-preview-live.wdp-media-1 .theme2-section-bg {
+  object-fit: cover;
+  object-position: 50% 43%;
+}
+
+.wedding-preview-live.wdp-media-1 .event-section-selected-visual {
+  background-position: 50% 48%;
+}
+
+/* Media 2: full artwork matte. No crop; warm surface fills extra modern-phone height. */
+.wedding-preview-live.wdp-media-2 .hero-container,
+.wedding-preview-live.wdp-media-2 .section-1,
+.wedding-preview-live.wdp-media-2 .event-section-selected-visual,
+.wedding-preview-live.wdp-media-2 .theme2-hero-reveal,
+.wedding-preview-live.wdp-media-2 .theme2-section {
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, .72), transparent 36%),
+    linear-gradient(180deg, #fffaf2, #eadbc5);
+}
+
+.wedding-preview-live.wdp-media-2 .hero-video,
+.wedding-preview-live.wdp-media-2 .hero-reveal-image,
+.wedding-preview-live.wdp-media-2 .ganesha-full-img,
+.wedding-preview-live.wdp-media-2 .theme2-hero-video,
+.wedding-preview-live.wdp-media-2 .theme2-hero-poster,
+.wedding-preview-live.wdp-media-2 .theme2-section-bg {
+  object-fit: contain;
+  object-position: center center;
+}
+
+.wedding-preview-live.wdp-media-2 .video-loading-overlay,
+.wedding-preview-live.wdp-media-2 .event-section-selected-visual {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center center;
+}
+
+/* Media 3: opening/reveal no-crop, event pages remain cinematic cover. */
+.wedding-preview-live.wdp-media-3 .hero-container,
+.wedding-preview-live.wdp-media-3 .section-1,
+.wedding-preview-live.wdp-media-3 .theme2-hero-reveal,
+.wedding-preview-live.wdp-media-3 .theme2-opening-reveal-landing {
+  background: linear-gradient(180deg, #fffaf2, #eadbc5);
+}
+
+.wedding-preview-live.wdp-media-3 .hero-video,
+.wedding-preview-live.wdp-media-3 .hero-reveal-image,
+.wedding-preview-live.wdp-media-3 .ganesha-full-img,
+.wedding-preview-live.wdp-media-3 .theme2-hero-video,
+.wedding-preview-live.wdp-media-3 .theme2-hero-poster,
+.wedding-preview-live.wdp-media-3 .theme2-opening-reveal-landing .theme2-section-bg {
+  object-fit: contain;
+  object-position: center center;
+}
+
+.wedding-preview-live.wdp-media-3 .video-loading-overlay {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center center;
+}
+
+.wedding-preview-live.wdp-media-3 .event-section-selected-visual {
+  background-size: cover;
+  background-position: 50% 48%;
+}
+
+/* Media 4: same live flow, but all visual pages behave like framed invitation art. */
+.wedding-preview-live.wdp-media-4 .phone-canvas,
+.wedding-preview-live.wdp-media-4 .theme2-phone-canvas-wrapper {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(219, 196, 154, .25), transparent 30%),
+    linear-gradient(180deg, #fffdf8, #f1e2cd);
+}
+
+.wedding-preview-live.wdp-media-4 .hero-container,
+.wedding-preview-live.wdp-media-4 .section-1,
+.wedding-preview-live.wdp-media-4 .event-section-selected-visual,
+.wedding-preview-live.wdp-media-4 .theme2-hero-reveal,
+.wedding-preview-live.wdp-media-4 .theme2-section {
+  inset: 12px;
+  width: auto;
+  min-height: auto;
+  border: 1px solid rgba(189, 145, 81, .34);
+  border-radius: 18px;
+  background-color: rgba(255, 253, 248, .75);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .65), 0 18px 34px rgba(75, 44, 26, .08);
+}
+
+.wedding-preview-live.wdp-media-4 .event-section-selected-visual {
+  background-size: cover;
+  background-position: 50% 45%;
+}
+
+.wedding-preview-live.wdp-media-4 .hero-video,
+.wedding-preview-live.wdp-media-4 .hero-reveal-image,
+.wedding-preview-live.wdp-media-4 .ganesha-full-img,
+.wedding-preview-live.wdp-media-4 .theme2-hero-video,
+.wedding-preview-live.wdp-media-4 .theme2-hero-poster,
+.wedding-preview-live.wdp-media-4 .theme2-section-bg {
+  border-radius: 16px;
+  object-position: 50% 43%;
+}
+
+/* Media 5: soft no-crop stage on the real live structure. */
+.wedding-preview-live.wdp-media-5 .hero-container,
+.wedding-preview-live.wdp-media-5 .section-1,
+.wedding-preview-live.wdp-media-5 .event-section-selected-visual,
+.wedding-preview-live.wdp-media-5 .theme2-hero-reveal,
+.wedding-preview-live.wdp-media-5 .theme2-section {
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 255, 255, .6), transparent 35%),
+    linear-gradient(180deg, #f8efe3, #e9dac4);
+}
+
+.wedding-preview-live.wdp-media-5 .hero-video,
+.wedding-preview-live.wdp-media-5 .hero-reveal-image,
+.wedding-preview-live.wdp-media-5 .ganesha-full-img,
+.wedding-preview-live.wdp-media-5 .theme2-hero-video,
+.wedding-preview-live.wdp-media-5 .theme2-hero-poster,
+.wedding-preview-live.wdp-media-5 .theme2-section-bg {
+  object-fit: contain;
+  object-position: center center;
+  filter: drop-shadow(0 14px 30px rgba(55, 36, 25, .1));
+}
+
+.wedding-preview-live.wdp-media-5 .video-loading-overlay,
+.wedding-preview-live.wdp-media-5 .event-section-selected-visual {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center center;
+}
+
+/* Media 6: live site structure, only opening video/reveal stretch to fill. */
+.wedding-preview-live.wdp-media-6 .desktop-bg-blur,
+.wedding-preview-live.wdp-media-6 .desktop-vignette {
+  display: none;
+}
+
+.wedding-preview-live.wdp-media-6 .app-container {
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.wedding-preview-live.wdp-media-6 .phone-canvas {
+  height: 100vh;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.wedding-preview-live.wdp-media-6 .hero-video,
+.wedding-preview-live.wdp-media-6 .hero-reveal-image,
+.wedding-preview-live.wdp-media-6 .ganesha-full-img,
+.wedding-preview-live.wdp-media-6 .theme2-hero-video,
+.wedding-preview-live.wdp-media-6 .theme2-hero-poster,
+.wedding-preview-live.wdp-media-6 .theme2-opening-reveal-landing .theme2-section-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  object-position: center center;
+}
+
+.wedding-preview-live.wdp-media-6 .video-loading-overlay {
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center center;
+}
+
+/* Cinematic 5: compact ornamental gradient bridges around familiar layouts. */
+.wdp-cinematic-5 .wdp-canvas {
+  background: #fffaf3;
+}
+
+.wdp-cinematic-5 .wdp-divider {
+  min-height: 82px;
+  padding: 17px 38px;
+  color: var(--wdp-gold);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0), rgba(245, 222, 208, .44) 48%, rgba(255, 250, 243, 0));
+}
+
+.wdp-cinematic-5 .wdp-divider i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50% 50% 0 50%;
+}
+
+.wdp-cinematic-5 .wdp-divider small {
+  font-size: 16px;
+}
+
+.wdp-cinematic-5 .wdp-event-flow .wdp-divider {
+  min-height: 56px;
+}
+
+.wdp-cinematic-5 .wdp-story,
+.wdp-cinematic-5 .wdp-event,
+.wdp-cinematic-5 .wdp-rsvp,
+.wdp-cinematic-5 .wdp-closing {
+  margin: 0 8px;
+  border-radius: 5px;
+}
+
+@media (max-width: 520px) {
+  .wedding-preview-variation {
+    padding-top: 56px;
+  }
+
+  .wdp-review-bar {
+    height: 56px;
+    padding: 0 14px;
+  }
+
+  .wdp-canvas {
+    width: 100%;
+    box-shadow: none;
+  }
+
+  .wdp-story-copy {
+    padding-right: 30px;
+    padding-left: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wdp-scroll-prompt i,
+  .wdp-cinematic-1 .wdp-enter,
+  .wdp-cinematic-2 .wdp-enter,
+  .wdp-cinematic-3 .wdp-enter,
+  .wdp-cinematic-4 .wdp-enter,
+  .wdp-cinematic-5 .wdp-enter,
+  .wdp-cinematic-4 .wdp-atmosphere {
+    animation: none;
+    transition: none;
+  }
+
+  .wdp-cinematic-1 .wdp-enter,
+  .wdp-cinematic-2 .wdp-enter,
+  .wdp-cinematic-3 .wdp-enter,
+  .wdp-cinematic-4 .wdp-enter,
+  .wdp-cinematic-5 .wdp-enter {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.wedding-preview-live {
+  padding-top: 0 !important;
+}
+
+.wedding-preview-live.wdp-media-6,
+.wedding-preview-live.wdp-media-6 .app-container,
+.wedding-preview-live.wdp-media-6 .phone-canvas {
+  height: 100dvh;
+}

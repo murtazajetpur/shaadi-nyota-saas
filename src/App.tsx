@@ -5,6 +5,7 @@ import AuthPage from './components/AuthPage';
 import CreateWeddingPage from './components/CreateWeddingPage';
 import Dashboard from './components/Dashboard';
 import InviteExperience from './components/InviteExperience';
+import WeddingDesignPreviews from './components/WeddingDesignPreviews';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import {
   defaultWeddingSlug,
@@ -87,16 +88,17 @@ function AccessMessage({
 
 function DashboardRoute() {
   const { user, loading, isConfigured } = useAuth();
+  const userId = user?.id;
   const [ownedWedding, setOwnedWedding] = useState<OwnedWeddingRow | null>(null);
   const [dashboardWedding, setDashboardWedding] = useState<SampleWeddingData | null>(null);
   const [isCheckingWedding, setIsCheckingWedding] = useState(false);
   const [weddingError, setWeddingError] = useState('');
 
   useEffect(() => {
-    if (!isConfigured || loading || !user) return;
+    if (!isConfigured || loading || !userId) return;
 
     setIsCheckingWedding(true);
-    getOwnedWeddingForUser(user.id).then(async ({ wedding, error }) => {
+    getOwnedWeddingForUser(userId).then(async ({ wedding, error }) => {
       setOwnedWedding(wedding);
       if (error || !wedding) {
         setWeddingError(error ?? '');
@@ -110,7 +112,7 @@ function DashboardRoute() {
       setWeddingError(bundle.error ?? '');
       setIsCheckingWedding(false);
     });
-  }, [isConfigured, loading, user]);
+  }, [isConfigured, loading, userId]);
 
   if (!isConfigured) {
     return <Dashboard authNotice="Supabase env vars are missing, so the dashboard is running with development fallback data." />;
@@ -384,6 +386,10 @@ function AppRoutes() {
 
   if (isCreateWedding) {
     return <CreateWeddingPage />;
+  }
+
+  if (firstSegment === 'mahesh-neha' && secondSegment === 'preview') {
+    return <WeddingDesignPreviews variationId={pathParts[2]} />;
   }
 
   if (isDashboard) {

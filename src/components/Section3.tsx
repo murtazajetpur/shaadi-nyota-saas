@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import './Section3.css';
 import type { RefObject } from 'react';
 import type { SampleWeddingData, WeddingEvent } from '../data/sampleWeddingData';
+import { getEventVisualByKey } from '../data/eventVisuals';
+import { resolveAssetPath } from '../data/assetRegistry';
+import EventAnimationLayer from './EventAnimationLayer';
 
 interface Section3Props {
     events: SampleWeddingData['events'];
@@ -98,7 +101,7 @@ function EventParticles({ eventId }: { eventId: string }) {
     );
 }
 
-function EventSection({
+export function EventSection({
     event,
     sectionRef,
     showParticles,
@@ -107,9 +110,22 @@ function EventSection({
     sectionRef?: RefObject<HTMLElement | null>;
     showParticles: boolean;
 }) {
+    const selectedVisual = getEventVisualByKey(event.eventVisualKey);
+    const foregroundImage = resolveAssetPath(event.foregroundImageSrc);
+    const backgroundImage = resolveAssetPath(event.backgroundImageSrc);
+    const selectedImage = resolveAssetPath(selectedVisual?.imageSrc);
+    const resolvedTextStyle = event.eventTextStyle === 'light' || event.eventTextStyle === 'dark'
+        ? event.eventTextStyle
+        : selectedVisual?.defaultTextStyle ?? 'dark';
+    const backgroundStyle = selectedImage
+        ? { backgroundImage: `url('${selectedImage}')` }
+        : { backgroundImage: `url('${foregroundImage}'), url('${backgroundImage}')` };
+
+    const mapsUrl = event.mapsUrl.trim();
+
     const handleMapClick = () => {
-        if (event.mapsUrl) {
-            window.open(event.mapsUrl, '_blank');
+        if (mapsUrl) {
+            window.open(mapsUrl, '_blank');
         }
     };
 
@@ -120,12 +136,17 @@ function EventSection({
     return (
         <section
             ref={sectionRef}
-            className={`section-wrapper event-section ${event.id}-bg`}
-            style={{
-                backgroundImage: `url('${event.foregroundImageSrc}'), url('${event.backgroundImageSrc}')`,
-            }}
+            className={[
+                'section-wrapper',
+                'event-section',
+                `${event.id}-bg`,
+                selectedImage ? 'event-section-selected-visual' : '',
+                `event-section-text-${resolvedTextStyle}`,
+            ].filter(Boolean).join(' ')}
+            style={backgroundStyle}
         >
             {showParticles && <EventParticles eventId={event.id} />}
+            <EventAnimationLayer animationKey={event.eventAnimationKey} eventCategory={event.eventKey ?? event.id} />
 
             <div className="event-content-overlay">
                 <h3 className={`event-title ${event.id === 'wedding' ? 'wedding-title' : ''}`}>
@@ -142,10 +163,12 @@ function EventSection({
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                         Add to Calendar
                     </button>
-                    <button className={`minimal-link-btn ${event.id === 'mehendi' || event.id === 'wedding' ? 'micro-interaction' : ''}`} onClick={handleMapClick}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                        View Location
-                    </button>
+                    {mapsUrl && (
+                        <button className={`minimal-link-btn ${event.id === 'mehendi' || event.id === 'wedding' ? 'micro-interaction' : ''}`} onClick={handleMapClick}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                            View Location
+                        </button>
+                    )}
                 </div>
             </div>
         </section>

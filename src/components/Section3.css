@@ -18,6 +18,33 @@
     overflow: hidden;
 }
 
+.event-section-selected-visual {
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center center;
+}
+
+.event-section-selected-visual::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 36%, rgba(0, 0, 0, 0.2) 100%);
+}
+
+.event-section-selected-visual.event-section-text-light::before {
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.32) 0%, rgba(0, 0, 0, 0.04) 44%, rgba(0, 0, 0, 0.42) 100%),
+        radial-gradient(circle at 50% 20%, rgba(0, 0, 0, 0.08), transparent 36%);
+}
+
+.event-section-selected-visual.event-section-text-dark::before {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.04) 44%, rgba(255, 255, 255, 0.28) 100%),
+        radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.16), transparent 36%);
+}
+
 /* Backgrounds */
 .haldi-bg {
     background-image: url('/assets/haldi.png'), url('/assets/haldi-bg.png');
@@ -56,7 +83,7 @@
     justify-content: flex-start;
     align-items: center;
     padding-top: 12vh;
-    z-index: 2;
+    z-index: 4;
     pointer-events: none;
     /* Let clicks pass to background if needed, but not buttons */
 }
@@ -200,4 +227,26 @@
         transform: translate3d(20px, 110vh, 0) rotate(180deg) scale(1.1);
         opacity: 0;
     }
+}
+
+.event-section-text-light .event-title,
+.event-section-text-light .event-details,
+.event-section-text-light .minimal-link-btn {
+    color: #fff;
+    text-shadow: 0 3px 14px rgba(0, 0, 0, 0.62);
+}
+
+.event-section-text-light .minimal-link-btn::after {
+    background-color: #fff;
+}
+
+.event-section-text-dark .event-title,
+.event-section-text-dark .event-details,
+.event-section-text-dark .minimal-link-btn {
+    color: var(--color-text);
+    text-shadow: 0 1px 4px rgba(255, 255, 255, 0.7);
+}
+
+.event-section-text-dark .minimal-link-btn::after {
+    background-color: var(--color-text);
 }

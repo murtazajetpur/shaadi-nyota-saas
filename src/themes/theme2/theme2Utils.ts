@@ -1,4 +1,5 @@
 import type { WeddingEvent } from '../../data/sampleWeddingData';
+import { resolveAssetPath } from '../../data/assetRegistry';
 import { getEventVisualByKey, getRecommendedVisualForEvent } from '../../data/eventVisuals';
 import { theme2Assets } from './theme2Assets';
 
@@ -14,16 +15,16 @@ export const isExternalAsset = (src: string) => {
 
 export const getEventTheme2Image = (event: WeddingEvent) => {
   const selectedVisual = getEventVisualByKey(event.eventVisualKey);
-  if (selectedVisual?.themeKey === 'theme-2') {
-    return selectedVisual.imageSrc;
+  if (selectedVisual) {
+    return resolveAssetPath(selectedVisual.imageSrc);
   }
 
   const recommendedVisual = getRecommendedVisualForEvent(event.eventName, event.eventKey, 'theme-2');
   if (recommendedVisual) {
-    return recommendedVisual.imageSrc;
+    return resolveAssetPath(recommendedVisual.imageSrc);
   }
 
-  return theme2Assets.background;
+  return resolveAssetPath(theme2Assets.background);
 };
 
 export const getEventTheme2TextStyle = (event: WeddingEvent) => {
@@ -32,7 +33,7 @@ export const getEventTheme2TextStyle = (event: WeddingEvent) => {
   }
 
   const selectedVisual = getEventVisualByKey(event.eventVisualKey);
-  if (selectedVisual?.themeKey === 'theme-2') {
+  if (selectedVisual) {
     return selectedVisual.defaultTextStyle;
   }
 
@@ -57,7 +58,7 @@ export const getEventTheme2Tone = (event: WeddingEvent) => {
 };
 
 export const getTheme2CoupleImage = (src: string) => (
-  isTheme2Asset(src) || isExternalAsset(src) ? src : theme2Assets.coupleBackground
+  resolveAssetPath(src || theme2Assets.coupleBackground)
 );
 
 export const toGoogleCalendarUrl = (event: WeddingEvent, coupleDisplayName: string) => {

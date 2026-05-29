@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { hasRsvpAccess, type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../../data/sampleWeddingData';
+import OpeningRevealScrollPrompt from '../../components/OpeningRevealScrollPrompt';
 import Theme2HeroReveal from './Theme2HeroReveal';
 import Theme2Couple from './Theme2Couple';
-import Theme2Story from './Theme2Story';
 import Theme2EventSection from './Theme2EventSection';
 import Theme2FinalCarousel from './Theme2FinalCarousel';
 import { getEventTheme2Image, getTheme2CoupleImage } from './theme2Utils';
@@ -18,6 +18,7 @@ interface Theme2InviteExperienceProps {
   guest?: WeddingGuest;
   visibleEvents?: WeddingEvent[];
   personalizedInviteMode?: boolean;
+  enableResponsiveOpeningVideo?: boolean;
 }
 
 export default function Theme2InviteExperience({
@@ -27,12 +28,15 @@ export default function Theme2InviteExperience({
   guest,
   visibleEvents,
   personalizedInviteMode = false,
+  enableResponsiveOpeningVideo = true,
 }: Theme2InviteExperienceProps) {
   const eventsToShow = visibleEvents ?? data.events;
   const shouldShowRsvp = hasRsvpAccess(data) && data.rsvp.enabled;
+  const shouldShowOurStory = data.couple.enabled;
   const [heroStarted, setHeroStarted] = useState(false);
   const [heroDone, setHeroDone] = useState(false);
-  const theme2CoupleBackground = getTheme2CoupleImage(data.couple.backgroundImageSrc);
+  const theme2CoupleBackground = getTheme2CoupleImage(data.couple.backgroundImageSrc || data.hero.revealImageSrc);
+  const openingRevealImage = data.hero.revealImageSrc || theme2CoupleBackground;
   const [activeBg, setActiveBg] = useState(theme2CoupleBackground);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -42,12 +46,12 @@ export default function Theme2InviteExperience({
     : theme2Assets.audio;
 
   const bgSequence = useMemo(() => [
-    theme2CoupleBackground,
-    theme2Assets.storyBackground,
+    openingRevealImage,
+    ...(shouldShowOurStory ? [theme2CoupleBackground, theme2Assets.storyBackground] : []),
     ...eventsToShow.map(getEventTheme2Image),
     theme2Assets.background,
     theme2Assets.background,
-  ], [theme2CoupleBackground, eventsToShow]);
+  ], [openingRevealImage, theme2CoupleBackground, eventsToShow, shouldShowOurStory]);
 
   useEffect(() => {
     setHeroStarted(false);
@@ -63,8 +67,8 @@ export default function Theme2InviteExperience({
   useEffect(() => {
     if (!heroStarted) return;
     const assets = [
-      theme2CoupleBackground,
-      theme2Assets.storyBackground,
+      openingRevealImage,
+      ...(shouldShowOurStory ? [theme2CoupleBackground, theme2Assets.storyBackground] : []),
       ...eventsToShow.map(getEventTheme2Image),
       theme2Assets.background,
       ...theme2Assets.carousel,
@@ -73,7 +77,7 @@ export default function Theme2InviteExperience({
       const img = new Image();
       img.src = src;
     });
-  }, [theme2CoupleBackground, eventsToShow, heroStarted]);
+  }, [openingRevealImage, theme2CoupleBackground, eventsToShow, heroStarted, shouldShowOurStory]);
 
   const toggleAudio = () => {
     if (!audioRef.current) return;
@@ -127,7 +131,7 @@ export default function Theme2InviteExperience({
       )}
 
       <div
-        className="theme2-phone-canvas"
+        className={`theme2-phone-canvas ${!heroDone ? 'theme2-scroll-locked' : ''}`}
         ref={canvasRef}
         onScroll={handleScroll}
         style={{
@@ -137,8 +141,15 @@ export default function Theme2InviteExperience({
       >
         {heroStarted && (
           <>
-            {data.couple.enabled && <Theme2Couple couple={data.couple} isHeroDone={heroDone} />}
-            <Theme2Story couple={data.couple} isHeroDone={heroDone} />
+            <div className="theme2-section theme2-opening-reveal-landing">
+              <img
+                src={openingRevealImage}
+                className="theme2-section-bg"
+                alt={data.hero.revealImageAlt || data.couple.displayName}
+              />
+              {heroDone && <OpeningRevealScrollPrompt />}
+            </div>
+            {shouldShowOurStory && <Theme2Couple couple={data.couple} isHeroDone={heroDone} />}
             {eventsToShow.map((event) => (
               <Theme2EventSection key={event.id} event={event} coupleDisplayName={data.couple.displayName} isHeroDone={heroDone} />
             ))}
@@ -169,6 +180,7 @@ export default function Theme2InviteExperience({
             onStarted={() => setHeroStarted(true)}
             onDone={() => setHeroDone(true)}
             onPlayAudio={playAudioWithFade}
+            enableResponsiveVideo={enableResponsiveOpeningVideo}
           />
         </div>
       )}

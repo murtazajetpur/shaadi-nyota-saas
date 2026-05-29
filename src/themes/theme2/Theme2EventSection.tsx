@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import type { WeddingEvent } from '../../data/sampleWeddingData';
+import { resolveAssetPath } from '../../data/assetRegistry';
+import EventAnimationLayer from '../../components/EventAnimationLayer';
 import { getEventTheme2Image, getEventTheme2Tone, toGoogleCalendarUrl } from './theme2Utils';
 
 interface Theme2EventSectionProps {
@@ -28,11 +30,12 @@ export function Theme2EventFrame({
   sectionRef,
 }: Theme2EventFrameProps) {
   const tone = getEventTheme2Tone(event);
-  const imageSrc = getEventTheme2Image(event);
+  const imageSrc = resolveAssetPath(getEventTheme2Image(event));
 
   return (
     <div className={`theme2-section theme2-event-section theme2-event-${tone} ${className}`} ref={sectionRef}>
       <img src={imageSrc} className="theme2-section-bg" alt={event.eventName} loading="lazy" />
+      <EventAnimationLayer animationKey={event.eventAnimationKey} eventCategory={event.eventKey ?? event.id} />
       <div className={`theme2-section-overlay theme2-event-overlay theme2-event-overlay-${tone}`} />
       {renderParticles?.()}
       <div className={`theme2-section-content theme2-event-content ${isVisible ? 'visible' : ''}`}>
@@ -44,15 +47,14 @@ export function Theme2EventFrame({
         <div className="theme2-event-venue theme2-fade-up cascade-3">
           <h2 className="theme2-body-font">{event.venueName}</h2>
           <h2 className="theme2-body-font">{event.city}</h2>
-          {event.dressCode && <p>{event.dressCode}</p>}
         </div>
         {showActions && (
           <div className="theme2-event-actions theme2-fade-up cascade-4">
             <a href={toGoogleCalendarUrl(event, coupleDisplayName)} target="_blank" rel="noopener noreferrer" className="theme2-event-btn">
               Add to Calendar
             </a>
-            {event.mapsUrl && (
-              <a href={event.mapsUrl} target="_blank" rel="noopener noreferrer" className="theme2-event-btn">
+            {event.mapsUrl.trim() && (
+              <a href={event.mapsUrl.trim()} target="_blank" rel="noopener noreferrer" className="theme2-event-btn">
                 Google Maps
               </a>
             )}

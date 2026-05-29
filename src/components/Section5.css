@@ -1,13 +1,24 @@
 .closing-section {
-    background-color: var(--color-white);
+    background:
+        radial-gradient(circle at 50% 54%, rgba(255, 255, 255, 0.96), rgba(255, 250, 242, 0.78) 48%, transparent 72%),
+        linear-gradient(180deg, #fffdf8 0%, #fffaf2 58%, #f6ecdf 100%);
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     scroll-snap-align: start;
     scroll-snap-stop: always;
-    padding: 2rem 1rem;
-    gap: 1.5rem;
+    padding: 2rem 1.25rem;
+}
+
+.closing-section-content {
+    width: min(100%, 340px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--color-text);
 }
 
 .closing-text {
@@ -17,63 +28,78 @@
     color: var(--color-text);
     text-align: center;
     margin: 0;
-    line-height: 1.2;
+    line-height: 1.05;
 }
 
 .closing-top {
-    font-size: 3rem;
+    font-size: 2.1rem;
 }
 
-.closing-bottom {
-    font-size: 3.5rem;
+.closing-message {
+    max-width: 280px;
+    margin: 0.75rem auto 0;
+    color: var(--color-text);
+    font-size: 1rem;
+    line-height: 1.5;
+    text-align: center;
 }
 
-.heart-frame-container {
+.closing-circle-gallery {
     position: relative;
-    width: 320px;
-    height: 320px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.heart-frame-image {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    z-index: 2;
-    pointer-events: none;
-}
-
-.carousel-mask {
-    position: absolute;
-    top: 52%;
-    /* Push down slightly to align with typical heart center */
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 65%;
-    /* Shrink width to stay inside the floral bounds */
-    height: 65%;
-    /* Shrink height */
-    z-index: 1;
+    width: min(76%, 250px);
+    aspect-ratio: 1;
+    margin-top: 1.35rem;
     overflow: hidden;
-    /* Soften edges to prevent sharp corners from sticking out of the floral frame */
-    mask-image: radial-gradient(circle, black 45%, transparent 65%);
-    -webkit-mask-image: radial-gradient(circle, black 45%, transparent 65%);
+    border-radius: 999px;
+    border: 10px solid rgba(255, 255, 255, 0.82);
+    background: #efe4d7;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16);
 }
 
 .carousel-image {
     position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center 30%;
+    object-position: center center;
     opacity: 0;
     transition: opacity 1.5s ease-in-out;
 }
 
 .carousel-image.active {
     opacity: 1;
+}
+
+.closing-carousel-dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    margin-top: 0.75rem;
+}
+
+.closing-carousel-dots i {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(122, 31, 31, 0.28);
+    transition: width 0.2s ease, background 0.2s ease;
+}
+
+.closing-carousel-dots i.active {
+    width: 18px;
+    background: #7a1f1f;
+}
+
+.closing-bottom {
+    margin-top: 0.9rem;
+    font-family: var(--font-primary);
+    font-size: 2.45rem;
+    font-weight: 400;
+    line-height: 1.1;
+}
+
+.simple-closing .closing-bottom {
+    margin-top: 1rem;
 }

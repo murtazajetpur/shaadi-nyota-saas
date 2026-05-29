@@ -1,5 +1,6 @@
 import "./Section2.css";
 import type { SampleWeddingData } from "../data/sampleWeddingData";
+import { resolveAssetPath } from "../data/assetRegistry";
 
 interface Section2Props {
     couple: SampleWeddingData['couple'];
@@ -14,11 +15,13 @@ export default function Section2({ couple }: Section2Props) {
 
             <div
                 className="s2-image-wrapper"
-                style={{ backgroundImage: `url('${couple.backgroundImageSrc}')` }}
+                style={{ backgroundImage: `url('${resolveAssetPath(couple.backgroundImageSrc)}')` }}
             >
-                <div className="s2-top-names">{couple.displayName}</div>
+                {couple.displayName.trim() && <div className="s2-top-names">{couple.displayName}</div>}
                 <div className="s2-heading-container">
-                    <h2 className="s2-heading">{couple.introLine}</h2>
+                    {couple.introLine.trim() && <h2 className="s2-heading">{couple.introLine}</h2>}
+                    {couple.storyTitle.trim() && <h3 className="s2-story-title">{couple.storyTitle}</h3>}
+                    {couple.storyText.trim() && <p className="s2-story-text">{couple.storyText}</p>}
                 </div>
             </div>
         </section>
