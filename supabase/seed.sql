@@ -4,15 +4,27 @@
 insert into public.themes (theme_key, display_name, description, is_active)
 values
   (
+    'envelope-opening',
+    'Envelope Opening',
+    'Starting template preset with an envelope reveal and common invite renderer.',
+    true
+  ),
+  (
+    'scroll-opening',
+    'Scroll Opening',
+    'Starting template preset with scroll-opening video defaults and common invite renderer.',
+    true
+  ),
+  (
     'palace-door-opening',
     'Palace Door Opening',
-    'Current Shaadi Nyota invite theme with reveal video and wedding sections.',
+    'Starting template preset with palace-door reveal defaults and common invite renderer.',
     true
   ),
   (
     'theme-2',
-    'Scroll Opening Invite',
-    'A cinematic scroll-style wedding invitation adapted from the second reference demo.',
+    'Scroll Opening',
+    'Legacy key kept for existing weddings. New weddings should use scroll-opening.',
     true
   )
 on conflict (theme_key) do update

@@ -199,6 +199,74 @@ const normalizeEventTextStyle = (value?: string | null): WeddingEvent['eventText
   value === 'light' || value === 'dark' ? value : 'auto'
 );
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const isUuid = (value: string) => uuidPattern.test(value);
+
+const normalizeEventLookupKey = (value?: string | null) => (
+  value?.trim().toLowerCase().replace(/\s+/g, '-') ?? ''
+);
+
+type EventIdLookupSource = {
+  id: string;
+  eventKey?: string | null;
+  eventName?: string | null;
+  event_key?: string | null;
+  event_name?: string | null;
+};
+
+const createEventIdResolver = (events: EventIdLookupSource[] = []) => {
+  const lookup = new Map<string, string>();
+
+  events.forEach((event) => {
+    if (!isUuid(event.id)) return;
+    [event.id, event.eventKey ?? event.event_key, event.eventName ?? event.event_name]
+      .map(normalizeEventLookupKey)
+      .filter(Boolean)
+      .forEach((key) => lookup.set(key, event.id));
+  });
+
+  return (eventIdOrKey: string) => {
+    if (isUuid(eventIdOrKey)) return eventIdOrKey;
+    return lookup.get(normalizeEventLookupKey(eventIdOrKey)) ?? '';
+  };
+};
+
+const getSupabaseEventIdResolver = async (weddingId: string, events: WeddingEvent[] = []) => {
+  if (!supabase) return { resolveEventId: createEventIdResolver(events), error: '' };
+
+  const { data, error } = await supabase
+    .from('events')
+    .select('id,event_key,event_name')
+    .eq('wedding_id', weddingId);
+
+  if (error) return { resolveEventId: createEventIdResolver(events), error: error.message };
+
+  return {
+    resolveEventId: createEventIdResolver([
+      ...events,
+      ...((data ?? []) as EventIdLookupSource[]),
+    ]),
+    error: '',
+  };
+};
+
+const resolveSupabaseEventIdsForWedding = async (
+  weddingId: string,
+  eventIds: string[],
+  events: WeddingEvent[] = []
+) => {
+  const { resolveEventId, error } = await getSupabaseEventIdResolver(weddingId, events);
+  if (error) return { resolvedIds: [], unresolvedIds: [], error };
+
+  const resolvedIds = eventIds
+    .map(resolveEventId)
+    .filter((eventId, index, allIds) => Boolean(eventId) && allIds.indexOf(eventId) === index);
+  const unresolvedIds = eventIds.filter((eventId) => !resolveEventId(eventId));
+
+  return { resolvedIds, unresolvedIds, error: '' };
+};
+
 const mapEventRow = (row: SupabaseEventRow): WeddingEvent => ({
   id: row.id,
   eventKey: row.event_key ?? '',
@@ -366,10 +434,11 @@ export async function loadSupabaseWeddingBySlug(slug: string, options: { include
     .from('weddings')
     .select('id')
     .eq('slug', slug)
+    .eq('status', 'published')
     .maybeSingle();
 
   if (error) return { wedding: null, weddingId: '', error: error.message };
-  if (!data) return { wedding: null, weddingId: '', error: '' };
+  if (!data) return { wedding: null, weddingId: '', error: 'This wedding website is not published or the link is invalid.' };
 
   return loadSupabaseWeddingBundle(data.id as string, options);
 }
@@ -413,10 +482,14 @@ const isMissingEventAnimationColumnError = (message?: string | null) => (
   Boolean(message?.toLowerCase().includes('event_animation_key'))
 );
 
+const getEventKeyForStorage = (event: WeddingEvent) => (
+  event.eventKey?.trim() || (!isUuid(event.id) ? event.id : null)
+);
+
 const eventToRow = (weddingId: string, event: WeddingEvent, sortOrder: number, includeAnimationKey = true) => ({
-  id: event.id,
+  id: isUuid(event.id) ? event.id : undefined,
   wedding_id: weddingId,
-  event_key: event.eventKey?.trim() || null,
+  event_key: getEventKeyForStorage(event),
   event_visual_key: event.eventVisualKey?.trim() || null,
   event_text_style: normalizeEventTextStyle(event.eventTextStyle),
   ...(includeAnimationKey ? { event_animation_key: normalizeEventAnimationKey(event.eventAnimationKey) } : {}),
@@ -461,13 +534,39 @@ export async function saveSupabaseEvents(weddingId: string, events: WeddingEvent
 
   const { data: existingRows, error: existingError } = await supabaseClient
     .from('events')
-    .select('id')
+    .select('id,event_key,event_name')
     .eq('wedding_id', weddingId);
 
   if (existingError) return { error: existingError.message };
 
-  const nextIds = new Set(events.map((event) => event.id));
-  const idsToDelete = ((existingRows ?? []) as Array<{ id: string }>)
+  const existingEventRows = (existingRows ?? []) as EventIdLookupSource[];
+  const resolveExistingEventId = createEventIdResolver(existingEventRows);
+  const eventsWithUuidIds: WeddingEvent[] = [];
+
+  for (const [index, event] of events.entries()) {
+    if (isUuid(event.id)) {
+      eventsWithUuidIds.push(event);
+      continue;
+    }
+
+    const matchedEventId = resolveExistingEventId(getEventKeyForStorage(event) ?? '')
+      || resolveExistingEventId(event.eventName)
+      || resolveExistingEventId(event.id);
+
+    if (matchedEventId) {
+      eventsWithUuidIds.push({ ...event, id: matchedEventId, eventKey: event.eventKey || event.id });
+      continue;
+    }
+
+    const created = await createSupabaseEvent(weddingId, event, index);
+    if (created.error || !created.event) {
+      return { error: created.error || 'Could not create event.', events: eventsWithUuidIds };
+    }
+    eventsWithUuidIds.push(created.event);
+  }
+
+  const nextIds = new Set(eventsWithUuidIds.map((event) => event.id));
+  const idsToDelete = existingEventRows
     .map((row) => row.id)
     .filter((id) => !nextIds.has(id));
 
@@ -480,17 +579,17 @@ export async function saveSupabaseEvents(weddingId: string, events: WeddingEvent
     if (deleteError) return { error: deleteError.message };
   }
 
-  if (!events.length) return { error: '' };
+  if (!eventsWithUuidIds.length) return { error: '', events: eventsWithUuidIds };
 
   const upsertEvents = (includeAnimationKey = true) => supabaseClient
     .from('events')
-    .upsert(events.map((event, index) => eventToRow(weddingId, event, index, includeAnimationKey)), { onConflict: 'id' });
+    .upsert(eventsWithUuidIds.map((event, index) => eventToRow(weddingId, event, index, includeAnimationKey)), { onConflict: 'id' });
   let { error } = await upsertEvents();
   if (isMissingEventAnimationColumnError(error?.message)) {
     ({ error } = await upsertEvents(false));
   }
 
-  return { error: error?.message ?? '' };
+  return { error: error?.message ?? '', events: eventsWithUuidIds };
 }
 
 const getSchemaCacheMissingColumn = (errorMessage?: string) => {
@@ -634,7 +733,12 @@ export async function createSupabaseGuest(weddingId: string, guest: WeddingGuest
     };
 }
 
-export async function replaceSupabaseGuestInvites(weddingId: string, guestId: string, eventIds: string[]) {
+export async function replaceSupabaseGuestInvites(
+  weddingId: string,
+  guestId: string,
+  eventIds: string[],
+  events: WeddingEvent[] = []
+) {
   if (!supabase) return { error: 'Supabase is not configured.' };
 
   const { error: deleteError } = await supabase
@@ -644,16 +748,21 @@ export async function replaceSupabaseGuestInvites(weddingId: string, guestId: st
     .eq('guest_id', guestId);
 
   if (deleteError) return { error: deleteError.message };
-  if (!eventIds.length) return { error: '' };
+  const { resolvedIds, unresolvedIds, error: resolveError } = await resolveSupabaseEventIdsForWedding(weddingId, eventIds, events);
+  if (resolveError) return { error: resolveError };
+  if (unresolvedIds.length) {
+    return { error: `Could not save guest event invites because these event selections do not map to Supabase event UUIDs: ${unresolvedIds.join(', ')}` };
+  }
+  if (!resolvedIds.length) return { error: '' };
 
   const { error } = await supabase
     .from('guest_event_invites')
-    .insert(eventIds.map((eventId) => ({ wedding_id: weddingId, guest_id: guestId, event_id: eventId })));
+    .insert(resolvedIds.map((eventId) => ({ wedding_id: weddingId, guest_id: guestId, event_id: eventId })));
 
   return { error: error?.message ?? '' };
 }
 
-export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest[]) {
+export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest[], events: WeddingEvent[] = []) {
   if (!supabase) return { error: 'Supabase is not configured.' };
 
   const { data: existingRows, error: existingError } = await supabase
@@ -691,9 +800,22 @@ export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest
 
   if (deleteInvitesError) return { error: deleteInvitesError.message };
 
-  const inviteRows = guests.flatMap((guest) => (
-    guest.invitedEventIds.map((eventId) => ({ wedding_id: weddingId, guest_id: guest.id, event_id: eventId }))
-  ));
+  const { resolveEventId, error: resolveError } = await getSupabaseEventIdResolver(weddingId, events);
+  if (resolveError) return { error: resolveError };
+
+  const unresolvedSelections = new Set<string>();
+  const inviteRows = guests.flatMap((guest) => {
+    const resolvedIds = guest.invitedEventIds
+      .map(resolveEventId)
+      .filter((eventId, index, allIds) => Boolean(eventId) && allIds.indexOf(eventId) === index);
+    const unresolvedIds = guest.invitedEventIds.filter((eventId) => !resolveEventId(eventId));
+    unresolvedIds.forEach((eventId) => unresolvedSelections.add(eventId));
+    return resolvedIds.map((eventId) => ({ wedding_id: weddingId, guest_id: guest.id, event_id: eventId }));
+  });
+
+  if (unresolvedSelections.size) {
+    return { error: `Could not save guest event invites because these event selections do not map to Supabase event UUIDs: ${Array.from(unresolvedSelections).join(', ')}` };
+  }
 
   if (!inviteRows.length) return { error: '' };
 
@@ -710,7 +832,8 @@ export async function deleteSupabaseGuest(guestId: string) {
 export async function importSupabaseGuests(
   weddingId: string,
   guests: WeddingGuest[],
-  mode: 'append' | 'replace'
+  mode: 'append' | 'replace',
+  events: WeddingEvent[] = []
 ) {
   if (!supabase) return { error: 'Supabase is not configured.' };
 
@@ -735,11 +858,15 @@ export async function importSupabaseGuests(
       .single();
     if (error) return { error: error.message };
 
-    const eventIds = guest.invitedEventIds;
-    if (eventIds.length) {
+    const { resolvedIds, unresolvedIds, error: resolveError } = await resolveSupabaseEventIdsForWedding(weddingId, guest.invitedEventIds, events);
+    if (resolveError) return { error: resolveError };
+    if (unresolvedIds.length) {
+      return { error: `Could not import guests because these event selections do not map to Supabase event UUIDs: ${unresolvedIds.join(', ')}` };
+    }
+    if (resolvedIds.length) {
       const { error: inviteError } = await supabase
         .from('guest_event_invites')
-        .insert(eventIds.map((eventId) => ({ wedding_id: weddingId, guest_id: data.id, event_id: eventId })));
+        .insert(resolvedIds.map((eventId) => ({ wedding_id: weddingId, guest_id: data.id, event_id: eventId })));
       if (inviteError) return { error: inviteError.message };
     }
   }
@@ -784,12 +911,14 @@ export async function saveSupabaseRsvpSubmission({
   guest,
   responses,
   mealPreference,
+  events = [],
 }: {
   weddingId: string;
   weddingSlug: string;
   guest: WeddingGuest;
   responses: Array<{ eventId: string; status: RsvpStatus }>;
   mealPreference: MealPreference;
+  events?: WeddingEvent[];
 }) {
   if (!supabase) return { error: 'Supabase is not configured.' };
 
@@ -801,13 +930,26 @@ export async function saveSupabaseRsvpSubmission({
 
   if (mealError) return { error: mealError.message };
 
-  const rows = responses
-    .filter((response): response is { eventId: string; status: Exclude<RsvpStatus, ''> } => Boolean(response.status))
-    .map((response) => ({
+  const activeResponses = responses
+    .filter((response): response is { eventId: string; status: Exclude<RsvpStatus, ''> } => Boolean(response.status));
+  const { resolveEventId, error: resolveError } = await getSupabaseEventIdResolver(weddingId, events);
+  if (resolveError) return { error: resolveError };
+  const unresolvedIds = activeResponses
+    .map((response) => response.eventId)
+    .filter((eventId) => !resolveEventId(eventId));
+  if (unresolvedIds.length) {
+    return { error: `Could not submit RSVP because these event selections do not map to Supabase event UUIDs: ${unresolvedIds.join(', ')}` };
+  }
+
+  const responseByResolvedId = new Map(
+    activeResponses.map((response) => [resolveEventId(response.eventId), response.status])
+  );
+  const rows = Array.from(responseByResolvedId.entries())
+    .map(([eventId, status]) => ({
       wedding_id: weddingId,
       guest_id: guest.id,
-      event_id: response.eventId,
-      status: response.status,
+      event_id: eventId,
+      status,
     }));
 
   if (rows.length) {

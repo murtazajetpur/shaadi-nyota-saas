@@ -15,8 +15,10 @@ export interface EventVisual {
 }
 
 const themeLabelByKey: Record<string, string> = {
-  'palace-door-opening': 'Classic Envelope',
-  'theme-2': 'Scroll Opening Invite',
+  'envelope-opening': 'Envelope Opening',
+  'palace-door-opening': 'Palace Door Opening',
+  'scroll-opening': 'Scroll Opening',
+  'theme-2': 'Scroll Opening',
   'newly-created': 'New Event Library',
   'asset-library': 'Event Library',
 };
@@ -165,7 +167,7 @@ export const getRecommendedVisualForEvent = (
 ) => {
   const normalizedEventKey = eventKey?.trim().toLowerCase();
 
-  if (themeKey === 'theme-2') {
+  if (themeKey === 'theme-2' || themeKey === 'scroll-opening') {
     const visualKey = normalizedEventKey ? eventTypeToTheme2VisualKey[normalizedEventKey] : undefined;
     return getEventVisualByKey(visualKey ?? getRecommendedTheme2KeyFromText(eventName));
   }

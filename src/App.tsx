@@ -256,6 +256,7 @@ function PublicInviteRoute({
       if (!mounted) return;
 
       if (result.error) {
+        console.error('Public invite load failed:', result.error);
         setSupabaseError(result.error);
       } else {
         setSupabaseError('');

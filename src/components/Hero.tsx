@@ -3,6 +3,7 @@ import './Hero.css';
 import type { SampleWeddingData } from '../data/sampleWeddingData';
 import { getOpeningRevealCrossfadeProgress } from '../data/openingReveal';
 import { useOpeningRevealVideoSrc } from '../hooks/useOpeningRevealVideoSrc';
+import OpeningRevealScrollPrompt from './OpeningRevealScrollPrompt';
 
 interface HeroProps {
     hero: SampleWeddingData['hero'];
@@ -11,17 +12,21 @@ interface HeroProps {
     onGaneshaReveal: () => void;
     onHeroComplete: () => void;
     enableResponsiveVideo?: boolean;
+    showScrollPrompt?: boolean;
+    previewMode?: boolean;
 }
 
-export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onHeroComplete, enableResponsiveVideo = true }: HeroProps) {
+export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onHeroComplete, enableResponsiveVideo = true, showScrollPrompt = false, previewMode = false }: HeroProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const responsiveVideoSrc = useOpeningRevealVideoSrc(hero.videoSrc);
     const videoSrc = enableResponsiveVideo ? responsiveVideoSrc : hero.videoSrc;
     const [isPlaying, setIsPlaying] = useState(false);
     const [ctaFadingOut, setCtaFadingOut] = useState(false);
-    const [isVideoReady, setIsVideoReady] = useState(false);
-    const [revealImageOpacity, setRevealImageOpacity] = useState(0);
+    const [isVideoReady, setIsVideoReady] = useState(previewMode);
+    const [revealImageOpacity, setRevealImageOpacity] = useState(previewMode ? 1 : 0);
+    const [isCompleting, setIsCompleting] = useState(false);
     const revealedRef = useRef(false);
+    const completeTimeoutRef = useRef<number | null>(null);
 
     const handleVideoReady = () => {
         setIsVideoReady(true);
@@ -32,6 +37,14 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
         const revealImage = new Image();
         revealImage.src = hero.revealImageSrc;
     }, [hero.revealImageSrc]);
+
+    useEffect(() => {
+        return () => {
+            if (completeTimeoutRef.current !== null) {
+                window.clearTimeout(completeTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const handleTap = () => {
         if (!isPlaying && !ctaFadingOut) {
@@ -119,29 +132,39 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
         return () => cancelAnimationFrame(animationFrame);
     }, [isPlaying, onGaneshaReveal]);
 
+    const completeHeroAfterRevealSettles = () => {
+        if (completeTimeoutRef.current !== null) return;
+        setRevealImageOpacity(1);
+        setIsCompleting(true);
+        completeTimeoutRef.current = window.setTimeout(() => {
+            onHeroComplete();
+        }, 450);
+    };
+
     return (
-        <div className="hero-container">
-            <video
-                ref={videoRef}
-                playsInline
-                webkit-playsinline="true"
-                className="hero-video"
-                preload="auto"
-                poster={hero.posterSrc}
-                src={videoSrc}
-                onPlay={handleVideoPlay}
-                onTimeUpdate={checkTime}
-                onCanPlay={handleVideoReady}
-                onLoadedData={handleVideoReady}
-                onEnded={() => {
-                    if (!revealedRef.current) {
-                        revealedRef.current = true;
-                        onGaneshaReveal();
-                    }
-                    setRevealImageOpacity(1);
-                    onHeroComplete();
-                }}
-            />
+        <div className={`hero-container ${isCompleting ? 'is-completing' : ''} ${previewMode ? 'hero-preview-mode' : ''}`}>
+            {!previewMode && (
+                <video
+                    ref={videoRef}
+                    playsInline
+                    webkit-playsinline="true"
+                    className="hero-video"
+                    preload="auto"
+                    poster={hero.posterSrc}
+                    src={videoSrc}
+                    onPlay={handleVideoPlay}
+                    onTimeUpdate={checkTime}
+                    onCanPlay={handleVideoReady}
+                    onLoadedData={handleVideoReady}
+                    onEnded={() => {
+                        if (!revealedRef.current) {
+                            revealedRef.current = true;
+                            onGaneshaReveal();
+                        }
+                        completeHeroAfterRevealSettles();
+                    }}
+                />
+            )}
 
             <img
                 className="hero-reveal-image"
@@ -150,17 +173,21 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
                 style={{ opacity: revealImageOpacity }}
             />
 
-            <div
-                className={`video-loading-overlay ${isVideoReady ? 'fade-out' : ''}`}
-                style={{ backgroundImage: `url('${hero.posterSrc}')` }}
-                onClick={handleTap}
-            />
+            {!previewMode && (
+                <div
+                    className={`video-loading-overlay ${isVideoReady ? 'fade-out' : ''}`}
+                    style={{ backgroundImage: `url('${hero.posterSrc}')` }}
+                    onClick={handleTap}
+                />
+            )}
 
-            {!isPlaying && (
+            {!previewMode && !isPlaying && (
                 <div className={`hero-cta-overlay ${ctaFadingOut ? 'fading-out' : ''}`} onClick={handleTap}>
                     <button className="hero-btn">{hero.revealCtaText}</button>
                 </div>
             )}
+
+            {!previewMode && showScrollPrompt && <OpeningRevealScrollPrompt />}
         </div>
     );
 }

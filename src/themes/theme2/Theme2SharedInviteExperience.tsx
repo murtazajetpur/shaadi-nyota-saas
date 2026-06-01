@@ -1,17 +1,13 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../../data/sampleWeddingData';
-import { getWeddingSectionConfig, type WeddingSectionConfig } from '../../data/sectionConfig';
+import { getWeddingSectionConfig } from '../../data/sectionConfig';
+import WeddingSectionRenderer from '../../components/WeddingSectionRenderer';
 import Theme2HeroReveal from './Theme2HeroReveal';
-import Theme2Couple from './Theme2Couple';
-import Theme2EventSection from './Theme2EventSection';
-import Theme2FinalCarousel from './Theme2FinalCarousel';
 import { getEventTheme2Image, getTheme2CoupleImage } from './theme2Utils';
 import { theme2Assets } from './theme2Assets';
 import './theme2.css';
 
-const Section4 = lazy(() => import('../../components/Section4'));
-
-interface Theme2InviteExperienceProps {
+interface Theme2SharedInviteExperienceProps {
   data: SampleWeddingData;
   weddingId?: string;
   embedded?: boolean;
@@ -21,7 +17,22 @@ interface Theme2InviteExperienceProps {
   enableResponsiveOpeningVideo?: boolean;
 }
 
-export default function Theme2InviteExperience({
+export default function Theme2SharedInviteExperience({
+  data,
+  ...props
+}: Theme2SharedInviteExperienceProps) {
+  const experienceResetKey = [
+    data.wedding.slug,
+    data.wedding.themeKey,
+    data.hero.videoSrc,
+    data.hero.revealImageSrc,
+    data.hero.revealStyle,
+  ].join('|');
+
+  return <Theme2SharedInviteExperienceContent key={experienceResetKey} data={data} {...props} />;
+}
+
+function Theme2SharedInviteExperienceContent({
   data,
   weddingId,
   embedded = false,
@@ -29,7 +40,7 @@ export default function Theme2InviteExperience({
   visibleEvents,
   personalizedInviteMode = false,
   enableResponsiveOpeningVideo = true,
-}: Theme2InviteExperienceProps) {
+}: Theme2SharedInviteExperienceProps) {
   const eventsToShow = visibleEvents ?? data.events;
   const sectionConfig = getWeddingSectionConfig(data, { visibleEvents });
   const enabledSections = sectionConfig
@@ -40,14 +51,7 @@ export default function Theme2InviteExperience({
   const [heroDone, setHeroDone] = useState(false);
   const theme2CoupleBackground = getTheme2CoupleImage(data.couple.backgroundImageSrc || data.hero.revealImageSrc);
   const openingRevealImage = data.hero.revealImageSrc || theme2CoupleBackground;
-  const experienceResetKey = [
-    data.wedding.slug,
-    data.wedding.themeKey,
-    data.hero.videoSrc,
-    data.hero.revealImageSrc,
-    data.hero.revealStyle,
-  ].join('|');
-  const [activeBg, setActiveBg] = useState(theme2CoupleBackground);
+  const [activeBg, setActiveBg] = useState(openingRevealImage);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -70,17 +74,6 @@ export default function Theme2InviteExperience({
         return [];
     }
   }), [enabledSections, openingRevealImage, theme2CoupleBackground, eventsToShow]);
-
-  useEffect(() => {
-    setHeroStarted(false);
-    setHeroDone(false);
-    setActiveBg(openingRevealImage);
-    setAudioPlaying(false);
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-  }, [experienceResetKey, openingRevealImage]);
 
   useEffect(() => {
     if (!heroStarted) return;
@@ -129,50 +122,6 @@ export default function Theme2InviteExperience({
     if (bgSequence[index]) setActiveBg(bgSequence[index]);
   };
 
-  const renderTheme2Section = (section: WeddingSectionConfig) => {
-    switch (section.type) {
-      case 'reveal':
-        return (
-          <Theme2HeroReveal
-            key={section.id}
-            hero={data.hero}
-            couple={data.couple}
-            onStarted={() => setHeroStarted(true)}
-            onDone={() => setHeroDone(true)}
-            onPlayAudio={playAudioWithFade}
-            enableResponsiveVideo={enableResponsiveOpeningVideo}
-            className="theme2-hero-reveal-section"
-            showScrollPrompt={heroDone}
-          />
-        );
-      case 'story':
-        return <Theme2Couple key={section.id} couple={data.couple} isHeroDone={heroDone} />;
-      case 'events':
-        return eventsToShow.map((event) => (
-          <Theme2EventSection key={event.id} event={event} coupleDisplayName={data.couple.displayName} isHeroDone={heroDone} />
-        ));
-      case 'rsvp':
-        return (
-          <div key={section.id} className="theme2-rsvp-section">
-            <Suspense fallback={null}>
-              <Section4
-                rsvp={data.rsvp}
-                weddingId={weddingId}
-                weddingSlug={data.wedding.slug}
-                events={eventsToShow}
-                guest={guest}
-                personalizedInviteMode={personalizedInviteMode}
-              />
-            </Suspense>
-          </div>
-        );
-      case 'closing':
-        return <Theme2FinalCarousel key={section.id} closing={data.closing} couple={data.couple} />;
-      default:
-        return null;
-    }
-  };
-
   const inviteCanvas = (
     <div className="theme2-phone-canvas-wrapper">
       <div className="theme2-blurred-backdrop" style={{ backgroundImage: `url("${activeBg}")` }} />
@@ -197,10 +146,27 @@ export default function Theme2InviteExperience({
         ref={canvasRef}
         onScroll={handleScroll}
       >
-        {enabledSections.map((section) => {
-          if (section.type !== 'reveal' && !heroStarted) return null;
-          return renderTheme2Section(section);
-        })}
+        <Theme2HeroReveal
+          hero={data.hero}
+          couple={data.couple}
+          onStarted={() => setHeroStarted(true)}
+          onDone={() => setHeroDone(true)}
+          onPlayAudio={playAudioWithFade}
+          enableResponsiveVideo={enableResponsiveOpeningVideo}
+          className="theme2-hero-reveal-section"
+          showScrollPrompt={heroDone}
+        />
+
+        {heroStarted && (
+          <WeddingSectionRenderer
+            data={data}
+            sections={sectionConfig}
+            events={eventsToShow}
+            weddingId={weddingId}
+            guest={guest}
+            personalizedInviteMode={personalizedInviteMode}
+          />
+        )}
       </div>
     </div>
   );

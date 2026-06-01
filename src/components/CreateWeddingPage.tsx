@@ -3,9 +3,9 @@ import './CreateWeddingPage.css';
 import { useAuth } from '../context/AuthContext';
 import {
   getPackageDisplayLabel,
-  themeDisplayLabels,
   type PackageType,
 } from '../data/sampleWeddingData';
+import { templatePresets, type TemplateKey } from '../data/templatePresets';
 import {
   createSlugFromNames,
   createWeddingShell,
@@ -28,7 +28,7 @@ const packageOptions: Array<{ value: PackageType; description: string }> = [
   },
 ];
 
-const themeOptions = ['palace-door-opening', 'theme-2'];
+const templateOptions: TemplateKey[] = ['envelope-opening', 'scroll-opening', 'palace-door-opening'];
 
 export default function CreateWeddingPage() {
   const { user, loading, isConfigured } = useAuth();
@@ -38,7 +38,7 @@ export default function CreateWeddingPage() {
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
   const [displayNameEdited, setDisplayNameEdited] = useState(false);
-  const [themeKey, setThemeKey] = useState(defaultThemeKey);
+  const [themeKey, setThemeKey] = useState<string>(defaultThemeKey);
   const [packageType, setPackageType] = useState<PackageType>('basic');
   const [pageTitle, setPageTitle] = useState('');
   const [pageTitleEdited, setPageTitleEdited] = useState(false);
@@ -242,11 +242,13 @@ export default function CreateWeddingPage() {
 
           <div className="package-selection">
             <div>
-              <span>Theme</span>
-              <p>Choose the visual style for this wedding website.</p>
+              <span>Template</span>
+              <p>Choose a starting point. You can customize sections, visuals, music, and events later.</p>
             </div>
             <div className="package-options theme-options">
-              {themeOptions.map((option) => (
+              {templateOptions.map((option) => {
+                const preset = templatePresets[option];
+                return (
                 <label
                   className={`package-option ${themeKey === option ? 'selected' : ''}`}
                   key={option}
@@ -258,14 +260,10 @@ export default function CreateWeddingPage() {
                     checked={themeKey === option}
                     onChange={() => setThemeKey(option)}
                   />
-                  <strong>{themeDisplayLabels[option] ?? option}</strong>
-                  <small>
-                    {option === 'theme-2'
-                      ? 'Scroll-style cinematic reveal, story sections, event scenes, and carousel closing.'
-                      : 'Classic palace-door reveal with elegant event sections.'}
-                  </small>
+                  <strong>{preset.displayName}</strong>
+                  <small>{preset.description}</small>
                 </label>
-              ))}
+              )})}
             </div>
           </div>
 

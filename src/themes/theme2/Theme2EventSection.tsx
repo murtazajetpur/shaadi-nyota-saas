@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import type { WeddingEvent } from '../../data/sampleWeddingData';
 import { resolveAssetPath } from '../../data/assetRegistry';
 import EventAnimationLayer from '../../components/EventAnimationLayer';
@@ -15,7 +15,6 @@ interface Theme2EventFrameProps {
   coupleDisplayName: string;
   isVisible?: boolean;
   showActions?: boolean;
-  renderParticles?: () => ReactNode;
   className?: string;
   sectionRef?: Ref<HTMLDivElement>;
 }
@@ -25,7 +24,6 @@ export function Theme2EventFrame({
   coupleDisplayName,
   isVisible = true,
   showActions = true,
-  renderParticles,
   className = '',
   sectionRef,
 }: Theme2EventFrameProps) {
@@ -37,7 +35,6 @@ export function Theme2EventFrame({
       <img src={imageSrc} className="theme2-section-bg" alt={event.eventName} loading="lazy" />
       <EventAnimationLayer animationKey={event.eventAnimationKey} eventCategory={event.eventKey ?? event.id} />
       <div className={`theme2-section-overlay theme2-event-overlay theme2-event-overlay-${tone}`} />
-      {renderParticles?.()}
       <div className={`theme2-section-content theme2-event-content ${isVisible ? 'visible' : ''}`}>
         <h1 className="theme2-display-font theme2-fade-up cascade-1">{event.eventName}</h1>
         <div className="theme2-event-date theme2-fade-up cascade-2">
@@ -68,15 +65,7 @@ export function Theme2EventFrame({
 export default function Theme2EventSection({ event, coupleDisplayName, isHeroDone }: Theme2EventSectionProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [inView, setInView] = useState(false);
-  const [showParticles, setShowParticles] = useState(false);
   const sectionRef = useRef<HTMLDivElement | null>(null);
-  const eventKey = `${event.id} ${event.eventName}`.toLowerCase();
-  const particleSeed = useMemo(() => Array.from({ length: 20 }, (_, index) => ({
-    id: index,
-    left: `${(index * 37) % 100}%`,
-    top: `${(index * 23) % 50}%`,
-    delay: `${(index % 5) * 0.45}s`,
-  })), []);
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
@@ -89,46 +78,14 @@ export default function Theme2EventSection({ event, coupleDisplayName, isHeroDon
   useEffect(() => {
     if (inView && isHeroDone) {
       setIsVisible(true);
-      setShowParticles(true);
     }
   }, [inView, isHeroDone]);
-
-  const renderParticles = () => {
-    if (!showParticles) return null;
-    if (eventKey.includes('haldi')) {
-      return (
-        <div className="theme2-particles-container">
-          {particleSeed.slice(0, 15).map((particle) => (
-            <div key={particle.id} className="theme2-particle-haldi" style={{ left: particle.left, animationDelay: particle.delay }} />
-          ))}
-        </div>
-      );
-    }
-    if (eventKey.includes('sangeet')) {
-      return (
-        <div className="theme2-particles-container">
-          <div className="theme2-glow-stringlights" />
-          {particleSeed.map((particle) => (
-            <div key={particle.id} className="theme2-particle-sparkle" style={{ top: particle.top, left: particle.left, animationDelay: particle.delay }} />
-          ))}
-        </div>
-      );
-    }
-    return (
-      <div className="theme2-particles-container">
-        {particleSeed.slice(0, 12).map((particle) => (
-          <div key={particle.id} className="theme2-particle-petal" style={{ left: particle.left, animationDelay: particle.delay }} />
-        ))}
-      </div>
-    );
-  };
 
   return (
     <Theme2EventFrame
       event={event}
       coupleDisplayName={coupleDisplayName}
       isVisible={isVisible}
-      renderParticles={renderParticles}
       sectionRef={sectionRef}
     />
   );

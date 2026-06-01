@@ -1119,7 +1119,6 @@
 
 /* Media 2: full artwork matte. No crop; warm surface fills extra modern-phone height. */
 .wedding-preview-live.wdp-media-2 .hero-container,
-.wedding-preview-live.wdp-media-2 .section-1,
 .wedding-preview-live.wdp-media-2 .event-section-selected-visual,
 .wedding-preview-live.wdp-media-2 .theme2-hero-reveal,
 .wedding-preview-live.wdp-media-2 .theme2-section {
@@ -1147,7 +1146,6 @@
 
 /* Media 3: opening/reveal no-crop, event pages remain cinematic cover. */
 .wedding-preview-live.wdp-media-3 .hero-container,
-.wedding-preview-live.wdp-media-3 .section-1,
 .wedding-preview-live.wdp-media-3 .theme2-hero-reveal,
 .wedding-preview-live.wdp-media-3 .theme2-opening-reveal-landing {
   background: linear-gradient(180deg, #fffaf2, #eadbc5);
@@ -1183,7 +1181,6 @@
 }
 
 .wedding-preview-live.wdp-media-4 .hero-container,
-.wedding-preview-live.wdp-media-4 .section-1,
 .wedding-preview-live.wdp-media-4 .event-section-selected-visual,
 .wedding-preview-live.wdp-media-4 .theme2-hero-reveal,
 .wedding-preview-live.wdp-media-4 .theme2-section {
@@ -1213,7 +1210,6 @@
 
 /* Media 5: soft no-crop stage on the real live structure. */
 .wedding-preview-live.wdp-media-5 .hero-container,
-.wedding-preview-live.wdp-media-5 .section-1,
 .wedding-preview-live.wdp-media-5 .event-section-selected-visual,
 .wedding-preview-live.wdp-media-5 .theme2-hero-reveal,
 .wedding-preview-live.wdp-media-5 .theme2-section {

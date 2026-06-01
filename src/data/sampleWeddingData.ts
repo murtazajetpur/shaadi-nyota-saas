@@ -26,13 +26,19 @@ export const getPackageDisplayLabel = (packageType: PackageType) => {
 };
 
 export const themeDisplayLabels: Record<string, string> = {
+  'envelope-opening': 'Envelope Opening',
+  'scroll-opening': 'Scroll Opening',
   'palace-door-opening': 'Palace Door Opening',
-  'theme-2': 'Scroll Opening Invite',
+  'theme-2': 'Scroll Opening',
 };
 
 export const getThemeDisplayLabel = (themeKey: string) => {
   return themeDisplayLabels[themeKey] ?? themeKey;
 };
+
+export const defaultOurStorySubtitle = 'are getting married';
+export const defaultOurStoryTitle = 'Two Hearts, One Beginning';
+export const defaultOurStoryText = 'Join us as we celebrate love, togetherness, and the beginning of our beautiful journey.';
 
 export interface WeddingEvent {
   id: string;
@@ -219,19 +225,40 @@ const theme2OpeningReveal = {
   },
 };
 
+const palaceDoorOpeningReveal = {
+  hero: {
+    revealStyle: 'palace-door' as RevealStyle,
+    revealCtaText: 'Tap to Reveal',
+    scrollHintText: '',
+    videoSrc: '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01.mp4',
+    posterSrc: '/assets/opening-reveal/palace-door/posters/opening-reveal-palace-door-poster-01.png',
+    revealImageSrc: '/assets/opening-reveal/envelope/revealed-images/revealed-hindu-classic-01.png',
+    revealImageType: 'blessing' as RevealImageType,
+    revealImageAlt: 'Hindu wedding blessing reveal',
+    revealImageShowAtSeconds: 4.0,
+    heroFadeAtSeconds: 6.0,
+  },
+  music: sharedThemeMedia.music,
+};
+
 export const openingRevealDefaultsByTheme: Record<string, {
   hero: SampleWeddingData['hero'];
   music: SampleWeddingData['music'];
 }> = {
-  'palace-door-opening': {
+  'envelope-opening': {
     hero: sharedThemeMedia.hero,
     music: sharedThemeMedia.music,
   },
+  'palace-door-opening': {
+    hero: palaceDoorOpeningReveal.hero,
+    music: palaceDoorOpeningReveal.music,
+  },
+  'scroll-opening': theme2OpeningReveal,
   'theme-2': theme2OpeningReveal,
 };
 
 export const getOpeningRevealDefaults = (themeKey: string) => {
-  return openingRevealDefaultsByTheme[themeKey] ?? openingRevealDefaultsByTheme['palace-door-opening'];
+  return openingRevealDefaultsByTheme[themeKey] ?? openingRevealDefaultsByTheme['envelope-opening'];
 };
 
 const tajMahalPalaceMapsUrl = 'https://www.google.com/maps/search/?api=1&query=Taj%20Mahal%20Palace%20Mumbai';
@@ -254,17 +281,17 @@ export const sampleWeddings: SampleWeddingData[] = [
       brideName: 'Lubna',
       groomName: 'Murtaza',
       displayName: 'Murtaza & Lubna',
-      introLine: 'are getting married',
+      introLine: defaultOurStorySubtitle,
       blessingLine: '',
-      storyTitle: 'Two hearts, one beautiful story',
-      storyText: 'With the blessings of our families, we invite you to celebrate this special day with us.',
+      storyTitle: defaultOurStoryTitle,
+      storyText: defaultOurStoryText,
       backgroundImageSrc: sharedThemeMedia.coupleBackgroundImageSrc,
       imageAlt: 'Murtaza and Lubna wedding story',
     },
     events: [
       {
         id: 'haldi',
-        eventAnimationKey: 'golden-glow',
+        eventAnimationKey: 'soft-petals-yellow',
         eventName: 'Haldi',
         date: '28th December 2026',
         startTime: '10:00 AM',
@@ -278,7 +305,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'mehendi',
-        eventAnimationKey: 'soft-petals',
+        eventAnimationKey: 'soft-petals-blush',
         eventName: 'Mehendi',
         date: '28th December 2026',
         startTime: '4:00 PM',
@@ -292,7 +319,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'sangeet',
-        eventAnimationKey: 'golden-glow',
+        eventAnimationKey: 'soft-petals-gold',
         eventName: 'Sangeet',
         date: '29th December 2026',
         startTime: '7:00 PM',
@@ -306,7 +333,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'wedding',
-        eventAnimationKey: 'soft-petals',
+        eventAnimationKey: 'soft-petals-blush',
         eventName: 'Wedding',
         date: '30th December 2026',
         startTime: '9:00 AM',
@@ -320,7 +347,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'reception',
-        eventAnimationKey: 'golden-glow',
+        eventAnimationKey: 'soft-petals-blush',
         eventName: 'Reception',
         date: '31st December 2026',
         startTime: '7:00 PM',
@@ -387,17 +414,17 @@ export const sampleWeddings: SampleWeddingData[] = [
       brideName: 'Sara',
       groomName: 'Ali',
       displayName: 'Ali & Sara',
-      introLine: 'are getting married',
+      introLine: defaultOurStorySubtitle,
       blessingLine: '',
-      storyTitle: 'Two hearts, one beautiful story',
-      storyText: 'With the blessings of our families, we invite you to celebrate this special day with us.',
+      storyTitle: defaultOurStoryTitle,
+      storyText: defaultOurStoryText,
       backgroundImageSrc: sharedThemeMedia.coupleBackgroundImageSrc,
       imageAlt: 'Ali and Sara wedding story',
     },
     events: [
       {
         id: 'haldi',
-        eventAnimationKey: 'golden-glow',
+        eventAnimationKey: 'soft-petals-yellow',
         eventName: 'Haldi',
         date: '12th February 2027',
         startTime: '11:00 AM',
@@ -411,7 +438,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'mehendi',
-        eventAnimationKey: 'soft-petals',
+        eventAnimationKey: 'soft-petals-blush',
         eventName: 'Mehendi',
         date: '12th February 2027',
         startTime: '5:00 PM',
@@ -425,7 +452,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'sangeet',
-        eventAnimationKey: 'golden-glow',
+        eventAnimationKey: 'soft-petals-gold',
         eventName: 'Sangeet',
         date: '13th February 2027',
         startTime: '8:00 PM',
@@ -439,7 +466,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'wedding',
-        eventAnimationKey: 'soft-petals',
+        eventAnimationKey: 'soft-petals-blush',
         eventName: 'Nikaah',
         date: '14th February 2027',
         startTime: '10:30 AM',
@@ -453,7 +480,7 @@ export const sampleWeddings: SampleWeddingData[] = [
       },
       {
         id: 'reception',
-        eventAnimationKey: 'golden-glow',
+        eventAnimationKey: 'soft-petals-blush',
         eventName: 'Reception',
         date: '14th February 2027',
         startTime: '7:30 PM',

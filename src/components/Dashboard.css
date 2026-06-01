@@ -23,7 +23,7 @@
 }
 
 .dashboard-sidebar h1,
-.dashboard-panel h2,
+.dashboard-panel > h2,
 .event-editor h3 {
     font-family: var(--font-secondary);
     letter-spacing: 0;
@@ -185,7 +185,7 @@
     gap: 16px;
 }
 
-.dashboard-panel h2 {
+.dashboard-panel > h2 {
     font-size: 1.7rem;
     font-weight: 500;
     margin-top: 6px;
@@ -305,6 +305,26 @@
     padding: 12px;
 }
 
+.dashboard-error-message,
+.dashboard-preview-error {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid rgba(154, 51, 44, 0.24);
+    border-radius: 8px;
+    background: #fffafa;
+    color: #7a1f1f;
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.dashboard-preview-error {
+    display: grid;
+    place-items: center;
+    width: min(340px, 100%);
+    aspect-ratio: 9 / 16;
+    text-align: center;
+}
+
 .dashboard-primary-btn,
 .event-editor-header button {
     border: 1px solid rgba(0, 0, 0, 0.14);
@@ -415,6 +435,14 @@
     min-height: 0;
     border-radius: 0;
     box-shadow: none;
+}
+
+.event-live-preview .event-content-overlay {
+    padding-top: 13%;
+}
+
+.event-live-preview .theme2-event-content {
+    margin-top: 13%;
 }
 
 .event-live-preview .event-title {
@@ -1320,6 +1348,60 @@
     box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14);
 }
 
+.story-preview-frame.live-section-preview,
+.closing-preview-frame.live-section-preview {
+    background: var(--color-ivory);
+}
+
+.story-preview-frame.live-section-preview .section-wrapper,
+.closing-preview-frame.live-section-preview .section-wrapper {
+    min-height: 100%;
+    height: 100%;
+    max-height: none;
+}
+
+.closing-preview-frame.live-section-preview .closing-section {
+    padding: 2rem 1.25rem;
+}
+
+.closing-preview-frame.live-section-preview .closing-section-content {
+    width: min(100%, 340px);
+}
+
+.closing-preview-frame.live-section-preview .closing-text {
+    font-family: 'Mea Culpa', cursive;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    line-height: 1.05;
+}
+
+.closing-preview-frame.live-section-preview .closing-top {
+    font-size: 2.1rem;
+}
+
+.closing-preview-frame.live-section-preview .closing-message {
+    margin-top: 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.closing-preview-frame.live-section-preview .closing-circle-gallery {
+    width: min(76%, 250px);
+    margin-top: 1.35rem;
+}
+
+.closing-preview-frame.live-section-preview .closing-carousel-dots {
+    margin-top: 0.75rem;
+}
+
+.closing-preview-frame.live-section-preview .closing-bottom {
+    margin-top: 0.9rem;
+    font-family: 'Mea Culpa', cursive;
+    font-size: 2.45rem;
+    font-weight: 400;
+    line-height: 1.1;
+}
+
 .story-preview-frame img,
 .story-preview-bg,
 .story-preview-portrait {
@@ -1632,7 +1714,11 @@
 }
 
 .closing-preview-theme2-window img {
-    filter: sepia(0.3) contrast(1.05) brightness(0.95);
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: contrast(1.02) brightness(0.98) saturate(1.02);
 }
 
 .closing-preview-dots {
@@ -1943,26 +2029,51 @@
 }
 
 .dashboard-preview-frame {
-    min-height: 786px;
+    min-height: 0;
     display: flex;
     justify-content: center;
-    align-items: flex-start;
-    padding: 24px;
+    align-items: center;
+    padding: 16px;
     background: #ece6dc;
     border-radius: 8px;
     overflow: hidden;
 }
 
 .dashboard-preview-frame .phone-canvas {
+    --dashboard-preview-section-height: min(76vh, 604px, calc((100vw - 96px) * 16 / 9));
     width: min(340px, 100%);
-    max-width: 340px;
-    height: auto;
+    height: var(--dashboard-preview-section-height);
     max-height: none;
     aspect-ratio: 9 / 16;
+    flex: 0 0 auto;
+}
+
+.dashboard-preview-frame .phone-canvas.preview-mode {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scroll-snap-type: y mandatory;
+    background: #fffaf2;
 }
 
 .dashboard-preview-frame .phone-canvas .section-wrapper {
+    min-height: var(--dashboard-preview-section-height);
+    scroll-snap-align: start;
+}
+
+.dashboard-preview-frame .phone-canvas .events-container {
+    width: 100%;
+}
+
+.dashboard-preview-frame .phone-canvas .event-section {
+    min-height: var(--dashboard-preview-section-height);
+    height: var(--dashboard-preview-section-height);
+    flex: 0 0 var(--dashboard-preview-section-height);
+}
+
+.dashboard-preview-frame .phone-canvas .hero-container {
     min-height: 100%;
+    height: 100%;
+    scroll-snap-align: start;
 }
 
 .dashboard-preview-frame .phone-canvas .section-2 {

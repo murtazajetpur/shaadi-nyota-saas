@@ -1,10 +1,14 @@
 import { supabase } from './supabaseClient';
 import {
-  getOpeningRevealDefaults,
+  defaultOurStorySubtitle,
+  defaultOurStoryText,
+  defaultOurStoryTitle,
   sampleWeddingData,
   type PackageType,
   type SampleWeddingData,
 } from '../data/sampleWeddingData';
+import { assetRegistry, getThemeDefaults } from '../data/assetRegistry';
+import { normalizeTemplateKey } from '../data/templatePresets';
 
 export interface OwnedWeddingRow {
   id: string;
@@ -47,7 +51,46 @@ const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => (
   JSON.parse(JSON.stringify(wedding)) as SampleWeddingData
 );
 
-export const defaultThemeKey = sampleWeddingData.wedding.themeKey;
+export const defaultThemeKey = 'envelope-opening';
+
+const getAssetById = <T extends { id: string }>(assets: T[], id: string) => (
+  assets.find((asset) => asset.id === id)
+);
+
+const getTemplateCreationDefaults = (templateKey: string) => {
+  const normalizedTemplateKey = normalizeTemplateKey(templateKey);
+  const defaults = getThemeDefaults(normalizedTemplateKey);
+  const openingAnimation = getAssetById(assetRegistry.sections.openingReveal.animations, defaults.openingRevealAnimationId);
+  const revealedImage = getAssetById(assetRegistry.sections.openingReveal.revealedImages, defaults.revealedImageId);
+  const storyImage = getAssetById(assetRegistry.sections.ourStory.images, defaults.ourStoryImageId);
+  const audio = getAssetById(assetRegistry.sections.audio, defaults.audioId);
+  const closingImages = defaults.closingPresetPhotoIds
+    .map((id) => getAssetById(assetRegistry.sections.closingGallery.presetPhotos, id)?.src)
+    .filter((src): src is string => Boolean(src));
+
+  return {
+    normalizedTemplateKey,
+    hero: {
+      revealStyle: openingAnimation?.revealStyle ?? sampleWeddingData.hero.revealStyle,
+      revealCtaText: sampleWeddingData.hero.revealCtaText,
+      scrollHintText: sampleWeddingData.hero.scrollHintText,
+      videoSrc: openingAnimation?.videoSrc ?? sampleWeddingData.hero.videoSrc,
+      posterSrc: openingAnimation?.posterSrc ?? sampleWeddingData.hero.posterSrc,
+      revealImageSrc: revealedImage?.src ?? sampleWeddingData.hero.revealImageSrc,
+      revealImageType: revealedImage?.imageType ?? sampleWeddingData.hero.revealImageType,
+      revealImageAlt: revealedImage?.altText ?? sampleWeddingData.hero.revealImageAlt,
+      revealImageShowAtSeconds: openingAnimation?.revealImageShowAtSeconds ?? sampleWeddingData.hero.revealImageShowAtSeconds,
+      heroFadeAtSeconds: openingAnimation?.heroFadeAtSeconds ?? sampleWeddingData.hero.heroFadeAtSeconds,
+    },
+    music: {
+      audioSrc: audio?.src ?? sampleWeddingData.music.audioSrc,
+      title: audio?.label ?? sampleWeddingData.music.title,
+    },
+    storyImageSrc: storyImage?.src ?? sampleWeddingData.couple.backgroundImageSrc,
+    storyImageAlt: storyImage?.altText ?? sampleWeddingData.couple.imageAlt,
+    closingImages,
+  };
+};
 
 export const createSlugFromNames = (brideName: string, groomName: string) => {
   return [groomName, brideName]
@@ -81,9 +124,9 @@ export const buildWeddingShellFromRow = (row: OwnedWeddingRow): SampleWeddingDat
       groomName: row.groom_name || '',
       displayName,
       enabled: true,
-      introLine: '',
-      storyTitle: '',
-      storyText: '',
+      introLine: defaultOurStorySubtitle,
+      storyTitle: defaultOurStoryTitle,
+      storyText: defaultOurStoryText,
     },
     rsvp: {
       ...fallback.rsvp,
@@ -131,7 +174,7 @@ export const updateWeddingShell = async (input: UpdateWeddingShellInput) => {
   if (error) {
     if (error.code === '23503' && error.message.includes('weddings_theme_key_fkey')) {
       return {
-        error: `Theme "${input.themeKey}" is not available in Supabase yet. Run supabase/seed.sql so the themes table includes this theme.`,
+        error: `Template "${input.themeKey}" is not available in Supabase yet. Run supabase/seed.sql so the themes table includes this template.`,
       };
     }
 
@@ -158,6 +201,7 @@ export const getOwnedWeddingForCurrentUser = async () => {
 
 export const createWeddingShell = async (input: CreateWeddingInput) => {
   if (!supabase) return { wedding: null, error: 'Supabase is not configured.' };
+  const templateDefaults = getTemplateCreationDefaults(input.themeKey);
 
   const { data: wedding, error: weddingError } = await supabase
     .from('weddings')
@@ -171,7 +215,7 @@ export const createWeddingShell = async (input: CreateWeddingInput) => {
       package_type: input.packageType,
       status: 'draft',
       payment_status: 'unpaid',
-      theme_key: input.themeKey,
+      theme_key: templateDefaults.normalizedTemplateKey,
       page_title: input.pageTitle,
     })
     .select('id, owner_id, created_by, slug, package_type, status, payment_status, theme_key, page_title, bride_name, groom_name, display_name, published_at')
@@ -187,31 +231,30 @@ export const createWeddingShell = async (input: CreateWeddingInput) => {
   }
 
   const defaults = sampleWeddingData;
-  const openingRevealDefaults = getOpeningRevealDefaults(input.themeKey);
   const { error: settingsError } = await supabase
     .from('wedding_settings')
     .insert({
       wedding_id: wedding.id,
-      hero_reveal_style: openingRevealDefaults.hero.revealStyle,
-      hero_reveal_cta_text: openingRevealDefaults.hero.revealCtaText,
-      hero_scroll_hint_text: openingRevealDefaults.hero.scrollHintText,
-      hero_video_src: openingRevealDefaults.hero.videoSrc,
-      hero_poster_src: openingRevealDefaults.hero.posterSrc,
-      hero_reveal_image_src: openingRevealDefaults.hero.revealImageSrc,
-      hero_reveal_image_type: openingRevealDefaults.hero.revealImageType,
-      hero_reveal_image_alt: openingRevealDefaults.hero.revealImageAlt,
-      hero_reveal_image_show_at_seconds: openingRevealDefaults.hero.revealImageShowAtSeconds,
-      hero_fade_at_seconds: openingRevealDefaults.hero.heroFadeAtSeconds,
-      music_audio_src: openingRevealDefaults.music.audioSrc,
-      music_title: openingRevealDefaults.music.title,
+      hero_reveal_style: templateDefaults.hero.revealStyle,
+      hero_reveal_cta_text: templateDefaults.hero.revealCtaText,
+      hero_scroll_hint_text: templateDefaults.hero.scrollHintText,
+      hero_video_src: templateDefaults.hero.videoSrc,
+      hero_poster_src: templateDefaults.hero.posterSrc,
+      hero_reveal_image_src: templateDefaults.hero.revealImageSrc,
+      hero_reveal_image_type: templateDefaults.hero.revealImageType,
+      hero_reveal_image_alt: templateDefaults.hero.revealImageAlt,
+      hero_reveal_image_show_at_seconds: templateDefaults.hero.revealImageShowAtSeconds,
+      hero_fade_at_seconds: templateDefaults.hero.heroFadeAtSeconds,
+      music_audio_src: templateDefaults.music.audioSrc,
+      music_title: templateDefaults.music.title,
       couple_enabled: true,
-      couple_intro_line: '',
+      couple_intro_line: defaultOurStorySubtitle,
       couple_blessing_line: defaults.couple.blessingLine,
-      couple_background_image_src: defaults.couple.backgroundImageSrc,
-      story_title: '',
-      story_text: '',
-      story_image_src: defaults.couple.backgroundImageSrc,
-      story_image_alt: defaults.couple.imageAlt,
+      couple_background_image_src: templateDefaults.storyImageSrc,
+      story_title: defaultOurStoryTitle,
+      story_text: defaultOurStoryText,
+      story_image_src: templateDefaults.storyImageSrc,
+      story_image_alt: templateDefaults.storyImageAlt,
       rsvp_enabled: defaults.rsvp.enabled,
       rsvp_title: defaults.rsvp.title,
       rsvp_subtitle: defaults.rsvp.subtitle,
@@ -226,12 +269,12 @@ export const createWeddingShell = async (input: CreateWeddingInput) => {
       rsvp_meal_preference_enabled: defaults.rsvp.mealPreferenceEnabled,
       rsvp_meal_options: defaults.rsvp.mealOptions,
       rsvp_success_message: defaults.rsvp.successMessage,
-      closing_include_photos: defaults.closing.includePhotos,
-      closing_layout: defaults.closing.includePhotos ? 'gallery' : 'simple',
+      closing_include_photos: templateDefaults.closingImages.length > 0,
+      closing_layout: templateDefaults.closingImages.length > 0 ? 'gallery' : 'simple',
       closing_line: defaults.closing.closingLine,
       closing_couple_display_name: input.displayName,
       closing_message: defaults.closing.message,
-      closing_carousel_images: defaults.closing.carouselImages,
+      closing_carousel_images: templateDefaults.closingImages,
       closing_frame_image_src: defaults.closing.frameImageSrc,
     });
 

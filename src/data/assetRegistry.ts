@@ -94,11 +94,21 @@ export interface SectionFirstAssetRegistry {
   themeDefaults: Record<string, ThemeDefaults>;
 }
 
-const allThemeKeys = ['palace-door-opening', 'theme-2'];
+const allThemeKeys = ['envelope-opening', 'scroll-opening', 'palace-door-opening', 'theme-2'];
+
+const templateKeyAliases: Record<string, string> = {
+  'theme-2': 'scroll-opening',
+};
+
+export const normalizeTemplateAssetKey = (templateKey = 'envelope-opening') => (
+  templateKeyAliases[templateKey] ?? templateKey
+);
 
 const baseAsset = <T extends RegistryAsset>(asset: T): T => ({
   compatibleThemes: allThemeKeys,
-  recommendedForThemes: asset.sourceTheme ? [asset.sourceTheme] : undefined,
+  recommendedForThemes: asset.sourceTheme
+    ? Array.from(new Set([asset.sourceTheme, normalizeTemplateAssetKey(asset.sourceTheme)]))
+    : undefined,
   ...assetAspectMetadataBySrc[asset.src],
   ...asset,
 });
@@ -621,35 +631,47 @@ export const assetRegistry: SectionFirstAssetRegistry = {
     ],
   },
   themeDefaults: {
-    'palace-door-opening': {
+    'envelope-opening': {
       openingRevealAnimationId: 'opening-envelope-classic-01',
       openingRevealPosterId: 'poster-envelope-classic-01',
       revealedImageId: 'revealed-hindu-classic-01',
       ourStoryImageId: 'story-pheras-01',
       eventVisualDefaults: {
-        haldi: 'event-haldi-premium-03',
-        mehendi: 'event-mehendi-premium-02',
-        sangeet: 'event-sangeet-premium-02',
-        wedding: 'event-wedding-premium-10',
-        reception: 'event-reception-premium-01',
+        haldi: 'event-haldi-premium-06',
+        mehendi: 'event-mehendi-premium-03',
+        sangeet: 'event-sangeet-premium-05',
+        wedding: 'event-wedding-premium-16',
+        reception: 'event-reception-premium-02',
       },
       closingPresetPhotoIds: [],
       audioId: 'music-din-shagna-da-classic',
     },
-    'theme-2': {
+    'palace-door-opening': {
+      openingRevealAnimationId: 'opening-palace-door-01',
+      openingRevealPosterId: 'poster-envelope-classic-01',
+      revealedImageId: 'revealed-generic-classic-04',
+      ourStoryImageId: 'story-floral-swing-02',
+      eventVisualDefaults: {
+        haldi: 'event-haldi-premium-06',
+        mehendi: 'event-mehendi-premium-03',
+        sangeet: 'event-sangeet-premium-05',
+        wedding: 'event-wedding-premium-16',
+        reception: 'event-reception-premium-02',
+      },
+      closingPresetPhotoIds: [],
+      audioId: 'music-din-shagna-da-classic',
+    },
+    'scroll-opening': {
       openingRevealAnimationId: 'opening-scroll-floral-01',
       openingRevealPosterId: 'poster-scroll-floral-01',
       revealedImageId: 'revealed-generic-classic-01',
-      ourStoryImageId: 'story-pheras-01',
+      ourStoryImageId: 'story-holding-hands-02',
       eventVisualDefaults: {
-        haldi: 'event-haldi-premium-05',
-        mehendi: 'event-mehendi-premium-09',
-        sangeet: 'event-sangeet-premium-14',
-        wedding: 'event-wedding-premium-35',
-        nikaah: 'event-wedding-premium-35',
-        reception: 'event-reception-premium-21',
-        walima: 'event-reception-premium-21',
-        generic: 'event-generic-premium-12',
+        haldi: 'event-haldi-premium-06',
+        mehendi: 'event-mehendi-premium-03',
+        sangeet: 'event-sangeet-premium-05',
+        wedding: 'event-wedding-premium-16',
+        reception: 'event-reception-premium-02',
       },
       closingBackgroundId: 'closing-bg-scroll-floral-01',
       closingPresetPhotoIds: [],
@@ -849,8 +871,8 @@ export const resolveAssetPath = (path?: string | null) => {
   return legacyAssetPathMap[path] ?? path;
 };
 
-export const getThemeDefaults = (themeKey = 'palace-door-opening') => (
-  assetRegistry.themeDefaults[themeKey] ?? assetRegistry.themeDefaults['palace-door-opening']
+export const getThemeDefaults = (themeKey = 'envelope-opening') => (
+  assetRegistry.themeDefaults[normalizeTemplateAssetKey(themeKey)] ?? assetRegistry.themeDefaults['envelope-opening']
 );
 
 export const getThemeAssets = () => assetRegistry.sections;
@@ -876,7 +898,7 @@ export const getRevealedImages = (themeKey?: string) => (
   recommendedFirst(assetRegistry.sections.openingReveal.revealedImages, themeKey)
 );
 
-export const getStoryImages = (_themeKey?: string) => assetRegistry.sections.ourStory.images;
+export const getStoryImages = () => assetRegistry.sections.ourStory.images;
 
 export const getClosingGalleryPresetPhotos = (themeKey?: string) => (
   recommendedFirst(assetRegistry.sections.closingGallery.presetPhotos, themeKey)

@@ -132,6 +132,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                 guest,
                 responses: responses.map((response) => ({ eventId: response.eventId, status: response.status })),
                 mealPreference: mealValue,
+                events,
             });
 
             if (result.error) {

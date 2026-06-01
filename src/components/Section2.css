@@ -6,6 +6,7 @@
     justify-content: space-between;
     max-height: 100vh;
     max-height: 100dvh;
+    container-type: inline-size;
 }
 
 .s2-image-wrapper {
@@ -26,13 +27,16 @@
 }
 
 .s2-top-names {
-    font-family: var(--font-primary);
-    font-size: 3.5rem;
+    font-family: 'Mea Culpa', cursive;
+    font-size: clamp(2.65rem, 13cqw, 3.5rem);
     letter-spacing: 0.02em;
     color: var(--color-text);
     z-index: 4;
-    white-space: nowrap;
+    max-width: 100%;
+    text-align: center;
     margin-bottom: 0.5rem;
+    padding-inline: 0.35rem;
+    overflow-wrap: anywhere;
 }
 
 .s2-heading-container {
@@ -43,8 +47,8 @@
 
 .s2-story-title {
     margin: 0.55rem 0 0;
-    font-family: var(--font-primary);
-    font-size: clamp(1.35rem, 4vw, 2.2rem);
+    font-family: 'Mea Culpa', cursive;
+    font-size: clamp(1.35rem, 4cqw, 2.2rem);
     color: var(--color-text);
 }
 
@@ -53,7 +57,7 @@
     max-width: 32rem;
     color: var(--color-text);
     font-family: var(--font-secondary);
-    font-size: clamp(0.88rem, 2.5vw, 1.05rem);
+    font-size: clamp(0.88rem, 2.5cqw, 1.05rem);
     line-height: 1.55;
 }
 

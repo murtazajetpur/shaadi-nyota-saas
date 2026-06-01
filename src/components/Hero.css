@@ -1,7 +1,10 @@
 .hero-container {
-    position: absolute;
-    inset: 0;
+    position: relative;
     z-index: 10;
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    flex-shrink: 0;
     background-color: var(--color-ivory);
     /* Initial poster state color */
     transition: opacity 0.7s cubic-bezier(0.645, 0.045, 0.355, 1);
@@ -15,10 +18,17 @@
 }
 
 .hero-video {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
+    transition: opacity 0.45s ease;
+}
+
+.hero-container.is-completing .hero-video {
+    opacity: 0;
 }
 
 .hero-reveal-image {

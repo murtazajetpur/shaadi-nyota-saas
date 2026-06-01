@@ -703,7 +703,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                         <h3>Summary</h3>
                                                         <dl className="admin-summary-list">
                                                             <div>
-                                                                <dt>Theme</dt>
+                                                                <dt>Template</dt>
                                                                 <dd>{getThemeDisplayLabel(wedding.themeKey)}</dd>
                                                             </div>
                                                             <div>

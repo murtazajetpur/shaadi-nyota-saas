@@ -1,14 +1,9 @@
-import { useState, useCallback, Suspense, lazy, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Hero from './Hero';
-import Section1 from './Section1';
 import AudioPlayer from './AudioPlayer';
-import { hasRsvpAccess, type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
-import Theme2InviteExperience from '../themes/theme2/Theme2InviteExperience';
-
-const Section2 = lazy(() => import('./Section2'));
-const Section3 = lazy(() => import('./Section3'));
-const Section4 = lazy(() => import('./Section4'));
-const Section5 = lazy(() => import('./Section5'));
+import { type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
+import { getWeddingSectionConfig, type WeddingSectionConfig } from '../data/sectionConfig';
+import WeddingSectionRenderer from './WeddingSectionRenderer';
 
 interface InviteExperienceProps {
   data: SampleWeddingData;
@@ -18,45 +13,35 @@ interface InviteExperienceProps {
   visibleEvents?: WeddingEvent[];
   personalizedInviteMode?: boolean;
   enableResponsiveOpeningVideo?: boolean;
+  previewMode?: boolean;
+  previewScrollFrame?: boolean;
+  forceSectionsVisible?: boolean;
+  forceEventsVisible?: boolean;
 }
 
-export default function InviteExperience({
+interface ClassicInviteExperienceProps extends InviteExperienceProps {
+  eventsToShow: WeddingEvent[];
+  sectionConfig: WeddingSectionConfig[];
+}
+
+function ClassicInviteExperience({
   data,
   weddingId,
   embedded = false,
   guest,
-  visibleEvents,
   personalizedInviteMode = false,
   enableResponsiveOpeningVideo = true,
-}: InviteExperienceProps) {
-  if (data.wedding.themeKey === 'theme-2') {
-    return (
-      <Theme2InviteExperience
-        data={data}
-        weddingId={weddingId}
-        embedded={embedded}
-        guest={guest}
-        visibleEvents={visibleEvents}
-        personalizedInviteMode={personalizedInviteMode}
-        enableResponsiveOpeningVideo={enableResponsiveOpeningVideo}
-      />
-    );
-  }
-
-  const eventsToShow = visibleEvents ?? data.events;
-  const shouldShowRsvp = hasRsvpAccess(data) && data.rsvp.enabled;
-  const [ganeshaVisible, setGaneshaVisible] = useState(false);
+  previewMode = false,
+  previewScrollFrame = false,
+  forceSectionsVisible = false,
+  eventsToShow,
+  sectionConfig,
+}: ClassicInviteExperienceProps) {
   const [heroDone, setHeroDone] = useState(false);
   const [heroStarted, setHeroStarted] = useState(false);
+  const contentReady = previewMode || forceSectionsVisible || heroDone;
 
-  const handleGaneshaReveal = useCallback(() => setGaneshaVisible(true), []);
   const handleHeroComplete = useCallback(() => setHeroDone(true), []);
-
-  useEffect(() => {
-    setGaneshaVisible(false);
-    setHeroDone(false);
-    setHeroStarted(false);
-  }, [data]);
 
   useEffect(() => {
     if (!heroStarted) return;
@@ -89,7 +74,7 @@ export default function InviteExperience({
   }, [heroStarted, data, eventsToShow]);
 
   const inviteCanvas = (
-    <div className={`phone-canvas ${!heroDone ? 'no-scroll' : 'ready-to-snap'}`}>
+    <div className={`phone-canvas ${!contentReady ? 'no-scroll' : 'ready-to-snap'} ${previewMode || previewScrollFrame ? 'preview-mode' : ''}`}>
       {(heroStarted || heroDone) && (
         <AudioPlayer
           triggerPlay={heroStarted || heroDone}
@@ -98,36 +83,26 @@ export default function InviteExperience({
         />
       )}
 
-      {heroDone && (
-        <>
-          <Section1 ganeshaVisible={ganeshaVisible} hero={data.hero} settled />
-          <Suspense fallback={null}>
-            {data.couple.enabled && <Section2 couple={data.couple} />}
-            <Section3 events={eventsToShow} />
-            {shouldShowRsvp && (
-              <Section4
-                rsvp={data.rsvp}
-                weddingId={weddingId}
-                weddingSlug={data.wedding.slug}
-                events={eventsToShow}
-                guest={guest}
-                personalizedInviteMode={personalizedInviteMode}
-              />
-            )}
-            <Section5 closing={data.closing} />
-          </Suspense>
-        </>
-      )}
+      <Hero
+        hero={data.hero}
+        audioSrc={data.music.audioSrc}
+        onHeroStart={() => setHeroStarted(true)}
+        onGaneshaReveal={() => undefined}
+        onHeroComplete={handleHeroComplete}
+        enableResponsiveVideo={enableResponsiveOpeningVideo}
+        showScrollPrompt={heroDone}
+        previewMode={previewMode}
+      />
 
-      {!heroDone && (
-        <Hero
-          hero={data.hero}
-          audioSrc={data.music.audioSrc}
-          onHeroStart={() => setHeroStarted(true)}
-          onGaneshaReveal={handleGaneshaReveal}
-          onHeroComplete={handleHeroComplete}
-          enableResponsiveVideo={enableResponsiveOpeningVideo}
-        />
+      {contentReady && (
+        <WeddingSectionRenderer
+          data={data}
+          sections={sectionConfig}
+          events={eventsToShow}
+        weddingId={weddingId}
+        guest={guest}
+        personalizedInviteMode={personalizedInviteMode}
+      />
       )}
     </div>
   );
@@ -142,5 +117,44 @@ export default function InviteExperience({
       <div className="desktop-vignette" />
       <div className="app-container">{inviteCanvas}</div>
     </>
+  );
+}
+
+export default function InviteExperience({
+  data,
+  weddingId,
+  embedded = false,
+  guest,
+  visibleEvents,
+  personalizedInviteMode = false,
+  enableResponsiveOpeningVideo = true,
+  previewMode = false,
+  previewScrollFrame = false,
+  forceSectionsVisible = false,
+  forceEventsVisible = false,
+}: InviteExperienceProps) {
+  const eventsToShow = visibleEvents ?? data.events;
+  const sectionConfig = getWeddingSectionConfig(data, { visibleEvents }).map((section) => (
+    forceEventsVisible && section.type === 'events' && eventsToShow.length > 0
+      ? { ...section, enabled: true }
+      : section
+  ));
+
+  return (
+    <ClassicInviteExperience
+      key={`${data.wedding.slug}-${data.wedding.themeKey}`}
+      data={data}
+      weddingId={weddingId}
+      embedded={embedded}
+      guest={guest}
+      visibleEvents={visibleEvents}
+      personalizedInviteMode={personalizedInviteMode}
+      enableResponsiveOpeningVideo={enableResponsiveOpeningVideo}
+      previewMode={previewMode}
+      previewScrollFrame={previewScrollFrame}
+      forceSectionsVisible={forceSectionsVisible}
+      eventsToShow={eventsToShow}
+      sectionConfig={sectionConfig}
+    />
   );
 }

@@ -43,6 +43,11 @@ It also adds primary keys, foreign keys, check constraints, indexes, comments, a
 
 Open a new SQL editor tab, paste the full contents of `supabase/rls_policies.sql`, and run it.
 
+If a published public or personalized invite link does not load while logged out
+or in incognito, run `supabase/public_invite_access_fix.sql`. It reapplies the
+public published-read policies and explicit `anon`/`authenticated` grants needed
+by the public invite routes.
+
 This enables row level security and creates policies for:
 
 - users reading/updating their own profile
