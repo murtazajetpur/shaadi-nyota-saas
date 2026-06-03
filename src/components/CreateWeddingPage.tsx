@@ -5,7 +5,8 @@ import {
   getPackageDisplayLabel,
   type PackageType,
 } from '../data/sampleWeddingData';
-import { templatePresets, type TemplateKey } from '../data/templatePresets';
+import { activePackageOptions } from '../data/paymentConfig';
+import { normalizeTemplateKey, templatePresets, type TemplateKey } from '../data/templatePresets';
 import {
   createSlugFromNames,
   createWeddingShell,
@@ -13,33 +14,21 @@ import {
   getOwnedWeddingForUser,
 } from '../lib/weddingOnboarding';
 
-const packageOptions: Array<{ value: PackageType; description: string }> = [
-  {
-    value: 'basic',
-    description: 'Wedding website with event details',
-  },
-  {
-    value: 'rsvp',
-    description: 'Website + RSVP + guest-wise event access',
-  },
-  {
-    value: 'whatsapp',
-    description: 'Website + RSVP + WhatsApp invites and reminders later',
-  },
-];
-
 const templateOptions: TemplateKey[] = ['envelope-opening', 'scroll-opening', 'palace-door-opening'];
 
 export default function CreateWeddingPage() {
   const { user, loading, isConfigured } = useAuth();
+  const searchParams = new URLSearchParams(window.location.search);
+  const initialThemeKey = normalizeTemplateKey(searchParams.get('theme') ?? undefined);
+  const initialPackageType: PackageType = searchParams.get('plan') === 'rsvp' ? 'rsvp' : 'basic';
   const [brideName, setBrideName] = useState('');
   const [groomName, setGroomName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
   const [displayNameEdited, setDisplayNameEdited] = useState(false);
-  const [themeKey, setThemeKey] = useState<string>(defaultThemeKey);
-  const [packageType, setPackageType] = useState<PackageType>('basic');
+  const [themeKey, setThemeKey] = useState<string>(initialThemeKey || defaultThemeKey);
+  const [packageType, setPackageType] = useState<PackageType>(initialPackageType);
   const [pageTitle, setPageTitle] = useState('');
   const [pageTitleEdited, setPageTitleEdited] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -221,7 +210,7 @@ export default function CreateWeddingPage() {
               <p>Choose the plan for this wedding. Admin can adjust it later if needed.</p>
             </div>
             <div className="package-options">
-              {packageOptions.map((option) => (
+              {activePackageOptions.map((option) => (
                 <label
                   className={`package-option ${packageType === option.value ? 'selected' : ''}`}
                   key={option.value}
@@ -234,7 +223,8 @@ export default function CreateWeddingPage() {
                     onChange={() => setPackageType(option.value)}
                   />
                   <strong>{getPackageDisplayLabel(option.value)}</strong>
-                  <small>{option.description}</small>
+                  <small>{option.priceLabel}</small>
+                  <small>{option.summary}</small>
                 </label>
               ))}
             </div>

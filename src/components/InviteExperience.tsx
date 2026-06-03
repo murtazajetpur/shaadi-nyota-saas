@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import Hero from './Hero';
 import AudioPlayer from './AudioPlayer';
+import DemoWatermarkOverlay from './DemoWatermarkOverlay';
 import { type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
 import { getWeddingSectionConfig, type WeddingSectionConfig } from '../data/sectionConfig';
 import WeddingSectionRenderer from './WeddingSectionRenderer';
@@ -17,6 +18,7 @@ interface InviteExperienceProps {
   previewScrollFrame?: boolean;
   forceSectionsVisible?: boolean;
   forceEventsVisible?: boolean;
+  demoPreviewMode?: boolean;
 }
 
 interface ClassicInviteExperienceProps extends InviteExperienceProps {
@@ -34,6 +36,7 @@ function ClassicInviteExperience({
   previewMode = false,
   previewScrollFrame = false,
   forceSectionsVisible = false,
+  demoPreviewMode = false,
   eventsToShow,
   sectionConfig,
 }: ClassicInviteExperienceProps) {
@@ -108,7 +111,12 @@ function ClassicInviteExperience({
   );
 
   if (embedded) {
-    return inviteCanvas;
+    return (
+      <>
+        {inviteCanvas}
+        {demoPreviewMode && <DemoWatermarkOverlay />}
+      </>
+    );
   }
 
   return (
@@ -116,6 +124,7 @@ function ClassicInviteExperience({
       <div className="desktop-bg-blur" />
       <div className="desktop-vignette" />
       <div className="app-container">{inviteCanvas}</div>
+      {demoPreviewMode && <DemoWatermarkOverlay />}
     </>
   );
 }
@@ -132,6 +141,7 @@ export default function InviteExperience({
   previewScrollFrame = false,
   forceSectionsVisible = false,
   forceEventsVisible = false,
+  demoPreviewMode = false,
 }: InviteExperienceProps) {
   const eventsToShow = visibleEvents ?? data.events;
   const sectionConfig = getWeddingSectionConfig(data, { visibleEvents }).map((section) => (
@@ -153,6 +163,7 @@ export default function InviteExperience({
       previewMode={previewMode}
       previewScrollFrame={previewScrollFrame}
       forceSectionsVisible={forceSectionsVisible}
+      demoPreviewMode={demoPreviewMode}
       eventsToShow={eventsToShow}
       sectionConfig={sectionConfig}
     />

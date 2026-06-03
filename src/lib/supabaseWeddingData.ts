@@ -25,7 +25,7 @@ export interface SupabaseWeddingRow {
   slug: string;
   package_type: PackageType;
   status: WebsiteStatus;
-  payment_status: 'unpaid' | 'paid';
+  payment_status: PaymentStatus;
   theme_key: string | null;
   page_title: string | null;
   bride_name: string | null;
@@ -215,6 +215,14 @@ type EventIdLookupSource = {
   event_name?: string | null;
 };
 
+type GuestIdLookupSource = {
+  id: string;
+  guestName?: string | null;
+  inviteCode?: string | null;
+  guest_name?: string | null;
+  invite_code?: string | null;
+};
+
 const createEventIdResolver = (events: EventIdLookupSource[] = []) => {
   const lookup = new Map<string, string>();
 
@@ -227,8 +235,23 @@ const createEventIdResolver = (events: EventIdLookupSource[] = []) => {
   });
 
   return (eventIdOrKey: string) => {
-    if (isUuid(eventIdOrKey)) return eventIdOrKey;
     return lookup.get(normalizeEventLookupKey(eventIdOrKey)) ?? '';
+  };
+};
+
+const createGuestIdResolver = (guests: GuestIdLookupSource[] = []) => {
+  const lookup = new Map<string, string>();
+
+  guests.forEach((guest) => {
+    if (!isUuid(guest.id)) return;
+    [guest.id, guest.inviteCode ?? guest.invite_code, guest.guestName ?? guest.guest_name]
+      .map(normalizeEventLookupKey)
+      .filter(Boolean)
+      .forEach((key) => lookup.set(key, guest.id));
+  });
+
+  return (guestIdOrKey: string) => {
+    return lookup.get(normalizeEventLookupKey(guestIdOrKey)) ?? '';
   };
 };
 
@@ -486,10 +509,16 @@ const getEventKeyForStorage = (event: WeddingEvent) => (
   event.eventKey?.trim() || (!isUuid(event.id) ? event.id : null)
 );
 
-const eventToRow = (weddingId: string, event: WeddingEvent, sortOrder: number, includeAnimationKey = true) => ({
+const eventToRow = (
+  weddingId: string,
+  event: WeddingEvent,
+  sortOrder: number,
+  includeAnimationKey = true,
+  eventKeyOverride?: string | null
+) => ({
   id: isUuid(event.id) ? event.id : undefined,
   wedding_id: weddingId,
-  event_key: getEventKeyForStorage(event),
+  event_key: eventKeyOverride !== undefined ? eventKeyOverride : getEventKeyForStorage(event),
   event_visual_key: event.eventVisualKey?.trim() || null,
   event_text_style: normalizeEventTextStyle(event.eventTextStyle),
   ...(includeAnimationKey ? { event_animation_key: normalizeEventAnimationKey(event.eventAnimationKey) } : {}),
@@ -506,6 +535,17 @@ const eventToRow = (weddingId: string, event: WeddingEvent, sortOrder: number, i
   calendar_description: event.calendarDescription,
   sort_order: sortOrder,
 });
+
+const eventToUpdateRow = (
+  weddingId: string,
+  event: WeddingEvent,
+  sortOrder: number,
+  includeAnimationKey = true,
+  eventKeyOverride?: string | null
+) => {
+  const { id, wedding_id, ...row } = eventToRow(weddingId, event, sortOrder, includeAnimationKey, eventKeyOverride);
+  return row;
+};
 
 export async function createSupabaseEvent(weddingId: string, event: WeddingEvent, sortOrder: number) {
   if (!supabase) return { event: null, error: 'Supabase is not configured.' };
@@ -537,30 +577,33 @@ export async function saveSupabaseEvents(weddingId: string, events: WeddingEvent
     .select('id,event_key,event_name')
     .eq('wedding_id', weddingId);
 
-  if (existingError) return { error: existingError.message };
+  if (existingError) return { error: `Loading existing events failed: ${existingError.message}` };
 
   const existingEventRows = (existingRows ?? []) as EventIdLookupSource[];
   const resolveExistingEventId = createEventIdResolver(existingEventRows);
+  const existingEventIds = new Set(existingEventRows.map((row) => row.id));
+  const existingEventKeyById = new Map(existingEventRows.map((row) => [row.id, row.event_key ?? row.eventKey ?? null]));
   const eventsWithUuidIds: WeddingEvent[] = [];
 
   for (const [index, event] of events.entries()) {
-    if (isUuid(event.id)) {
-      eventsWithUuidIds.push(event);
-      continue;
-    }
-
-    const matchedEventId = resolveExistingEventId(getEventKeyForStorage(event) ?? '')
+    const storageKey = getEventKeyForStorage(event);
+    const matchedEventId = resolveExistingEventId(storageKey ?? '')
       || resolveExistingEventId(event.eventName)
-      || resolveExistingEventId(event.id);
+      || (isUuid(event.id) && existingEventIds.has(event.id) ? event.id : '')
+      || (!isUuid(event.id) ? resolveExistingEventId(event.id) : '');
 
     if (matchedEventId) {
-      eventsWithUuidIds.push({ ...event, id: matchedEventId, eventKey: event.eventKey || event.id });
+      eventsWithUuidIds.push({
+        ...event,
+        id: matchedEventId,
+        eventKey: existingEventKeyById.get(matchedEventId) || event.eventKey || storageKey || event.id,
+      });
       continue;
     }
 
     const created = await createSupabaseEvent(weddingId, event, index);
     if (created.error || !created.event) {
-      return { error: created.error || 'Could not create event.', events: eventsWithUuidIds };
+      return { error: `Creating event "${event.eventName || event.id}" failed: ${created.error || 'Could not create event.'}`, events: eventsWithUuidIds };
     }
     eventsWithUuidIds.push(created.event);
   }
@@ -576,20 +619,30 @@ export async function saveSupabaseEvents(weddingId: string, events: WeddingEvent
       .delete()
       .eq('wedding_id', weddingId)
       .in('id', idsToDelete);
-    if (deleteError) return { error: deleteError.message };
+    if (deleteError) return { error: `Deleting removed events failed: ${deleteError.message}` };
   }
 
   if (!eventsWithUuidIds.length) return { error: '', events: eventsWithUuidIds };
 
-  const upsertEvents = (includeAnimationKey = true) => supabaseClient
-    .from('events')
-    .upsert(eventsWithUuidIds.map((event, index) => eventToRow(weddingId, event, index, includeAnimationKey)), { onConflict: 'id' });
-  let { error } = await upsertEvents();
-  if (isMissingEventAnimationColumnError(error?.message)) {
-    ({ error } = await upsertEvents(false));
+  for (const [index, event] of eventsWithUuidIds.entries()) {
+    const storedEventKey = existingEventKeyById.get(event.id) ?? getEventKeyForStorage(event);
+    const updateEvent = (includeAnimationKey = true) => supabaseClient
+      .from('events')
+      .update(eventToUpdateRow(weddingId, event, index, includeAnimationKey, storedEventKey))
+      .eq('id', event.id)
+      .eq('wedding_id', weddingId);
+
+    let { error } = await updateEvent();
+    if (isMissingEventAnimationColumnError(error?.message)) {
+      ({ error } = await updateEvent(false));
+    }
+
+    if (error) {
+      return { error: `Saving event "${event.eventName || event.eventKey || event.id}" failed: ${error.message}`, events: eventsWithUuidIds };
+    }
   }
 
-  return { error: error?.message ?? '', events: eventsWithUuidIds };
+  return { error: '', events: eventsWithUuidIds };
 }
 
 const getSchemaCacheMissingColumn = (errorMessage?: string) => {
@@ -713,6 +766,11 @@ const guestToRow = (weddingId: string, guest: WeddingGuest) => ({
   meal_preference: guest.mealPreference || null,
 });
 
+const guestToUpdateRow = (weddingId: string, guest: WeddingGuest) => {
+  const { id, wedding_id, ...row } = guestToRow(weddingId, guest);
+  return row;
+};
+
 export async function createSupabaseGuest(weddingId: string, guest: WeddingGuest) {
   if (!supabase) return { guest: null, error: 'Supabase is not configured.' };
 
@@ -767,13 +825,25 @@ export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest
 
   const { data: existingRows, error: existingError } = await supabase
     .from('guests')
-    .select('id')
+    .select('id,invite_code,guest_name')
     .eq('wedding_id', weddingId);
 
-  if (existingError) return { error: existingError.message };
+  if (existingError) return { error: `Loading existing guests failed: ${existingError.message}` };
 
-  const nextIds = new Set(guests.map((guest) => guest.id));
-  const idsToDelete = ((existingRows ?? []) as Array<{ id: string }>)
+  const existingGuestRows = (existingRows ?? []) as GuestIdLookupSource[];
+  const resolveExistingGuestId = createGuestIdResolver(existingGuestRows);
+  const existingGuestIds = new Set(existingGuestRows.map((row) => row.id));
+  const guestsWithUuidIds = guests.map((guest) => {
+    const matchedGuestId = resolveExistingGuestId(guest.inviteCode)
+      || resolveExistingGuestId(guest.guestName)
+      || (isUuid(guest.id) && existingGuestIds.has(guest.id) ? guest.id : '')
+      || (!isUuid(guest.id) ? resolveExistingGuestId(guest.id) : '');
+
+    return matchedGuestId ? { ...guest, id: matchedGuestId } : guest;
+  });
+
+  const nextIds = new Set(guestsWithUuidIds.map((guest) => guest.id).filter(isUuid));
+  const idsToDelete = existingGuestRows
     .map((row) => row.id)
     .filter((id) => !nextIds.has(id));
 
@@ -783,14 +853,30 @@ export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest
       .delete()
       .eq('wedding_id', weddingId)
       .in('id', idsToDelete);
-    if (deleteError) return { error: deleteError.message };
+    if (deleteError) return { error: `Deleting removed guests failed: ${deleteError.message}` };
   }
 
-  if (guests.length) {
-    const { error: upsertError } = await supabase
+  for (const guest of guestsWithUuidIds) {
+    if (isUuid(guest.id) && existingGuestIds.has(guest.id)) {
+      const { error: updateError } = await supabase
+        .from('guests')
+        .update(guestToUpdateRow(weddingId, guest))
+        .eq('id', guest.id)
+        .eq('wedding_id', weddingId);
+      if (updateError) return { error: `Saving guest "${guest.guestName || guest.inviteCode || guest.id}" failed: ${updateError.message}` };
+      continue;
+    }
+
+    const { data: insertedGuest, error: insertError } = await supabase
       .from('guests')
-      .upsert(guests.map((guest) => guestToRow(weddingId, guest)), { onConflict: 'id' });
-    if (upsertError) return { error: upsertError.message };
+      .insert({
+        ...guestToRow(weddingId, guest),
+        id: undefined,
+      })
+      .select('id')
+      .single();
+    if (insertError) return { error: `Creating guest "${guest.guestName || guest.inviteCode || guest.id}" failed: ${insertError.message}` };
+    guest.id = insertedGuest.id;
   }
 
   const { error: deleteInvitesError } = await supabase
@@ -798,13 +884,13 @@ export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest
     .delete()
     .eq('wedding_id', weddingId);
 
-  if (deleteInvitesError) return { error: deleteInvitesError.message };
+  if (deleteInvitesError) return { error: `Clearing guest event invites failed: ${deleteInvitesError.message}` };
 
   const { resolveEventId, error: resolveError } = await getSupabaseEventIdResolver(weddingId, events);
-  if (resolveError) return { error: resolveError };
+  if (resolveError) return { error: `Resolving event invite IDs failed: ${resolveError}` };
 
   const unresolvedSelections = new Set<string>();
-  const inviteRows = guests.flatMap((guest) => {
+  const inviteRows = guestsWithUuidIds.flatMap((guest) => {
     const resolvedIds = guest.invitedEventIds
       .map(resolveEventId)
       .filter((eventId, index, allIds) => Boolean(eventId) && allIds.indexOf(eventId) === index);
@@ -820,7 +906,7 @@ export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest
   if (!inviteRows.length) return { error: '' };
 
   const { error } = await supabase.from('guest_event_invites').insert(inviteRows);
-  return { error: error?.message ?? '' };
+  return { error: error?.message ? `Saving guest event invites failed: ${error.message}` : '' };
 }
 
 export async function deleteSupabaseGuest(guestId: string) {

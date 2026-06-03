@@ -5,6 +5,7 @@ import AuthPage from './components/AuthPage';
 import CreateWeddingPage from './components/CreateWeddingPage';
 import Dashboard from './components/Dashboard';
 import InviteExperience from './components/InviteExperience';
+import MarketingHome from './components/MarketingHome';
 import WeddingDesignPreviews from './components/WeddingDesignPreviews';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import {
@@ -31,6 +32,24 @@ import {
 } from './lib/supabaseWeddingData';
 import { isSupabaseConfigured } from './lib/supabaseClient';
 
+const templateDemoRoutes: Record<string, { slug: string; inviteCode: string; title: string }> = {
+  'classic-envelope': {
+    slug: 'mahesh-neha',
+    inviteCode: 'lvpehh',
+    title: 'Classic Envelope Demo',
+  },
+  'scroll-opening': {
+    slug: 'sahil-ruhana',
+    inviteCode: '0gcbvj',
+    title: 'Scroll Opening Demo',
+  },
+  'palace-door-opening': {
+    slug: 'john-melissa',
+    inviteCode: '4jz5bt',
+    title: 'Palace Door Opening Demo',
+  },
+};
+
 function NotFound({ title = 'Wedding invite not found', message = 'Please check the invitation link and try again.' }) {
   useEffect(() => {
     document.title = 'Wedding Not Found | Shaadi Nyota';
@@ -52,6 +71,30 @@ function NotFound({ title = 'Wedding invite not found', message = 'Please check 
   );
 }
 
+function useNoindexPage(title: string) {
+  useEffect(() => {
+    document.title = `${title} | Shaadi Nyota`;
+    const existingRobotsMeta = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    const previousRobotsContent = existingRobotsMeta?.getAttribute('content') ?? null;
+    const robotsMeta = existingRobotsMeta ?? document.createElement('meta');
+    robotsMeta.setAttribute('name', 'robots');
+    robotsMeta.setAttribute('content', 'noindex,nofollow');
+    if (!existingRobotsMeta) document.head.appendChild(robotsMeta);
+
+    return () => {
+      if (existingRobotsMeta) {
+        if (previousRobotsContent) {
+          existingRobotsMeta.setAttribute('content', previousRobotsContent);
+        } else {
+          existingRobotsMeta.removeAttribute('content');
+        }
+      } else {
+        robotsMeta.remove();
+      }
+    };
+  }, [title]);
+}
+
 function RedirectToLogin() {
   useEffect(() => {
     window.location.href = '/login';
@@ -61,6 +104,134 @@ function RedirectToLogin() {
     <AccessMessage
       title="Login required"
       message="Redirecting you to login..."
+    />
+  );
+}
+
+function TemplateDemoRoute({ demoKey }: { demoKey?: string }) {
+  const demo = demoKey ? templateDemoRoutes[demoKey] : undefined;
+  const [isLoadingInvite, setIsLoadingInvite] = useState(Boolean(demo && isSupabaseConfigured));
+  const [supabaseData, setSupabaseData] = useState<{
+    data: SampleWeddingData;
+    weddingId?: string;
+    guest?: WeddingGuest;
+    visibleEvents?: WeddingEvent[];
+  } | null>(null);
+  const [supabaseError, setSupabaseError] = useState('');
+
+  useNoindexPage(demo?.title ?? 'Template Demo');
+
+  useEffect(() => {
+    if (!demo) return;
+
+    const preventContextMenu = (event: MouseEvent) => event.preventDefault();
+    const preventDragStart = (event: DragEvent) => {
+      if ((event.target as HTMLElement | null)?.tagName === 'IMG') {
+        event.preventDefault();
+      }
+    };
+
+    document.addEventListener('contextmenu', preventContextMenu);
+    document.addEventListener('dragstart', preventDragStart);
+    return () => {
+      document.removeEventListener('contextmenu', preventContextMenu);
+      document.removeEventListener('dragstart', preventDragStart);
+    };
+  }, [demo]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadInvite = async () => {
+      if (!demo || !isSupabaseConfigured) {
+        setIsLoadingInvite(false);
+        return;
+      }
+
+      setIsLoadingInvite(true);
+      const result = await loadSupabasePersonalizedInvite(demo.slug, demo.inviteCode);
+      if (!mounted) return;
+
+      if (result.error) {
+        console.error('Template demo load failed:', result.error);
+        setSupabaseError(result.error);
+        setSupabaseData(null);
+      } else if (result.wedding) {
+        setSupabaseError('');
+        setSupabaseData({
+          data: result.wedding,
+          weddingId: result.weddingId,
+          guest: result.guest,
+          visibleEvents: result.visibleEvents,
+        });
+      } else {
+        setSupabaseError('Template demo not found.');
+        setSupabaseData(null);
+      }
+
+      setIsLoadingInvite(false);
+    };
+
+    void loadInvite();
+
+    return () => {
+      mounted = false;
+    };
+  }, [demo]);
+
+  if (!demo) {
+    return (
+      <NotFound
+        title="Template preview not found"
+        message="Please choose one of the available Shaadi Nyota template previews."
+      />
+    );
+  }
+
+  if (isLoadingInvite) {
+    return <AccessMessage title="Loading template demo" message="Please wait while we load this protected preview." />;
+  }
+
+  const fallbackData = getWeddingBySlug(demo.slug);
+  const data = supabaseData?.data ?? fallbackData;
+  const guest = supabaseData?.guest ?? (data ? getGuestByInviteCode(data, demo.inviteCode) : undefined);
+  const visibleEvents = supabaseData?.visibleEvents ?? (data && guest ? getEventsForGuest(data, guest) : undefined);
+
+  if (!data) {
+    return (
+      <NotFound
+        title="Template demo unavailable"
+        message={supabaseError || 'This template preview could not be loaded. Please try again later.'}
+      />
+    );
+  }
+
+  if (data.wedding.status === 'suspended') {
+    return (
+      <NotFound
+        title="Template demo unavailable"
+        message="This template preview is currently unavailable."
+      />
+    );
+  }
+
+  if (!guest) {
+    return (
+      <NotFound
+        title="Template invite not found"
+        message="This protected template preview requires its demo invite record."
+      />
+    );
+  }
+
+  return (
+    <InviteExperience
+      data={data}
+      weddingId={supabaseData?.weddingId}
+      guest={guest}
+      visibleEvents={visibleEvents}
+      personalizedInviteMode
+      demoPreviewMode
     />
   );
 }
@@ -373,9 +544,15 @@ function AppRoutes() {
   const isLogin = firstSegment === 'login';
   const isSignup = firstSegment === 'signup';
   const isCreateWedding = firstSegment === 'create-wedding';
+  const isTemplateDemo = firstSegment === 'templates';
+  const isMarketingHome = !firstSegment;
   const isPersonalizedInvite = isPersonalizedInvitePath(window.location.pathname);
   const slug = firstSegment ?? defaultWeddingSlug;
   const inviteCode = isPersonalizedInvite ? pathParts[2] : undefined;
+
+  if (isMarketingHome) {
+    return <MarketingHome />;
+  }
 
   if (isLogin) {
     return <AuthPage mode="login" />;
@@ -387,6 +564,10 @@ function AppRoutes() {
 
   if (isCreateWedding) {
     return <CreateWeddingPage />;
+  }
+
+  if (isTemplateDemo) {
+    return <TemplateDemoRoute demoKey={secondSegment} />;
   }
 
   if (firstSegment === 'mahesh-neha' && secondSegment === 'preview') {

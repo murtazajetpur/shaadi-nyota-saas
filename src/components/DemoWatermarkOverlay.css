@@ -1,0 +1,61 @@
+.demo-watermark-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.demo-watermark-pattern {
+  position: absolute;
+  inset: -18%;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(180px, 1fr));
+  gap: 3.2rem 2.4rem;
+  transform: rotate(-28deg);
+  opacity: 0.22;
+}
+
+.demo-watermark-pattern span {
+  color: rgba(104, 24, 35, 0.42);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(0.92rem, 2.4vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(255, 250, 238, 0.56);
+  white-space: nowrap;
+}
+
+.demo-watermark-badge {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  padding: 0.56rem 0.8rem;
+  border: 1px solid rgba(157, 115, 45, 0.42);
+  border-radius: 999px;
+  background: rgba(255, 249, 236, 0.78);
+  box-shadow: 0 16px 36px rgba(65, 25, 21, 0.14);
+  color: #6f1c2a;
+  font-family: var(--font-secondary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
+@media (max-width: 600px) {
+  .demo-watermark-pattern {
+    inset: -25%;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    gap: 2.6rem 1.4rem;
+  }
+
+  .demo-watermark-badge {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    font-size: 0.66rem;
+  }
+}

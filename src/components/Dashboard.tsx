@@ -6,7 +6,7 @@ import Section2 from './Section2';
 import Section5 from './Section5';
 import './Dashboard.css';
 import { useAuth } from '../context/AuthContext';
-import { updateWeddingShell } from '../lib/weddingOnboarding';
+import { updateWeddingPaymentStatus, updateWeddingShell } from '../lib/weddingOnboarding';
 import {
     createSupabaseEvent,
     createSupabaseGuest,
@@ -21,6 +21,9 @@ import {
     saveSupabaseWeddingSettings,
 } from '../lib/supabaseWeddingData';
 import {
+    canManageGuests,
+    canUpgradePlan,
+    canViewRsvpDashboard,
     defaultDashboardWeddingSlug,
     getPackageDisplayLabel,
     mockAdminWeddingsStorageKey,
@@ -34,6 +37,15 @@ import {
     type WeddingEvent,
     type WeddingGuest,
 } from '../data/sampleWeddingData';
+import {
+    buildManualPaymentWhatsAppUrl,
+    buildRsvpUpgradeWhatsAppUrl,
+    packageDetails,
+    paymentConfig,
+    paymentStatusDescriptions,
+    paymentStatusLabels,
+    type PaymentWhatsAppContext,
+} from '../data/paymentConfig';
 import {
     eventVisuals,
     getEventVisualByKey,
@@ -131,7 +143,7 @@ const revealAnimationOptions = getAllOpeningRevealAnimations().map((option) => (
     posterSrc: resolveAssetPath(option.posterSrc),
     revealImageShowAtSeconds: option.revealImageShowAtSeconds,
     heroFadeAtSeconds: option.heroFadeAtSeconds,
-    themeLabel: option.disabled ? 'Coming soon' : 'Reveal Animation',
+    themeLabel: option.disabled ? 'Unavailable' : 'Reveal Animation',
     disabled: option.disabled,
     helper: option.helper,
 }));
@@ -207,6 +219,40 @@ const isScrollReveal = (hero: SampleWeddingData['hero']) => (
 
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => {
     return JSON.parse(JSON.stringify(wedding)) as SampleWeddingData;
+};
+
+const normalizeEventSelectionKey = (value?: string | null) => (
+    value?.trim().toLowerCase().replace(/\s+/g, '-') ?? ''
+);
+
+const remapGuestInvitesToSavedEvents = (
+    guests: WeddingGuest[],
+    originalEvents: WeddingEvent[],
+    savedEvents: WeddingEvent[]
+) => {
+    const eventIdMap = new Map<string, string>();
+
+    savedEvents.forEach((savedEvent, index) => {
+        const originalEvent = originalEvents[index];
+        [
+            savedEvent.id,
+            savedEvent.eventKey,
+            savedEvent.eventName,
+            originalEvent?.id,
+            originalEvent?.eventKey,
+            originalEvent?.eventName,
+        ]
+            .map(normalizeEventSelectionKey)
+            .filter(Boolean)
+            .forEach((key) => eventIdMap.set(key, savedEvent.id));
+    });
+
+    return guests.map((guest) => ({
+        ...guest,
+        invitedEventIds: guest.invitedEventIds
+            .map((eventId) => eventIdMap.get(normalizeEventSelectionKey(eventId)) ?? eventId)
+            .filter((eventId, index, allIds) => Boolean(eventId) && allIds.indexOf(eventId) === index),
+    }));
 };
 
 const applyAdminFields = (wedding: SampleWeddingData): SampleWeddingData => {
@@ -405,6 +451,23 @@ const readDashboardDraft = (storageKey: string) => {
     }
 };
 
+const applyAuthoritativePlanState = (
+    draft: SampleWeddingData,
+    source?: SampleWeddingData
+) => {
+    if (!source) return draft;
+
+    return {
+        ...draft,
+        wedding: {
+            ...draft.wedding,
+            packageType: source.wedding.packageType,
+            paymentStatus: source.wedding.paymentStatus,
+            status: source.wedding.status,
+        },
+    };
+};
+
 const writeDashboardDraft = (storageKey: string, wedding: SampleWeddingData) => {
     const draft: DashboardDraftSnapshot = {
         savedAt: new Date().toISOString(),
@@ -445,7 +508,10 @@ export default function Dashboard({
     const dashboardDraftStorageKey = supabaseWeddingId
         ? createDashboardDraftStorageKey(mode, supabaseWeddingId, initialWedding?.wedding.slug)
         : mockDashboardDraftStorageKey;
-    const restoredDashboardDraft = supabaseWeddingId ? readDashboardDraft(dashboardDraftStorageKey) : null;
+    const storedDashboardDraft = supabaseWeddingId ? readDashboardDraft(dashboardDraftStorageKey) : null;
+    const restoredDashboardDraft = storedDashboardDraft
+        ? applyAuthoritativePlanState(storedDashboardDraft, initialWedding)
+        : null;
     const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
     const [weddingData, setWeddingData] = useState<SampleWeddingData>(() => (
         restoredDashboardDraft ?? (initialWedding ? normalizeWedding(initialWedding) : loadInitialWedding())
@@ -470,7 +536,20 @@ export default function Dashboard({
     const hasUnsavedChangesRef = useRef(Boolean(restoredDashboardDraft));
     const activeDraftStorageKeyRef = useRef(dashboardDraftStorageKey);
     const isAdminMode = mode === 'admin';
-    const showTechnicalSaveDetail = import.meta.env.DEV && Boolean(saveErrorDetail);
+    const hasDashboardGuestAccess = isAdminMode || canManageGuests(weddingData);
+    const hasDashboardRsvpAccess = isAdminMode || canViewRsvpDashboard(weddingData);
+    const showPlanUpgrade = !isAdminMode && canUpgradePlan(weddingData);
+    const weddingWebsiteUrl = `${window.location.origin}/${weddingData.wedding.slug}`;
+    const paymentWhatsAppContext: PaymentWhatsAppContext = {
+        email: user?.email,
+        slug: weddingData.wedding.slug,
+        websiteUrl: weddingWebsiteUrl,
+        brideName: weddingData.couple.brideName,
+        groomName: weddingData.couple.groomName,
+        coupleDisplayName: weddingData.couple.displayName,
+        packageType: weddingData.wedding.packageType,
+    };
+    const showTechnicalSaveDetail = Boolean(saveErrorDetail);
     const adminRlsHint = ' Admin access requires RLS policies allowing admins to read and update weddings, events, guests, guest_event_invites, and RSVP responses.';
 
     useEffect(() => {
@@ -503,7 +582,7 @@ export default function Dashboard({
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'rsvp') {
+        if (activeTab === 'rsvp' && hasDashboardRsvpAccess) {
             if (supabaseWeddingId) {
                 setIsRsvpLoading(true);
                 loadSupabaseRsvpResponses(
@@ -523,7 +602,7 @@ export default function Dashboard({
                 setRsvpResponses(loadStoredRsvpResponses());
             }
         }
-    }, [activeTab, supabaseWeddingId, weddingData.wedding.slug, weddingData.rsvp.guests]);
+    }, [activeTab, hasDashboardRsvpAccess, supabaseWeddingId, weddingData.wedding.slug, weddingData.rsvp.guests]);
 
     useEffect(() => {
         setSelectedGuestIds((current) => current.filter((id) => (
@@ -538,8 +617,9 @@ export default function Dashboard({
             if (!draftScopeChanged && hasUnsavedChangesRef.current) return;
             const restoredDraft = supabaseWeddingId ? readDashboardDraft(dashboardDraftStorageKey) : null;
             if (restoredDraft) {
-                setWeddingData(restoredDraft);
-                weddingDataRef.current = restoredDraft;
+                const nextDraft = applyAuthoritativePlanState(restoredDraft, initialWedding);
+                setWeddingData(nextDraft);
+                weddingDataRef.current = nextDraft;
                 setHasUnsavedChanges(true);
                 hasUnsavedChangesRef.current = true;
                 setSaveStatus('Unsaved draft restored');
@@ -731,6 +811,7 @@ export default function Dashboard({
             if (result.error) {
                 console.warn('Could not save wedding details', result.error);
                 setSaveStatus('');
+                setSaveErrorDetail(result.error);
                 setSaveError(result.error.toLowerCase().includes('duplicate') || result.error.toLowerCase().includes('unique')
                     ? 'This slug is already in use. Please choose another slug.'
                     : result.error);
@@ -766,20 +847,25 @@ export default function Dashboard({
                 });
                 setSaveStatus('');
                 setSaveErrorDetail(eventsResult.error);
-                setSaveError(`Could not save events.${isAdminMode ? adminRlsHint : ''}`);
+                setSaveError(`Could not save events.${isAdminMode ? adminRlsHint : ''} Please share the Technical detail line if this appears again.`);
                 return;
             }
             const savedEvents = eventsResult.events ?? weddingToSave.events;
+            const guestsToSave = eventsResult.events
+                ? remapGuestInvitesToSavedEvents(weddingToSave.rsvp.guests, weddingToSave.events, savedEvents)
+                : weddingToSave.rsvp.guests;
 
-            const guestsResult = await saveSupabaseGuests(supabaseWeddingId, weddingToSave.rsvp.guests, savedEvents);
+            const guestsResult = await saveSupabaseGuests(supabaseWeddingId, guestsToSave, savedEvents);
             if (guestsResult.error) {
                 console.warn('Could not save guests', guestsResult.error);
                 setSaveStatus('');
+                setSaveErrorDetail(guestsResult.error);
                 setSaveError(`Could not save guests.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
             if (eventsResult.events) {
                 weddingToSave.events = savedEvents;
+                weddingToSave.rsvp.guests = guestsToSave;
             }
         }
 
@@ -997,6 +1083,7 @@ export default function Dashboard({
             const result = await createSupabaseEvent(supabaseWeddingId, newEvent, weddingData.events.length);
             if (result.error || !result.event) {
                 console.warn('Could not add event', result.error);
+                setSaveErrorDetail(result.error ?? '');
                 setSaveError(`Could not add event.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
@@ -1020,6 +1107,7 @@ export default function Dashboard({
             const result = await deleteSupabaseEvent(eventToDelete.id);
             if (result.error) {
                 console.warn('Could not delete event', result.error);
+                setSaveErrorDetail(result.error);
                 setSaveError(`Could not delete event.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
@@ -1074,6 +1162,7 @@ export default function Dashboard({
             replaceSupabaseGuestInvites(supabaseWeddingId, currentGuest.id, nextEventIds, weddingData.events).then((result) => {
                 if (result.error) {
                     console.warn('Could not update guest events', result.error);
+                    setSaveErrorDetail(result.error);
                     setSaveError(`Could not update guest events.${isAdminMode ? adminRlsHint : ''}`);
                 }
             });
@@ -1095,6 +1184,7 @@ export default function Dashboard({
             const result = await createSupabaseGuest(supabaseWeddingId, newGuest);
             if (result.error || !result.guest) {
                 console.warn('Could not add guest', result.error);
+                setSaveErrorDetail(result.error ?? '');
                 setSaveError(`Could not add guest.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
@@ -1147,6 +1237,11 @@ export default function Dashboard({
     const copyGuestInviteLink = async (guest: WeddingGuest) => {
         const link = `${window.location.origin}${getGuestInviteLink(guest)}`;
         await window.navigator.clipboard?.writeText(link);
+    };
+
+    const copyWeddingWebsiteUrl = async () => {
+        await window.navigator.clipboard?.writeText(weddingWebsiteUrl);
+        setSaveStatus('Copied website URL');
     };
 
     const previewGuestInvite = async (guest: WeddingGuest) => {
@@ -1351,6 +1446,48 @@ export default function Dashboard({
         }));
     };
 
+    const handlePaymentVerificationRequest = async () => {
+        const hadUnsavedChanges = hasUnsavedChangesRef.current;
+        setSaveError('');
+        setSaveErrorDetail('');
+        setSaveStatus('Requesting payment verification...');
+
+        if (supabaseWeddingId) {
+            const result = await updateWeddingPaymentStatus({
+                weddingId: supabaseWeddingId,
+                paymentStatus: 'manual_pending',
+            });
+
+            if (result.error) {
+                setSaveStatus('');
+                setSaveErrorDetail(result.error);
+                setSaveError('Could not request payment verification. If Supabase says the status is invalid, run the manual payment status migration SQL.');
+                return;
+            }
+
+        }
+
+        const nextWedding: SampleWeddingData = {
+            ...weddingDataRef.current,
+            wedding: {
+                ...weddingDataRef.current.wedding,
+                paymentStatus: 'manual_pending',
+            },
+        };
+        weddingDataRef.current = nextWedding;
+        setWeddingData(nextWedding);
+
+        if (supabaseWeddingId && hadUnsavedChanges) {
+            writeDashboardDraft(dashboardDraftStorageKey, nextWedding);
+        } else if (!supabaseWeddingId) {
+            window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(nextWedding));
+        }
+
+        hasUnsavedChangesRef.current = hadUnsavedChanges;
+        setHasUnsavedChanges(hadUnsavedChanges);
+        setSaveStatus('Verification request submitted. We will review your payment and make the website live within 24-48 hours.');
+    };
+
     const toggleGuestSelection = (guestId: string) => {
         setSelectedGuestIds((current) => (
             current.includes(guestId)
@@ -1481,16 +1618,21 @@ export default function Dashboard({
                     {dashboardTabGroups.map((group) => (
                         <div className="dashboard-tab-group" key={group.label}>
                             <p className="dashboard-tab-group-label">{group.label}</p>
-                            {group.tabs.map((tab) => (
-                                <button
-                                    key={tab.id}
-                                    className={activeTab === tab.id ? 'active' : ''}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    type="button"
-                                >
-                                    {tab.label}
-                                </button>
-                            ))}
+                            {group.tabs.map((tab) => {
+                                const isLockedTab = (tab.id === 'guests' && !hasDashboardGuestAccess)
+                                    || (tab.id === 'rsvp' && !hasDashboardRsvpAccess);
+
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        className={`${activeTab === tab.id ? 'active' : ''}${isLockedTab ? ' locked' : ''}`}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        type="button"
+                                    >
+                                        {tab.label}{isLockedTab ? ' Locked' : ''}
+                                    </button>
+                                );
+                            })}
                         </div>
                     ))}
                 </nav>
@@ -1512,16 +1654,26 @@ export default function Dashboard({
                             <ReadOnlyBadgeCard
                                 label="Plan"
                                 value={getPackageDisplayLabel(weddingData.wedding.packageType)}
-                                helperText="Plan changes will be handled from checkout/admin in a later phase."
-                                actionLabel={weddingData.wedding.packageType === 'whatsapp' ? undefined : 'Request upgrade'}
+                                helperText={packageDetails[weddingData.wedding.packageType].summary}
                             />
                             <ReadOnlyBadgeCard
                                 label="Status"
                                 value={weddingData.wedding.status}
-                                helperText="Payment and publishing status will be managed by admin/payment flow later."
+                                helperText="Publishing is handled after payment/admin verification."
                             />
-                            <InfoBlock label="Payment" value={weddingData.wedding.paymentStatus} />
+                            <InfoBlock label="Payment" value={paymentStatusLabels[weddingData.wedding.paymentStatus]} />
                         </div>
+                        <ManualPaymentCard
+                            packageType={weddingData.wedding.packageType}
+                            paymentStatus={weddingData.wedding.paymentStatus}
+                            whatsAppContext={paymentWhatsAppContext}
+                            onRequestVerification={handlePaymentVerificationRequest}
+                        />
+                        {showPlanUpgrade && <RsvpUpgradeCard whatsAppContext={paymentWhatsAppContext} />}
+                        <WebsiteUrlCard
+                            url={weddingWebsiteUrl}
+                            onCopy={copyWeddingWebsiteUrl}
+                        />
                         <div className="form-grid dashboard-shell-fields">
                             <TextField
                                 label="Slug"
@@ -1788,7 +1940,7 @@ export default function Dashboard({
                     </div>
                 )}
 
-                {activeTab === 'guests' && (
+                {activeTab === 'guests' && (hasDashboardGuestAccess ? (
                     <div className="dashboard-panel">
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
@@ -1978,9 +2130,11 @@ export default function Dashboard({
                             )}
                         </div>
                     </div>
-                )}
+                ) : (
+                    <RsvpPlanLockedPanel title="Guest management is locked" whatsAppContext={paymentWhatsAppContext} />
+                ))}
 
-                {activeTab === 'rsvp' && (
+                {activeTab === 'rsvp' && (hasDashboardRsvpAccess ? (
                     <div className="dashboard-panel rsvp-dashboard-panel">
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
@@ -2062,7 +2216,9 @@ export default function Dashboard({
                             ))}
                         </RsvpTable>
                     </div>
-                )}
+                ) : (
+                    <RsvpPlanLockedPanel title="RSVP Dashboard is locked" whatsAppContext={paymentWhatsAppContext} />
+                ))}
 
                 {activeTab === 'closing-gallery' && (
                     <div className="dashboard-panel closing-gallery-panel">
@@ -2586,6 +2742,138 @@ function InfoBlock({ label, value }: { label: string; value: string }) {
             <span>{label}</span>
             <strong>{value}</strong>
         </div>
+    );
+}
+
+function ManualPaymentCard({
+    packageType,
+    paymentStatus,
+    whatsAppContext,
+    onRequestVerification,
+}: {
+    packageType: SampleWeddingData['wedding']['packageType'];
+    paymentStatus: SampleWeddingData['wedding']['paymentStatus'];
+    whatsAppContext: PaymentWhatsAppContext;
+    onRequestVerification: () => void;
+}) {
+    const plan = packageDetails[packageType];
+    const isPaid = paymentStatus === 'paid';
+    const isPending = paymentStatus === 'manual_pending' || paymentStatus === 'ref_pending';
+    const manualPaymentWhatsAppUrl = buildManualPaymentWhatsAppUrl(whatsAppContext);
+
+    return (
+        <section className={`manual-payment-card ${paymentStatus}`}>
+            <div className="manual-payment-header">
+                <div>
+                    <span className="manual-payment-eyebrow">Manual payment</span>
+                    <h3>{isPaid ? 'Your Plan Is Active' : 'Complete Your Payment'}</h3>
+                </div>
+                <strong>{paymentStatusLabels[paymentStatus]}</strong>
+            </div>
+            <div className="manual-payment-plan">
+                <span>{getPackageDisplayLabel(packageType)}</span>
+                <strong>{plan.priceLabel}</strong>
+            </div>
+            <p>{paymentStatusDescriptions[paymentStatus]}</p>
+            <ul>
+                {plan.features.map((feature) => (
+                    <li key={feature}>{feature}</li>
+                ))}
+            </ul>
+            {!isPaid && (
+                <div className="manual-payment-instructions">
+                    <strong>Manual Payment Required</strong>
+                    {paymentConfig.instructions.map((instruction) => (
+                        <p key={instruction}>{instruction}</p>
+                    ))}
+                    <p className="manual-payment-note">{paymentConfig.paymentNote}</p>
+                </div>
+            )}
+            <div className="manual-payment-actions">
+                {!isPaid && (
+                    <a className="dashboard-primary-btn secondary" href={manualPaymentWhatsAppUrl} target="_blank" rel="noreferrer">
+                        Contact on WhatsApp
+                    </a>
+                )}
+                {!isPaid && !isPending && (
+                    <button className="dashboard-primary-btn" type="button" onClick={onRequestVerification}>
+                        Request verification
+                    </button>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function RsvpUpgradeCard({ whatsAppContext }: { whatsAppContext: PaymentWhatsAppContext }) {
+    const rsvpUpgradeWhatsAppUrl = buildRsvpUpgradeWhatsAppUrl({
+        ...whatsAppContext,
+        packageType: 'rsvp',
+    });
+
+    return (
+        <section className="dashboard-upgrade-card">
+            <p className="dashboard-eyebrow">Upgrade</p>
+            <h3>Unlock RSVP Management</h3>
+            <p>
+                Manage guests, event-wise invitations, RSVP responses, and meal preferences.
+            </p>
+            <p>
+                If you have already paid for your current plan, you only need to pay the difference amount.
+                After payment, request verification and our team will update your plan.
+            </p>
+            <a className="dashboard-primary-btn" href={rsvpUpgradeWhatsAppUrl} target="_blank" rel="noreferrer">
+                Request Upgrade
+            </a>
+        </section>
+    );
+}
+
+function RsvpPlanLockedPanel({
+    title,
+    whatsAppContext,
+}: {
+    title: string;
+    whatsAppContext: PaymentWhatsAppContext;
+}) {
+    return (
+        <div className="dashboard-panel dashboard-locked-panel">
+            <div>
+                <p className="dashboard-eyebrow">Plan Locked</p>
+                <h2>{title}</h2>
+                <p>RSVP Management is not included in your current plan.</p>
+                <p>
+                    Upgrade to Basic Website + RSVP Management to manage guest lists, event-wise invites,
+                    RSVP responses, and meal preferences.
+                </p>
+            </div>
+            <RsvpUpgradeCard whatsAppContext={whatsAppContext} />
+        </div>
+    );
+}
+
+function WebsiteUrlCard({
+    url,
+    onCopy,
+}: {
+    url: string;
+    onCopy: () => void;
+}) {
+    return (
+        <section className="website-url-card">
+            <div>
+                <p className="dashboard-eyebrow">Website URL</p>
+                <a href={url} target="_blank" rel="noreferrer">{url}</a>
+            </div>
+            <div className="website-url-actions">
+                <button className="dashboard-primary-btn secondary" type="button" onClick={onCopy}>
+                    Copy URL
+                </button>
+                <a className="dashboard-primary-btn" href={url} target="_blank" rel="noreferrer">
+                    Open Website
+                </a>
+            </div>
+        </section>
     );
 }
 

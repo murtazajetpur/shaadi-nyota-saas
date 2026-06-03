@@ -156,9 +156,17 @@ const eventAssetSrcById: Record<string, string> = {
 const getEventAssetTokens = (category: string, id: string, style: string) => (
   id
     .replace(`event-${category}-`, '')
-    .replace(/-\d{2}$/, '')
+    .replace(/-(\d{2})(?:-|$)/, '-')
     .split('-')
-    .filter((token) => token && token !== style && token !== 'event' && token !== category)
+    .filter((token) => (
+      token &&
+      token !== style &&
+      token !== 'event' &&
+      token !== category &&
+      token !== 'regenerated' &&
+      !/^\d{2}$/.test(token) &&
+      !/^\d+x\d+$/.test(token)
+    ))
 );
 
 const makeEventAssetLabel = (
@@ -168,7 +176,8 @@ const makeEventAssetLabel = (
 ) => {
   const categoryLabel = eventCategoryLabels[category] ?? category;
   const styleLabel = eventStyleLabels[style] ?? style;
-  const number = id.match(/-(\d{2})$/)?.[1];
+  const number = id.match(/-(\d{2})(?:-|$)/)?.[1];
+  const aspectRatio = id.includes('9x20') ? '9:20' : id.includes('9x16') ? '9:16' : undefined;
   const tokens = getEventAssetTokens(category, id, style)
     .filter((token) => token !== 'foreground' && token !== 'bg')
     .join(' ');
@@ -178,7 +187,7 @@ const makeEventAssetLabel = (
     return `Generic Visual ${number ?? ''}`.trim();
   }
 
-  return `${descriptor} ${categoryLabel}${number ? ` ${number}` : ''}`;
+  return `${descriptor} ${categoryLabel}${number ? ` ${number}` : ''}${aspectRatio ? ` (${aspectRatio})` : ''}`;
 };
 
 const makeEventAsset = (
@@ -273,6 +282,7 @@ export const assetRegistry: SectionFirstAssetRegistry = {
       posters: [
         baseAsset({ id: 'poster-envelope-classic-01', label: 'Envelope Poster', src: '/assets/opening-reveal/envelope/posters/opening-envelope-poster.jpeg', type: 'poster', section: 'openingReveal', category: 'poster', style: 'classic', sourceTheme: 'palace-door-opening' }),
         baseAsset({ id: 'poster-scroll-floral-01', label: 'Scroll Poster', src: '/assets/opening-reveal/scroll/posters/opening-scroll-poster.png', type: 'poster', section: 'openingReveal', category: 'poster', style: 'scroll', sourceTheme: 'theme-2' }),
+        baseAsset({ id: 'poster-palace-door-01', label: 'Palace Door Poster', src: '/assets/opening-reveal/palace-door/posters/opening-reveal-palace-door-poster-01.png', type: 'poster', section: 'openingReveal', category: 'poster', style: 'palace-door', sourceTheme: 'palace-door-opening' }),
       ],
       revealedImages: [
         baseAsset({
@@ -480,21 +490,33 @@ export const assetRegistry: SectionFirstAssetRegistry = {
         'event-haldi-sketch-02',
         'event-haldi-sketch-03',
         'event-haldi-sketch-04',
+        'event-haldi-premium-01-regenerated-9x20',
+        'event-haldi-premium-02-regenerated-9x20',
+        'event-haldi-premium-03-regenerated-9x20',
+        'event-haldi-premium-04-regenerated-9x20',
+        'event-haldi-premium-05-regenerated-9x20',
+        'event-haldi-premium-06-regenerated-9x20',
+        'event-haldi-premium-07-regenerated-9x20',
+        'event-haldi-premium-08-regenerated-9x20',
+        'event-haldi-faceless-01-regenerated-9x20',
+        'event-haldi-faceless-02-regenerated-9x20',
+        'event-haldi-faceless-03-regenerated-9x20',
+        'event-haldi-faceless-04-regenerated-9x20',
+        'event-haldi-sketch-01-regenerated-9x20',
+        'event-haldi-sketch-02-regenerated-9x20',
+        'event-haldi-sketch-03-regenerated-9x20',
+        'event-haldi-sketch-04-regenerated-9x20',
       ]),
       mehendi: makeEventAssets('mehendi', [
         'event-mehendi-premium-01',
-        'event-mehendi-premium-02',
         'event-mehendi-premium-04',
-        'event-mehendi-premium-09',
         'event-mehendi-faceless-01',
         'event-mehendi-faceless-02',
         'event-mehendi-faceless-03',
         'event-mehendi-faceless-04',
         'event-mehendi-sketch-01',
         'event-mehendi-sketch-02',
-        'event-mehendi-sketch-03',
         'event-mehendi-sketch-04',
-        'event-mehendi-sketch-05',
         'event-mehendi-sketch-06',
       ]),
       sangeet: makeEventAssets('sangeet', [
@@ -562,7 +584,6 @@ export const assetRegistry: SectionFirstAssetRegistry = {
         'event-wedding-sketch-07',
       ]),
       reception: makeEventAssets('reception', [
-        'event-reception-premium-01',
         'event-reception-premium-02',
         'event-reception-premium-03',
         'event-reception-premium-04',
@@ -577,7 +598,6 @@ export const assetRegistry: SectionFirstAssetRegistry = {
         'event-reception-premium-17',
         'event-reception-premium-18',
         'event-reception-premium-20',
-        'event-reception-premium-21',
         'event-reception-faceless-01',
         'event-reception-faceless-02',
         'event-reception-faceless-03',
@@ -638,7 +658,7 @@ export const assetRegistry: SectionFirstAssetRegistry = {
       ourStoryImageId: 'story-pheras-01',
       eventVisualDefaults: {
         haldi: 'event-haldi-premium-06',
-        mehendi: 'event-mehendi-premium-03',
+        mehendi: 'event-mehendi-premium-04',
         sangeet: 'event-sangeet-premium-05',
         wedding: 'event-wedding-premium-16',
         reception: 'event-reception-premium-02',
@@ -648,12 +668,12 @@ export const assetRegistry: SectionFirstAssetRegistry = {
     },
     'palace-door-opening': {
       openingRevealAnimationId: 'opening-palace-door-01',
-      openingRevealPosterId: 'poster-envelope-classic-01',
+      openingRevealPosterId: 'poster-palace-door-01',
       revealedImageId: 'revealed-generic-classic-04',
       ourStoryImageId: 'story-floral-swing-02',
       eventVisualDefaults: {
         haldi: 'event-haldi-premium-06',
-        mehendi: 'event-mehendi-premium-03',
+        mehendi: 'event-mehendi-premium-04',
         sangeet: 'event-sangeet-premium-05',
         wedding: 'event-wedding-premium-16',
         reception: 'event-reception-premium-02',
@@ -668,7 +688,7 @@ export const assetRegistry: SectionFirstAssetRegistry = {
       ourStoryImageId: 'story-holding-hands-02',
       eventVisualDefaults: {
         haldi: 'event-haldi-premium-06',
-        mehendi: 'event-mehendi-premium-03',
+        mehendi: 'event-mehendi-premium-04',
         sangeet: 'event-sangeet-premium-05',
         wedding: 'event-wedding-premium-16',
         reception: 'event-reception-premium-02',
@@ -696,15 +716,15 @@ export const legacyEventAssetIdMap: Record<string, string> = {
   'event-haldi-classic-foreground-01': 'event-haldi-premium-03',
   'event-haldi-couple-watercolor-04': 'event-haldi-premium-04',
   'event-haldi-scroll-01': 'event-haldi-premium-05',
-  'event-mehendi-classic-foreground-01': 'event-mehendi-premium-02',
+  'event-mehendi-classic-foreground-01': 'event-mehendi-premium-01',
   'event-mehendi-couple-watercolor-01': 'event-mehendi-sketch-04',
   'event-mehendi-couple-watercolor-02': 'event-mehendi-premium-04',
-  'event-mehendi-couple-watercolor-03': 'event-mehendi-sketch-05',
+  'event-mehendi-couple-watercolor-03': 'event-mehendi-sketch-06',
   'event-mehendi-couple-watercolor-04': 'event-mehendi-faceless-03',
   'event-mehendi-couple-watercolor-05': 'event-mehendi-faceless-04',
   'event-mehendi-couple-watercolor-06': 'event-mehendi-sketch-06',
-  'event-mehendi-scroll-01': 'event-mehendi-premium-09',
-  'event-reception-classic-foreground-01': 'event-reception-premium-01',
+  'event-mehendi-scroll-01': 'event-mehendi-premium-04',
+  'event-reception-classic-foreground-01': 'event-reception-premium-02',
   'event-reception-couple-formal-watercolor-01': 'event-reception-premium-02',
   'event-reception-couple-formal-watercolor-02': 'event-reception-premium-03',
   'event-reception-couple-formal-watercolor-03': 'event-reception-premium-04',
@@ -724,7 +744,7 @@ export const legacyEventAssetIdMap: Record<string, string> = {
   'event-reception-generic-09': 'event-reception-premium-18',
   'event-reception-generic-10': 'event-reception-faceless-07',
   'event-reception-piano-watercolor-01': 'event-reception-premium-20',
-  'event-reception-scroll-01': 'event-reception-premium-21',
+  'event-reception-scroll-01': 'event-reception-premium-20',
   'event-sangeet-classic-foreground-01': 'event-sangeet-premium-02',
   'event-sangeet-dance-watercolor-01': 'event-sangeet-faceless-03',
   'event-sangeet-dance-watercolor-02': 'event-sangeet-faceless-04',
@@ -772,7 +792,7 @@ export const legacyEventAssetIdMap: Record<string, string> = {
   'event-wedding-red-bridal-watercolor-05': 'event-wedding-premium-34',
   'event-wedding-scroll-01': 'event-wedding-premium-35',
   'event-mehendi-premium-03': 'event-mehendi-sketch-04',
-  'event-mehendi-premium-05': 'event-mehendi-sketch-05',
+  'event-mehendi-premium-05': 'event-mehendi-sketch-06',
   'event-mehendi-premium-06': 'event-mehendi-faceless-03',
   'event-mehendi-premium-07': 'event-mehendi-faceless-04',
   'event-mehendi-premium-08': 'event-mehendi-sketch-06',
@@ -841,20 +861,20 @@ export const legacyAssetPathMap: Record<string, string> = {
   '/assets/our-story/backgrounds/story-bg-scroll-generic-01.png': '/assets/our-story/images/story-pheras-01.png',
   '/assets/haldi.png': '/assets/events/haldi/event-haldi-premium-03-9x16.png',
   '/assets/haldi-bg.png': '/assets/haldi-bg.png',
-  '/assets/mehendi.png': '/assets/events/mehendi/event-mehendi-premium-02.png',
+  '/assets/mehendi.png': '/assets/events/mehendi/event-mehendi-premium-01.png',
   '/assets/mehendi-bg.png': '/assets/mehendi-bg.png',
   '/assets/sangeet.png': '/assets/events/sangeet/event-sangeet-premium-02.png',
   '/assets/sangeet-bg.png': '/assets/sangeet-bg.png',
   '/assets/wedding.png': '/assets/events/wedding/event-wedding-premium-10.png',
   '/assets/wedding-bg.png': '/assets/wedding-bg.png',
-  '/assets/reception.png': '/assets/events/reception/event-reception-premium-01.png',
+  '/assets/reception.png': '/assets/events/reception/event-reception-premium-02.png',
   '/assets/reception-bg.png': '/assets/reception-bg.png',
   '/assets/event-gap-bg.png': '/assets/event-gap-bg.png',
   '/assets/theme-2/haldi.png': '/assets/events/haldi/event-haldi-premium-05-9x16.png',
-  '/assets/theme-2/mehendi.png': '/assets/events/mehendi/event-mehendi-premium-09.png',
+  '/assets/theme-2/mehendi.png': '/assets/events/mehendi/event-mehendi-premium-04.png',
   '/assets/theme-2/sangeet.png': '/assets/events/sangeet/event-sangeet-premium-14.png',
   '/assets/theme-2/shaadi.png': '/assets/events/wedding/event-wedding-premium-35.png',
-  '/assets/theme-2/reception.png': '/assets/events/reception/event-reception-premium-21.png',
+  '/assets/theme-2/reception.png': '/assets/events/reception/event-reception-premium-20.png',
   '/assets/heart-frame.png': '/assets/closing-gallery/frames/closing-frame-heart-classic-01.png',
   '/assets/carousel1.png': '/assets/closing-gallery/preset-photos/closing-photo-preset-01.png',
   '/assets/carousel2.png': '/assets/closing-gallery/preset-photos/closing-photo-preset-02.png',

@@ -97,7 +97,14 @@ Do not commit `.env`. It is ignored by git.
 
 ## 7. Runtime Notes
 
+- Active purchasable plans are `basic` (Basic Website, ₹3,000) and `rsvp` (Basic Website + RSVP Management, ₹5,000).
+- A legacy package value remains in the schema only for existing records and is not shown as an active purchasable plan.
 - Public RSVP depends on `weddings.status = 'published'`.
+- Manual payment verification requests use `weddings.payment_status = 'manual_pending'`. The dashboard labels this as "Verification Requested". If an older database still only allows `unpaid` and `paid`, run `supabase/add_manual_payment_status.sql`.
+- Basic Website dashboards show Guests and RSVP Dashboard as locked upgrade panels. Admin editing remains unrestricted.
+- Dashboard/admin builder saves depend on the latest `wedding_settings` columns. If saving settings fails with a missing-column or schema-cache error, run `supabase/add_builder_settings_columns.sql`.
+- Dashboard/admin event saves need current event columns plus authenticated insert/update/delete privileges. If saving Events fails with an RLS or permission error, run `supabase/fix_admin_events.sql`.
+- To repair all dashboard/admin section editing permissions and current builder columns in one pass, run `supabase/fix_dashboard_admin_permissions.sql`.
 - Draft weddings are visible in the couple dashboard and admin panel but not on public invite routes.
 - Suspended weddings show an unavailable message on public invite routes.
 - Admin pages rely on `public.is_admin()` in RLS policies.

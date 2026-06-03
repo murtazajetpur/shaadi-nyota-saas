@@ -16,10 +16,12 @@ export type RevealStyle = 'envelope' | 'scroll' | 'palace-door';
 export type RevealImageType = 'blessing' | 'couple' | 'floral';
 
 export const packageDisplayLabels: Record<PackageType, string> = {
-  basic: 'Nyota Classic',
-  rsvp: 'Nyota Plus',
-  whatsapp: 'Nyota Complete',
+  basic: 'Basic Website',
+  rsvp: 'Basic Website + RSVP Management',
+  whatsapp: 'Basic Website + RSVP Management',
 };
+
+export const activePackageTypes: PackageType[] = ['basic', 'rsvp'];
 
 export const getPackageDisplayLabel = (packageType: PackageType) => {
   return packageDisplayLabels[packageType];
@@ -268,7 +270,7 @@ export const sampleWeddings: SampleWeddingData[] = [
   {
     wedding: {
       slug: 'murtaza-lubna',
-      packageType: 'basic',
+      packageType: 'rsvp',
       status: 'published',
       paymentStatus: 'paid',
       themeKey: 'palace-door-opening',
@@ -553,8 +555,17 @@ export const getWeddingBySlug = (slug: string) => {
 };
 
 export const hasRsvpAccess = (wedding: SampleWeddingData) => {
+  // Legacy package records keep RSVP access so old weddings do not lose features.
   return wedding.wedding.packageType === 'rsvp' || wedding.wedding.packageType === 'whatsapp';
 };
+
+export const canManageGuests = hasRsvpAccess;
+
+export const canViewRsvpDashboard = hasRsvpAccess;
+
+export const canUpgradePlan = (wedding: SampleWeddingData) => (
+  wedding.wedding.packageType === 'basic'
+);
 
 export const getGuestByInviteCode = (wedding: SampleWeddingData, inviteCode: string) => {
   return wedding.rsvp.guests.find((guest) => guest.inviteCode === inviteCode);

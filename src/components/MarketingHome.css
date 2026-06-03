@@ -1,0 +1,655 @@
+.marketing-home {
+  min-height: 100vh;
+  background:
+    linear-gradient(90deg, rgba(108, 26, 35, 0.06) 1px, transparent 1px),
+    linear-gradient(180deg, #fffaf0 0%, #f7eadb 42%, #fff8ec 100%);
+  background-size: 46px 46px, auto;
+  color: #2b1713;
+  font-family: var(--font-secondary);
+  overflow-x: hidden;
+}
+
+.marketing-home::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(154, 36, 48, 0.13), transparent 26%),
+    radial-gradient(circle at 82% 4%, rgba(194, 153, 76, 0.2), transparent 28%),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.54), transparent 42%, rgba(128, 36, 42, 0.07));
+  z-index: 0;
+}
+
+.marketing-home > * {
+  position: relative;
+  z-index: 1;
+}
+
+.marketing-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 0.85rem 0;
+  backdrop-filter: blur(16px);
+}
+
+.marketing-header::after {
+  content: "";
+  position: absolute;
+  inset: 0.45rem -0.75rem;
+  z-index: -1;
+  border: 1px solid rgba(168, 124, 54, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 250, 239, 0.78);
+  box-shadow: 0 18px 45px rgba(68, 28, 20, 0.08);
+}
+
+.marketing-brand,
+.marketing-header nav,
+.marketing-header-actions,
+.marketing-footer nav,
+.marketing-hero-actions,
+.template-actions,
+.template-badges {
+  display: flex;
+  align-items: center;
+}
+
+.marketing-brand {
+  gap: 0.65rem;
+  min-width: max-content;
+  color: #641924;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.marketing-brand img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.marketing-header nav {
+  gap: 1.2rem;
+}
+
+.marketing-header a,
+.marketing-footer a {
+  color: #5d3130;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.marketing-header a:hover,
+.marketing-footer a:hover {
+  color: #8a1f2f;
+}
+
+.marketing-header-actions {
+  gap: 0.65rem;
+}
+
+.marketing-login {
+  padding: 0.65rem 0.35rem;
+}
+
+.marketing-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.75rem 1.05rem;
+  border-radius: 999px;
+  border: 1px solid rgba(158, 116, 45, 0.42);
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-decoration: none;
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.marketing-btn.primary {
+  background: linear-gradient(135deg, #7a1d2c, #4c151c);
+  color: #fff8ea;
+  box-shadow: 0 14px 30px rgba(107, 25, 35, 0.24);
+}
+
+.marketing-btn.secondary {
+  background: rgba(255, 251, 244, 0.84);
+  color: #6b1d28;
+}
+
+.marketing-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(80, 28, 24, 0.14);
+}
+
+.marketing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.98fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: center;
+  width: min(1180px, calc(100% - 32px));
+  min-height: calc(100vh - 74px);
+  margin: 0 auto;
+  padding: clamp(3rem, 7vw, 6.5rem) 0 4rem;
+}
+
+.marketing-eyebrow {
+  margin: 0 0 0.8rem;
+  color: #8f6931;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.marketing-hero h1,
+.marketing-section h2,
+.marketing-final-cta h2 {
+  margin: 0;
+  color: #551722;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.marketing-hero h1 {
+  max-width: 760px;
+  font-size: clamp(3rem, 6.4vw, 6.3rem);
+  line-height: 0.92;
+}
+
+.marketing-hero-copy > p:not(.marketing-eyebrow),
+.marketing-section-heading p:not(.marketing-eyebrow),
+.rsvp-highlight p,
+.marketing-final-cta p:not(.marketing-eyebrow),
+.marketing-footer p,
+.pricing-note {
+  color: #68443f;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.marketing-hero-copy > p:not(.marketing-eyebrow) {
+  max-width: 640px;
+  margin: 1.35rem 0 0;
+  font-size: clamp(1.05rem, 2vw, 1.25rem);
+}
+
+.marketing-hero-actions {
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1.65rem;
+}
+
+.marketing-hero-visual {
+  position: relative;
+  min-height: 650px;
+}
+
+.marketing-hero-visual::before {
+  content: "";
+  position: absolute;
+  inset: 7% 2% 10% 18%;
+  border: 1px solid rgba(184, 138, 62, 0.28);
+  border-radius: 42% 42% 4% 4%;
+  background: linear-gradient(180deg, rgba(255, 247, 230, 0.52), rgba(134, 36, 46, 0.04));
+}
+
+.marketing-phone {
+  position: absolute;
+  width: 250px;
+  aspect-ratio: 9 / 16;
+  padding: 10px;
+  border: 1px solid rgba(168, 124, 54, 0.32);
+  border-radius: 32px;
+  background: linear-gradient(180deg, #fffdf8, #f5eadb);
+  box-shadow: 0 28px 60px rgba(69, 31, 25, 0.18);
+}
+
+.marketing-phone.main {
+  left: 50%;
+  top: 50%;
+  width: min(330px, 64vw);
+  transform: translate(-50%, -50%);
+}
+
+.marketing-phone.side {
+  width: 170px;
+}
+
+.marketing-phone.side.top {
+  right: 2%;
+  top: 7%;
+  transform: rotate(4deg);
+}
+
+.marketing-phone.side.bottom {
+  left: 2%;
+  bottom: 9%;
+  transform: rotate(-4deg);
+}
+
+.marketing-phone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #fff8ee;
+}
+
+.marketing-phone-screen img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.marketing-phone-copy {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  gap: 0.35rem;
+  padding: 4.5rem 1.1rem 1.2rem;
+  color: #fff7e8;
+  background: linear-gradient(180deg, transparent, rgba(64, 18, 20, 0.84));
+  text-align: center;
+}
+
+.marketing-phone-copy span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.marketing-phone-copy strong {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.marketing-section,
+.marketing-final-cta,
+.marketing-footer {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.marketing-section {
+  padding: clamp(3rem, 7vw, 5rem) 0;
+}
+
+.marketing-section-heading {
+  max-width: 760px;
+  margin-bottom: 1.6rem;
+}
+
+.marketing-section h2,
+.marketing-final-cta h2 {
+  font-size: clamp(2rem, 4vw, 4rem);
+  line-height: 1;
+}
+
+.template-grid,
+.feature-grid,
+.steps-grid,
+.pricing-grid,
+.faq-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.template-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.template-card,
+.feature-card,
+.step-card,
+.pricing-card,
+.faq-grid article,
+.rsvp-highlight,
+.marketing-final-cta,
+.marketing-footer {
+  border: 1px solid rgba(168, 124, 54, 0.24);
+  background: rgba(255, 251, 242, 0.72);
+  box-shadow: 0 18px 45px rgba(75, 31, 25, 0.08);
+}
+
+.template-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  border-radius: 28px;
+}
+
+.template-preview {
+  aspect-ratio: 9 / 12;
+  overflow: hidden;
+  background: #f5eadb;
+}
+
+.template-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.template-card > div:last-child,
+.feature-card,
+.step-card,
+.pricing-card,
+.faq-grid article {
+  padding: 1.25rem;
+}
+
+.template-card h3,
+.feature-card h3,
+.step-card h3,
+.pricing-card h3,
+.faq-grid h3 {
+  margin: 0;
+  color: #5d1823;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.35rem;
+}
+
+.template-card p,
+.feature-card p,
+.step-card p,
+.faq-grid p,
+.pricing-card p,
+.pricing-card li {
+  color: #6b4942;
+  line-height: 1.65;
+}
+
+.template-badges {
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 1rem 0;
+}
+
+.template-badges span {
+  padding: 0.38rem 0.55rem;
+  border: 1px solid rgba(158, 116, 45, 0.28);
+  border-radius: 999px;
+  color: #7e5b25;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.template-actions {
+  gap: 0.7rem;
+}
+
+.template-actions a {
+  color: #7a1d2c;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.flow-line {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.7rem;
+  position: relative;
+}
+
+.flow-step {
+  min-height: 126px;
+  padding: 1rem;
+  border: 1px solid rgba(168, 124, 54, 0.24);
+  border-radius: 22px;
+  background: rgba(255, 251, 244, 0.76);
+}
+
+.flow-step span,
+.step-card span,
+.rsvp-mini-card span {
+  color: #9a7433;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.flow-step strong {
+  display: block;
+  margin-top: 1.4rem;
+  color: #5d1823;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.25rem;
+}
+
+.feature-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.feature-card,
+.step-card,
+.faq-grid article {
+  border-radius: 24px;
+}
+
+.rsvp-highlight {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 1.5rem;
+  align-items: center;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border-radius: 32px;
+  background:
+    linear-gradient(135deg, rgba(255, 250, 240, 0.84), rgba(245, 226, 207, 0.72)),
+    linear-gradient(90deg, rgba(119, 29, 42, 0.08), transparent);
+}
+
+.rsvp-mini-card {
+  padding: 1.2rem;
+  border: 1px solid rgba(126, 29, 42, 0.18);
+  border-radius: 24px;
+  background: #fffaf0;
+  text-align: center;
+}
+
+.rsvp-mini-card strong {
+  display: block;
+  color: #6e1d29;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 4rem;
+  line-height: 1;
+}
+
+.steps-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pricing-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.pricing-card {
+  border-radius: 30px;
+}
+
+.pricing-card.featured {
+  background: linear-gradient(180deg, rgba(117, 29, 43, 0.96), rgba(76, 21, 28, 0.96));
+  color: #fff8ea;
+}
+
+.pricing-card.featured h3,
+.pricing-card.featured strong,
+.pricing-card.featured p,
+.pricing-card.featured li {
+  color: #fff8ea;
+}
+
+.pricing-card > strong {
+  display: block;
+  margin: 0.8rem 0 1rem;
+  color: #6f1d29;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 2.4rem;
+}
+
+.pricing-card ul {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 0 1.25rem;
+  padding-left: 1.15rem;
+}
+
+.pricing-note {
+  max-width: 760px;
+  margin: 1rem auto 0;
+  text-align: center;
+}
+
+.faq-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.marketing-final-cta {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding: clamp(2rem, 6vw, 4rem);
+  border-radius: 34px;
+  text-align: center;
+}
+
+.marketing-footer {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  border-radius: 28px;
+}
+
+.marketing-footer nav {
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.marketing-footer small {
+  color: #7b5a52;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-btn,
+  .marketing-header a,
+  .template-actions a {
+    transition: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .marketing-header nav {
+    display: none;
+  }
+
+  .marketing-hero {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    padding-top: 3rem;
+  }
+
+  .marketing-hero-visual {
+    min-height: 560px;
+  }
+
+  .template-grid,
+  .feature-grid,
+  .steps-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flow-line {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-step {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 680px) {
+  .marketing-header {
+    width: min(100% - 20px, 1180px);
+  }
+
+  .marketing-header::after {
+    border-radius: 24px;
+  }
+
+  .marketing-brand span {
+    font-size: 1rem;
+  }
+
+  .marketing-header-actions {
+    gap: 0.35rem;
+  }
+
+  .marketing-login {
+    display: none;
+  }
+
+  .marketing-btn {
+    min-height: 42px;
+    padding: 0.7rem 0.85rem;
+    font-size: 0.82rem;
+  }
+
+  .marketing-hero,
+  .marketing-section,
+  .marketing-final-cta,
+  .marketing-footer {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .marketing-hero h1 {
+    font-size: clamp(2.7rem, 15vw, 4.2rem);
+  }
+
+  .marketing-hero-visual {
+    min-height: 500px;
+  }
+
+  .marketing-phone.main {
+    width: min(290px, 74vw);
+  }
+
+  .marketing-phone.side {
+    width: 132px;
+  }
+
+  .template-grid,
+  .feature-grid,
+  .steps-grid,
+  .pricing-grid,
+  .faq-grid,
+  .rsvp-highlight {
+    grid-template-columns: 1fr;
+  }
+
+  .template-preview {
+    aspect-ratio: 9 / 11;
+  }
+}

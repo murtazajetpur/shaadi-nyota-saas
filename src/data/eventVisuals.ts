@@ -61,10 +61,10 @@ const registryEventVisuals = Object.values(assetRegistry.sections.events)
 
 const legacyTheme2VisualKeyMap: Record<string, string> = {
   'theme2-haldi': 'event-haldi-premium-05',
-  'theme2-mehendi': 'event-mehendi-premium-09',
+  'theme2-mehendi': 'event-mehendi-premium-04',
   'theme2-sangeet': 'event-sangeet-premium-14',
   'theme2-shaadi': 'event-wedding-premium-35',
-  'theme2-reception': 'event-reception-premium-21',
+  'theme2-reception': 'event-reception-premium-20',
   'theme2-generic': 'event-generic-premium-12',
 };
 

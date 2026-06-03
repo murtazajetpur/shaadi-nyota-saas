@@ -238,6 +238,13 @@
     color: #5d3715;
 }
 
+.admin-plan-price {
+    display: block;
+    margin-top: 6px;
+    color: #6b6b6b;
+    font-size: 0.78rem;
+}
+
 .admin-status-badge.paid,
 .admin-status-badge.published {
     background: #edf7ef;
@@ -245,9 +252,15 @@
 }
 
 .admin-status-badge.unpaid,
+.admin-status-badge.manual_pending,
+.admin-status-badge.ref_pending,
 .admin-status-badge.draft {
     background: #fff8e7;
     color: #8a5d12;
+}
+
+.admin-payment-request-row {
+    background: #fffaf1;
 }
 
 .admin-status-badge.suspended {

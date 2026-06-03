@@ -17,14 +17,14 @@ Use Supabase as the MVP backend because it gives the product Auth, Postgres, row
 For MVP:
 
 - Keep internal package values as `basic`, `rsvp`, and `whatsapp`.
-- Keep UI labels as `Nyota Classic`, `Nyota Plus`, and `Nyota Complete`.
-- Use only `payment_status = 'unpaid' | 'paid'`.
+- Keep user-facing labels aligned to active packages: Basic Website and Basic Website + RSVP Management.
+- Use `payment_status = 'unpaid' | 'manual_pending' | 'ref_pending' | 'paid'`; `manual_pending` is displayed as Verification Requested.
 - Keep website status separate from payment status.
 - Keep date/time labels for current invite display.
 
 Later:
 
-- Add manual/refund-oriented payment states such as `manual_pending` or refund-related statuses if the payment workflow needs them.
+- Keep manual verification state until a real checkout flow replaces it.
 - Add Supabase Storage for media upload and management.
 - Add proper event datetime fields before WhatsApp event reminders.
 
@@ -388,7 +388,7 @@ Current localStorage keys:
 
 - Require Supabase Auth.
 - Couple users can access weddings where `weddings.owner_id = auth.uid()`.
-- Couple dashboard can edit wedding settings, events, guests, guest-event invites, and theme/media fields allowed by the product.
+- Couple dashboard can edit wedding settings, events, and theme/media fields allowed by the product. Guests, guest-event invites, and RSVP dashboard access require the RSVP package.
 - Package, payment, and publish status stay admin/payment-managed.
 
 ### Admin panel: `/admin`
@@ -439,7 +439,7 @@ Current localStorage keys:
 
 - Move admin localStorage state into `weddings`.
 - Admin updates package, payment status, website status, and `published_at`.
-- Keep real payment gateway out of scope.
+- Keep real payment gateway out of scope; manual payment verification uses the dashboard request action and admin Mark Paid / Verify Payment.
 
 ### Phase G: Storage/media later
 
@@ -449,12 +449,12 @@ Current localStorage keys:
 
 ## Mock Or Out Of Scope For Now
 
-- WhatsApp automation.
+- Additional invitation delivery channels.
 - Real online payment gateway.
 - Custom domains.
 - Multi-theme marketplace.
 - Media upload/asset management.
-- Manual pending/refund payment statuses.
+- Refund payment statuses.
 
 ## Risks And Decisions
 

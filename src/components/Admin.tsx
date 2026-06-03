@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import './Admin.css';
 import { useAuth } from '../context/AuthContext';
 import {
+    activePackageTypes,
     getPackageDisplayLabel,
     getThemeDisplayLabel,
     mockAdminWeddingsStorageKey,
@@ -10,14 +11,16 @@ import {
     packageDisplayLabels,
     sampleWeddings,
     type PackageType,
+    type PaymentStatus,
     type SampleWeddingData,
     type StoredRsvpResponse,
     type WeddingStatus,
 } from '../data/sampleWeddingData';
+import { packageDetails, paymentStatusLabels } from '../data/paymentConfig';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 type WebsiteStatus = 'draft' | 'published' | 'suspended';
-type PaymentFilter = 'all' | 'unpaid' | 'paid';
+type PaymentFilter = 'all' | PaymentStatus;
 type WebsiteStatusFilter = 'all' | WebsiteStatus;
 type AdminDataSource = 'supabase' | 'mock';
 
@@ -27,7 +30,7 @@ interface SupabaseWeddingRow {
     slug: string;
     package_type: PackageType;
     status: WebsiteStatus;
-    payment_status: 'unpaid' | 'paid';
+    payment_status: PaymentStatus;
     bride_name: string | null;
     groom_name: string | null;
     display_name: string | null;
@@ -41,7 +44,7 @@ interface AdminWeddingRecord {
     id: string;
     slug: string;
     packageType: PackageType;
-    paymentStatus: 'unpaid' | 'paid';
+    paymentStatus: PaymentStatus;
     websiteStatus: WebsiteStatus;
     displayName: string;
     pageTitle: string;
@@ -54,13 +57,19 @@ interface AdminWeddingRecord {
     eventCount: number | null;
 }
 
-const packageOptions: PackageType[] = ['basic', 'rsvp', 'whatsapp'];
+const getAdminPackageOptions = (currentPackageType?: PackageType) => {
+    const options = [...activePackageTypes];
+    if (currentPackageType && !options.includes(currentPackageType)) {
+        options.push(currentPackageType);
+    }
+    return options;
+};
 
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => (
     JSON.parse(JSON.stringify(wedding)) as SampleWeddingData
 );
 
-const getFallbackPaymentStatus = (status: WeddingStatus): 'unpaid' | 'paid' => (
+const getFallbackPaymentStatus = (status: WeddingStatus): PaymentStatus => (
     status === 'paid' || status === 'published' ? 'paid' : 'unpaid'
 );
 
@@ -546,8 +555,10 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                         value={String(summaries.filter((summary) => summary.websiteStatus === 'published').length)}
                     />
                     <InfoCard
-                        label="Unpaid"
-                        value={String(summaries.filter((summary) => summary.paymentStatus === 'unpaid').length)}
+                        label="Payment Requests"
+                        value={String(summaries.filter((summary) => (
+                            summary.paymentStatus === 'manual_pending' || summary.paymentStatus === 'ref_pending'
+                        )).length)}
                     />
                     <InfoCard
                         label="Total Guests"
@@ -572,7 +583,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                         <span>Plan</span>
                         <select value={planFilter} onChange={(event) => setPlanFilter(event.target.value as 'all' | PackageType)}>
                             <option value="all">All plans</option>
-                            {packageOptions.map((packageType) => (
+                            {getAdminPackageOptions().map((packageType) => (
                                 <option key={packageType} value={packageType}>{getPackageDisplayLabel(packageType)}</option>
                             ))}
                         </select>
@@ -581,8 +592,10 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                         <span>Payment</span>
                         <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value as PaymentFilter)}>
                             <option value="all">All payment</option>
-                            <option value="unpaid">unpaid</option>
-                            <option value="paid">paid</option>
+                            <option value="unpaid">{paymentStatusLabels.unpaid}</option>
+                            <option value="manual_pending">{paymentStatusLabels.manual_pending}</option>
+                            <option value="ref_pending">{paymentStatusLabels.ref_pending}</option>
+                            <option value="paid">{paymentStatusLabels.paid}</option>
                         </select>
                     </label>
                     <label>
@@ -617,14 +630,17 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                         <tbody>
                             {filteredSummaries.map((wedding) => (
                                 <Fragment key={wedding.id}>
-                                    <tr>
+                                    <tr className={wedding.paymentStatus === 'manual_pending' || wedding.paymentStatus === 'ref_pending' ? 'admin-payment-request-row' : undefined}>
                                         <td>
                                             <strong>{wedding.displayName}</strong>
                                             <small>{wedding.pageTitle}</small>
                                         </td>
                                         <td><code>{wedding.slug}</code></td>
-                                        <td><StatusBadge tone="plan">{getPackageDisplayLabel(wedding.packageType)}</StatusBadge></td>
-                                        <td><StatusBadge tone={wedding.paymentStatus}>{wedding.paymentStatus}</StatusBadge></td>
+                                        <td>
+                                            <StatusBadge tone="plan">{getPackageDisplayLabel(wedding.packageType)}</StatusBadge>
+                                            <small className="admin-plan-price">{packageDetails[wedding.packageType].priceLabel}</small>
+                                        </td>
+                                        <td><StatusBadge tone={wedding.paymentStatus}>{paymentStatusLabels[wedding.paymentStatus]}</StatusBadge></td>
                                         <td><StatusBadge tone={wedding.websiteStatus}>{wedding.websiteStatus}</StatusBadge></td>
                                         <td>{formatDate(wedding.createdAt)}</td>
                                         <td>{wedding.guestCount ?? 0} families / {wedding.invitedCount ?? 0} invited</td>
@@ -651,9 +667,9 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                                 value={wedding.packageType}
                                                                 onChange={(event) => changePlan(wedding, event.target.value as PackageType)}
                                                             >
-                                                                {packageOptions.map((packageType) => (
+                                                                {getAdminPackageOptions(wedding.packageType).map((packageType) => (
                                                                     <option key={packageType} value={packageType}>
-                                                                        {packageDisplayLabels[packageType]}
+                                                                        {packageDisplayLabels[packageType]} · {packageDetails[packageType].priceLabel}
                                                                     </option>
                                                                 ))}
                                                             </select>
@@ -663,12 +679,17 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                     <div className="admin-manage-section">
                                                         <h3>Payment Controls</h3>
                                                         <div className="admin-action-grid">
-                                                            {wedding.paymentStatus === 'unpaid' ? (
-                                                                <button type="button" onClick={() => markPaid(wedding)}>Mark Paid</button>
+                                                            {wedding.paymentStatus !== 'paid' ? (
+                                                                <button type="button" onClick={() => markPaid(wedding)}>
+                                                                    {wedding.paymentStatus === 'manual_pending' || wedding.paymentStatus === 'ref_pending' ? 'Verify Payment' : 'Mark Paid'}
+                                                                </button>
                                                             ) : (
                                                                 <button type="button" onClick={() => markUnpaid(wedding)}>Mark Unpaid</button>
                                                             )}
                                                         </div>
+                                                        {(wedding.paymentStatus === 'manual_pending' || wedding.paymentStatus === 'ref_pending') && (
+                                                            <p className="admin-helper-text">Payment verification has been requested by the couple.</p>
+                                                        )}
                                                     </div>
 
                                                     <div className="admin-manage-section">

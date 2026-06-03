@@ -5,6 +5,7 @@ import {
   defaultOurStoryTitle,
   sampleWeddingData,
   type PackageType,
+  type PaymentStatus,
   type SampleWeddingData,
 } from '../data/sampleWeddingData';
 import { assetRegistry, getThemeDefaults } from '../data/assetRegistry';
@@ -17,7 +18,7 @@ export interface OwnedWeddingRow {
   slug: string;
   package_type: PackageType;
   status: 'draft' | 'published' | 'suspended';
-  payment_status: 'unpaid' | 'paid';
+  payment_status: PaymentStatus;
   theme_key: string;
   page_title: string | null;
   bride_name: string | null;
@@ -45,6 +46,11 @@ export interface UpdateWeddingShellInput {
   slug: string;
   themeKey: string;
   pageTitle: string;
+}
+
+export interface UpdateWeddingPaymentInput {
+  weddingId: string;
+  paymentStatus: PaymentStatus;
 }
 
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => (
@@ -183,6 +189,21 @@ export const updateWeddingShell = async (input: UpdateWeddingShellInput) => {
         ? 'This slug is already taken. Please choose another.'
         : error.message,
     };
+  }
+
+  return { error: null };
+};
+
+export const updateWeddingPaymentStatus = async (input: UpdateWeddingPaymentInput) => {
+  if (!supabase) return { error: 'Supabase is not configured.' };
+
+  const { error } = await supabase
+    .from('weddings')
+    .update({ payment_status: input.paymentStatus })
+    .eq('id', input.weddingId);
+
+  if (error) {
+    return { error: error.message };
   }
 
   return { error: null };

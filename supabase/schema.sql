@@ -52,7 +52,7 @@ create table if not exists public.weddings (
   slug text not null unique,
   package_type text not null check (package_type in ('basic', 'rsvp', 'whatsapp')),
   status text not null default 'draft' check (status in ('draft', 'published', 'suspended')),
-  payment_status text not null default 'unpaid' check (payment_status in ('unpaid', 'paid')),
+  payment_status text not null default 'unpaid' check (payment_status in ('unpaid', 'manual_pending', 'ref_pending', 'paid')),
   theme_key text not null references public.themes(theme_key),
   page_title text,
   bride_name text,
@@ -66,8 +66,8 @@ create table if not exists public.weddings (
 comment on table public.weddings is 'Main wedding record and route identity.';
 comment on column public.weddings.owner_id is 'Couple/user who owns the wedding.';
 comment on column public.weddings.created_by is 'User/admin who created the wedding record.';
-comment on column public.weddings.package_type is 'Internal values: basic, rsvp, whatsapp. UI labels are Nyota Classic, Nyota Plus, Nyota Complete.';
-comment on column public.weddings.payment_status is 'MVP values only: unpaid, paid. Manual/refund statuses can be added later.';
+comment on column public.weddings.package_type is 'Internal values include active basic/rsvp plans plus a legacy compatibility value. Active purchasable plans are basic and rsvp.';
+comment on column public.weddings.payment_status is 'Manual payment workflow values: unpaid, manual_pending, ref_pending, paid.';
 comment on column public.weddings.published_at is 'Set when status first changes to published.';
 
 create trigger weddings_set_updated_at
@@ -157,8 +157,8 @@ create table if not exists public.events (
 );
 
 comment on table public.events is 'Wedding functions/events shown on the invite.';
-comment on column public.events.date_label is 'MVP display label. Add event_start_at before reminder automation.';
-comment on column public.events.start_time_label is 'MVP display label. Add timezone-aware datetime fields before WhatsApp reminders.';
+comment on column public.events.date_label is 'MVP display label. Add event_start_at before scheduled notifications.';
+comment on column public.events.start_time_label is 'MVP display label. Add timezone-aware datetime fields before scheduled notifications.';
 
 create trigger events_set_updated_at
 before update on public.events
@@ -261,7 +261,7 @@ create index if not exists music_options_is_active_idx on public.music_options(i
 -- Future optional field, intentionally not part of MVP:
 -- alter table public.weddings add column deleted_at timestamptz;
 
--- Future reminder fields, intentionally not part of MVP:
+-- Scheduling fields, intentionally not part of MVP:
 -- alter table public.events add column event_start_at timestamptz;
 -- alter table public.events add column event_end_at timestamptz;
 -- alter table public.events add column timezone text;

@@ -54,8 +54,9 @@ For Closing Gallery uploads, also create a public Supabase Storage bucket named 
 - Our Story supports preset/path-based story images and a local preview, but image upload is not implemented yet. The separate Couple tab is hidden from dashboard/admin navigation.
 - Closing Gallery supports preset optional couple photos, Supabase Storage uploads, and a local preview. Gallery photos are not used as the closing section background.
 - Supabase Storage is implemented for Closing Gallery photo uploads only. Opening Reveal, Our Story, theme media, video, and music uploads remain future phases.
-- WhatsApp invitations and reminders are not implemented yet.
-- Real online payments are not implemented yet; admin payment status is manual.
+- Additional invitation delivery channels are not implemented yet.
+- Real online payments are not implemented yet; manual payment instructions use a WhatsApp contact link and `manual_pending` as the verification-requested state.
+- Basic Website dashboards lock Guests and RSVP Dashboard behind an upgrade prompt. RSVP plan and admin editing keep full guest/RSVP access.
 - Custom domains are not implemented yet.
 - The couple dashboard currently assumes one active wedding per couple account.
 - CSV import is browser-side MVP logic and should be hardened further before very large production imports.
@@ -89,7 +90,7 @@ For Closing Gallery uploads, also create a public Supabase Storage bucket named 
 
 1. Move theme media management to Supabase Storage.
 2. Add production-grade CSV validation and import previews.
-3. Add payment/checkout integration and replace manual payment state.
-4. Add WhatsApp invite/reminder automation after adding timezone-aware event datetime fields.
+3. Add payment/checkout integration and replace the manual WhatsApp verification flow.
+4. Add optional invitation delivery workflows after adding timezone-aware event datetime fields.
 5. Add admin wedding creation/support workflows.
 6. Add multi-wedding support per couple account if needed.

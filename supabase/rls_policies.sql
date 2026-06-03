@@ -25,6 +25,14 @@ as $$
 $$;
 
 grant execute on function public.is_admin() to anon, authenticated;
+grant select on public.profiles to authenticated;
+grant select on public.weddings to authenticated;
+grant select, insert, update on public.weddings to authenticated;
+grant select, insert, update, delete on public.wedding_settings to authenticated;
+grant select, insert, update, delete on public.events to authenticated;
+grant select, insert, update, delete on public.guests to authenticated;
+grant select, insert, update, delete on public.guest_event_invites to authenticated;
+grant select, insert, update on public.rsvp_responses to authenticated;
 
 drop policy if exists "Users can read own profile" on public.profiles;
 create policy "Users can read own profile"
@@ -144,6 +152,14 @@ on public.wedding_settings
 for select
 to authenticated
 using (public.is_admin());
+
+drop policy if exists "Admins can manage all wedding settings" on public.wedding_settings;
+create policy "Admins can manage all wedding settings"
+on public.wedding_settings
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
 
 drop policy if exists "Public can read published wedding settings" on public.wedding_settings;
 create policy "Public can read published wedding settings"
