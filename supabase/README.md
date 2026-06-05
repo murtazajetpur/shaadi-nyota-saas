@@ -11,8 +11,10 @@ The setup order below is for future reproducibility and production-readiness tes
 1. Run `supabase/schema.sql`
 2. Run `supabase/rls_policies.sql`
 3. Run `supabase/seed.sql`
-4. Add local env vars
-5. Configure Auth settings, including Confirm Email behavior
+4. For an existing project, run `supabase/security_hardening_phase_1.sql`
+5. Run `supabase/data_integrity_phase_2.sql`
+6. Add local env vars
+7. Configure Auth settings, including Confirm Email behavior
 
 ## 1. Create A Supabase Project
 
@@ -92,6 +94,8 @@ Do not commit `.env`. It is ignored by git.
 - Signup passes `full_name` through Supabase Auth user metadata.
 - The frontend does not insert into `public.profiles` during signup.
 - The `public.handle_new_user()` database trigger should create the `profiles` row after a new auth user signs up.
+- `supabase/security_hardening_phase_1.sql` creates or replaces this trigger and
+  backfills missing profile rows from `auth.users`.
 - New profiles should default to `role = 'couple'`.
 - To test admin access locally, manually update the test user's `profiles.role` to `admin` in Supabase.
 
@@ -99,7 +103,18 @@ Do not commit `.env`. It is ignored by git.
 
 - Active purchasable plans are `basic` (Basic Website, ₹3,000) and `rsvp` (Basic Website + RSVP Management, ₹5,000).
 - A legacy package value remains in the schema only for existing records and is not shown as an active purchasable plan.
-- Public RSVP depends on `weddings.status = 'published'`.
+- Public invites require both `weddings.status = 'published'` and
+  `weddings.payment_status = 'paid'`.
+- Personalized invite lookup uses `public.get_public_invite_by_code(slug, code)`.
+  Anonymous users cannot directly select guests, guest-event assignments, or
+  RSVP responses.
+- Public RSVP submission uses `public.submit_guest_rsvp(slug, code, responses,
+  meal_preference)`, which validates plan access and every submitted event
+  against that guest.
+- Couple payment verification requests use
+  `public.request_payment_verification(wedding_id)`. A database trigger blocks
+  couples from directly changing package, payment, publication, or ownership
+  fields while preserving admin controls.
 - Manual payment verification requests use `weddings.payment_status = 'manual_pending'`. The dashboard labels this as "Verification Requested". If an older database still only allows `unpaid` and `paid`, run `supabase/add_manual_payment_status.sql`.
 - Basic Website dashboards show Guests and RSVP Dashboard as locked upgrade panels. Admin editing remains unrestricted.
 - Dashboard/admin builder saves depend on the latest `wedding_settings` columns. If saving settings fails with a missing-column or schema-cache error, run `supabase/add_builder_settings_columns.sql`.
@@ -109,3 +124,65 @@ Do not commit `.env`. It is ignored by git.
 - Suspended weddings show an unavailable message on public invite routes.
 - Admin pages rely on `public.is_admin()` in RLS policies.
 - The app still keeps local development fallback support for legacy sample routes when Supabase is unavailable.
+
+## Production Security Hardening Phase 1
+
+For an existing Supabase project, run:
+
+1. `supabase/security_hardening_phase_1.sql`
+2. `supabase/data_integrity_phase_2.sql`
+3. Refresh the PostgREST schema cache if Supabase does not detect the RPCs.
+4. Deploy the frontend that calls the new RPCs.
+5. Run the anonymous, couple, and admin checks listed below.
+
+The migration removes anonymous direct access to `guests`,
+`guest_event_invites`, and `rsvp_responses`. Do not rerun an older public-access
+script that restores those policies. The current `public_invite_access_fix.sql`
+is safe after Phase 1 and preserves RPC-only personalized invite access.
+
+Manual checks:
+
+- An anonymous request to `guests`, `guest_event_invites`, or `rsvp_responses`
+  returns no rows/access denied.
+- A valid paid and published invite code loads only its matching guest/events.
+- An invalid code, unpaid wedding, draft wedding, and suspended wedding do not
+  return personalized invite data.
+- A couple cannot directly update `package_type`, `payment_status`, `status`,
+  `published_at`, `owner_id`, or `created_by`.
+- Admin payment, package, publish, suspend, guest, and RSVP controls still work.
+
+## Data Integrity Hardening Phase 2
+
+Run `supabase/data_integrity_phase_2.sql` after Phase 1. It adds
+transactional RPCs for destructive dashboard operations:
+
+- `save_wedding_relational_data(wedding_id, events, guests, mode)` saves event
+  rows, guest rows, guest-event assignments, and intentional deletions in one
+  transaction.
+- `save_wedding_guests_transactional(wedding_id, guests, mode)` powers CSV
+  append/replace imports without deleting current guests before validation.
+- `replace_guest_event_invites_transactional(wedding_id, guest_id, event_ids)`
+  validates event ownership before replacing one guest's assignments.
+- `delete_wedding_event_transactional(wedding_id, event_id)` validates ownership
+  and reports how many guest assignments/RSVP responses will be removed by FK
+  cascade.
+- `delete_wedding_guests_transactional(wedding_id, guest_ids)` deletes selected
+  guests atomically after validating every ID.
+
+These RPCs require the current authenticated user to own the wedding or be an
+admin. Existing foreign-key cascades still intentionally remove event/guest
+assignments and RSVP rows when the corresponding event or guest is deleted.
+
+Manual checks:
+
+- Full dashboard save with event edits and guest invite edits either fully
+  succeeds or leaves prior guests/invites intact.
+- CSV replace with an invalid event column or duplicate invite code leaves the
+  existing guest list unchanged.
+- CSV append with a duplicate invite code shows an error and makes no partial
+  inserts.
+- Guest event checkbox changes do not clear old assignments when validation
+  fails.
+- Deleting an event shows the guest/RSVP impact warning and cascades only after
+  confirmation.
+- Bulk guest delete validates all selected guests before deleting any of them.

@@ -1,10 +1,8 @@
--- Public invite access repair script.
--- Run this in Supabase SQL Editor if published invite links do not work in
--- incognito or for logged-out guests.
+-- Public invite access repair script after security hardening Phase 1.
 --
--- This keeps private write/admin behavior behind existing authenticated RLS
--- policies, but explicitly allows anon/authenticated clients to read only
--- published wedding website data needed by public invite routes.
+-- Run supabase/security_hardening_phase_1.sql first. Personalized guest lookup
+-- and RSVP submission must use the secure RPCs; this script intentionally does
+-- not restore anonymous access to guests, guest_event_invites, or RSVP rows.
 
 alter table public.weddings enable row level security;
 alter table public.wedding_settings enable row level security;
@@ -17,159 +15,55 @@ grant usage on schema public to anon, authenticated;
 grant select on public.weddings to anon, authenticated;
 grant select on public.wedding_settings to anon, authenticated;
 grant select on public.events to anon, authenticated;
-grant select on public.guests to anon, authenticated;
-grant select on public.guest_event_invites to anon, authenticated;
-grant select, insert, update on public.rsvp_responses to anon, authenticated;
-grant update (meal_preference) on public.guests to anon, authenticated;
 
 drop policy if exists "Public can read published weddings" on public.weddings;
-create policy "Public can read published weddings"
+drop policy if exists "Public can read paid published weddings" on public.weddings;
+create policy "Public can read paid published weddings"
 on public.weddings
 for select
 to anon, authenticated
-using (status = 'published');
+using (status = 'published' and payment_status = 'paid');
 
 drop policy if exists "Public can read published wedding settings" on public.wedding_settings;
-create policy "Public can read published wedding settings"
+drop policy if exists "Public can read paid published wedding settings" on public.wedding_settings;
+create policy "Public can read paid published wedding settings"
 on public.wedding_settings
 for select
 to anon, authenticated
 using (
   exists (
-    select 1
-    from public.weddings
+    select 1 from public.weddings
     where weddings.id = wedding_settings.wedding_id
       and weddings.status = 'published'
+      and weddings.payment_status = 'paid'
   )
 );
 
 drop policy if exists "Public can read published events" on public.events;
-create policy "Public can read published events"
+drop policy if exists "Public can read paid published events" on public.events;
+create policy "Public can read paid published events"
 on public.events
 for select
 to anon, authenticated
 using (
   exists (
-    select 1
-    from public.weddings
+    select 1 from public.weddings
     where weddings.id = events.wedding_id
       and weddings.status = 'published'
+      and weddings.payment_status = 'paid'
   )
 );
 
 drop policy if exists "Public can read published invite guests" on public.guests;
-create policy "Public can read published invite guests"
-on public.guests
-for select
-to anon, authenticated
-using (
-  exists (
-    select 1
-    from public.weddings
-    where weddings.id = guests.wedding_id
-      and weddings.status = 'published'
-  )
-);
-
 drop policy if exists "Public can update published guest meal preference" on public.guests;
-create policy "Public can update published guest meal preference"
-on public.guests
-for update
-to anon, authenticated
-using (
-  exists (
-    select 1
-    from public.weddings
-    where weddings.id = guests.wedding_id
-      and weddings.status = 'published'
-  )
-)
-with check (
-  exists (
-    select 1
-    from public.weddings
-    where weddings.id = guests.wedding_id
-      and weddings.status = 'published'
-  )
-);
-
 drop policy if exists "Public can read published guest event invites" on public.guest_event_invites;
-create policy "Public can read published guest event invites"
-on public.guest_event_invites
-for select
-to anon, authenticated
-using (
-  exists (
-    select 1
-    from public.weddings
-    where weddings.id = guest_event_invites.wedding_id
-      and weddings.status = 'published'
-  )
-);
-
 drop policy if exists "Public can read published valid RSVP responses" on public.rsvp_responses;
-create policy "Public can read published valid RSVP responses"
-on public.rsvp_responses
-for select
-to anon, authenticated
-using (
-  exists (
-    select 1
-    from public.weddings
-    join public.guest_event_invites
-      on guest_event_invites.wedding_id = weddings.id
-     and guest_event_invites.guest_id = rsvp_responses.guest_id
-     and guest_event_invites.event_id = rsvp_responses.event_id
-    where weddings.id = rsvp_responses.wedding_id
-      and weddings.status = 'published'
-  )
-);
-
 drop policy if exists "Public can insert published valid RSVP responses" on public.rsvp_responses;
-create policy "Public can insert published valid RSVP responses"
-on public.rsvp_responses
-for insert
-to anon, authenticated
-with check (
-  exists (
-    select 1
-    from public.weddings
-    join public.guest_event_invites
-      on guest_event_invites.wedding_id = weddings.id
-     and guest_event_invites.guest_id = rsvp_responses.guest_id
-     and guest_event_invites.event_id = rsvp_responses.event_id
-    where weddings.id = rsvp_responses.wedding_id
-      and weddings.status = 'published'
-  )
-);
-
 drop policy if exists "Public can update published valid RSVP responses" on public.rsvp_responses;
-create policy "Public can update published valid RSVP responses"
-on public.rsvp_responses
-for update
-to anon, authenticated
-using (
-  exists (
-    select 1
-    from public.weddings
-    join public.guest_event_invites
-      on guest_event_invites.wedding_id = weddings.id
-     and guest_event_invites.guest_id = rsvp_responses.guest_id
-     and guest_event_invites.event_id = rsvp_responses.event_id
-    where weddings.id = rsvp_responses.wedding_id
-      and weddings.status = 'published'
-  )
-)
-with check (
-  exists (
-    select 1
-    from public.weddings
-    join public.guest_event_invites
-      on guest_event_invites.wedding_id = weddings.id
-     and guest_event_invites.guest_id = rsvp_responses.guest_id
-     and guest_event_invites.event_id = rsvp_responses.event_id
-    where weddings.id = rsvp_responses.wedding_id
-      and weddings.status = 'published'
-  )
-);
 
+revoke all privileges on public.guests from anon;
+revoke all privileges on public.guest_event_invites from anon;
+revoke all privileges on public.rsvp_responses from anon;
+
+grant execute on function public.get_public_invite_by_code(text, text) to anon, authenticated;
+grant execute on function public.submit_guest_rsvp(text, text, jsonb, text) to anon, authenticated;

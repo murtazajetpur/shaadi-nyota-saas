@@ -193,7 +193,9 @@ function TemplateDemoRoute({ demoKey }: { demoKey?: string }) {
   }
 
   const fallbackData = getWeddingBySlug(demo.slug);
-  const data = supabaseData?.data ?? fallbackData;
+  // Development fallback data must never bypass Supabase publication/payment
+  // checks in configured environments.
+  const data = supabaseData?.data ?? (!isSupabaseConfigured ? fallbackData : undefined);
   const guest = supabaseData?.guest ?? (data ? getGuestByInviteCode(data, demo.inviteCode) : undefined);
   const visibleEvents = supabaseData?.visibleEvents ?? (data && guest ? getEventsForGuest(data, guest) : undefined);
 
@@ -474,7 +476,9 @@ function PublicInviteRoute({
     }
     : baseData;
 
-  const data = supabaseData?.data ?? fallbackData;
+  // Never let local sample/draft data bypass Supabase publication/payment checks
+  // when this deployment is connected to a backend.
+  const data = supabaseData?.data ?? (!isSupabaseConfigured ? fallbackData : undefined);
   const guest = supabaseData?.guest ?? (data && inviteCode ? getGuestByInviteCode(data, inviteCode) : undefined);
   const visibleEvents = supabaseData?.visibleEvents ?? (data && guest ? getEventsForGuest(data, guest) : undefined);
 
@@ -506,6 +510,15 @@ function PublicInviteRoute({
   }
 
   if (data.wedding.status !== 'published') {
+    return (
+      <NotFound
+        title="Wedding website not live yet"
+        message="This wedding website is not live yet."
+      />
+    );
+  }
+
+  if (data.wedding.paymentStatus !== 'paid') {
     return (
       <NotFound
         title="Wedding website not live yet"

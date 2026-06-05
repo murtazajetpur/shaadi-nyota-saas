@@ -12,12 +12,12 @@ import {
     createSupabaseGuest,
     deleteSupabaseEvent,
     deleteSupabaseGuest,
+    deleteSupabaseGuests,
     importSupabaseGuests,
     loadSupabaseRsvpResponses,
     loadSupabaseWeddingBundle,
     replaceSupabaseGuestInvites,
-    saveSupabaseEvents,
-    saveSupabaseGuests,
+    saveSupabaseRelationalData,
     saveSupabaseWeddingSettings,
 } from '../lib/supabaseWeddingData';
 import {
@@ -219,40 +219,6 @@ const isScrollReveal = (hero: SampleWeddingData['hero']) => (
 
 const cloneWedding = (wedding: SampleWeddingData): SampleWeddingData => {
     return JSON.parse(JSON.stringify(wedding)) as SampleWeddingData;
-};
-
-const normalizeEventSelectionKey = (value?: string | null) => (
-    value?.trim().toLowerCase().replace(/\s+/g, '-') ?? ''
-);
-
-const remapGuestInvitesToSavedEvents = (
-    guests: WeddingGuest[],
-    originalEvents: WeddingEvent[],
-    savedEvents: WeddingEvent[]
-) => {
-    const eventIdMap = new Map<string, string>();
-
-    savedEvents.forEach((savedEvent, index) => {
-        const originalEvent = originalEvents[index];
-        [
-            savedEvent.id,
-            savedEvent.eventKey,
-            savedEvent.eventName,
-            originalEvent?.id,
-            originalEvent?.eventKey,
-            originalEvent?.eventName,
-        ]
-            .map(normalizeEventSelectionKey)
-            .filter(Boolean)
-            .forEach((key) => eventIdMap.set(key, savedEvent.id));
-    });
-
-    return guests.map((guest) => ({
-        ...guest,
-        invitedEventIds: guest.invitedEventIds
-            .map((eventId) => eventIdMap.get(normalizeEventSelectionKey(eventId)) ?? eventId)
-            .filter((eventId, index, allIds) => Boolean(eventId) && allIds.indexOf(eventId) === index),
-    }));
 };
 
 const applyAdminFields = (wedding: SampleWeddingData): SampleWeddingData => {
@@ -831,10 +797,15 @@ export default function Dashboard({
                 return;
             }
 
-            const eventsResult = await saveSupabaseEvents(supabaseWeddingId, weddingToSave.events);
-            if (eventsResult.error) {
-                console.error('Could not save events', {
-                    error: eventsResult.error,
+            const relationalResult = await saveSupabaseRelationalData(
+                supabaseWeddingId,
+                weddingToSave.events,
+                weddingToSave.rsvp.guests,
+                'replace'
+            );
+            if (relationalResult.error) {
+                console.error('Could not save events and guests transactionally', {
+                    error: relationalResult.detail || relationalResult.error,
                     weddingId: supabaseWeddingId,
                     mode,
                     events: weddingToSave.events.map((event) => ({
@@ -846,27 +817,12 @@ export default function Dashboard({
                     })),
                 });
                 setSaveStatus('');
-                setSaveErrorDetail(eventsResult.error);
-                setSaveError(`Could not save events.${isAdminMode ? adminRlsHint : ''} Please share the Technical detail line if this appears again.`);
+                setSaveErrorDetail(relationalResult.detail || relationalResult.error);
+                setSaveError(`${relationalResult.error}${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
-            const savedEvents = eventsResult.events ?? weddingToSave.events;
-            const guestsToSave = eventsResult.events
-                ? remapGuestInvitesToSavedEvents(weddingToSave.rsvp.guests, weddingToSave.events, savedEvents)
-                : weddingToSave.rsvp.guests;
-
-            const guestsResult = await saveSupabaseGuests(supabaseWeddingId, guestsToSave, savedEvents);
-            if (guestsResult.error) {
-                console.warn('Could not save guests', guestsResult.error);
-                setSaveStatus('');
-                setSaveErrorDetail(guestsResult.error);
-                setSaveError(`Could not save guests.${isAdminMode ? adminRlsHint : ''}`);
-                return;
-            }
-            if (eventsResult.events) {
-                weddingToSave.events = savedEvents;
-                weddingToSave.rsvp.guests = guestsToSave;
-            }
+            weddingToSave.events = relationalResult.events;
+            weddingToSave.rsvp.guests = relationalResult.guests;
         }
 
         if (supabaseWeddingId) {
@@ -1102,13 +1058,18 @@ export default function Dashboard({
 
     const deleteEvent = async (index: number) => {
         const eventToDelete = weddingData.events[index];
-        if (!eventToDelete || !window.confirm(`Delete ${eventToDelete.eventName || 'this event'}?`)) return;
+        const assignedGuests = weddingData.rsvp.guests.filter((guest) => guest.invitedEventIds.includes(eventToDelete?.id ?? '')).length;
+        const responseCount = rsvpResponses.filter((response) => response.eventId === eventToDelete?.id).length;
+        const impact = assignedGuests || responseCount
+            ? ` This will also permanently remove ${assignedGuests} guest assignment${assignedGuests === 1 ? '' : 's'} and ${responseCount} RSVP response${responseCount === 1 ? '' : 's'}.`
+            : '';
+        if (!eventToDelete || !window.confirm(`Delete ${eventToDelete.eventName || 'this event'}?${impact}`)) return;
         if (supabaseWeddingId && eventToDelete) {
-            const result = await deleteSupabaseEvent(eventToDelete.id);
+            const result = await deleteSupabaseEvent(supabaseWeddingId, eventToDelete.id);
             if (result.error) {
                 console.warn('Could not delete event', result.error);
-                setSaveErrorDetail(result.error);
-                setSaveError(`Could not delete event.${isAdminMode ? adminRlsHint : ''}`);
+                setSaveErrorDetail(result.detail || result.error);
+                setSaveError(`${result.error}${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
         }
@@ -1162,8 +1123,8 @@ export default function Dashboard({
             replaceSupabaseGuestInvites(supabaseWeddingId, currentGuest.id, nextEventIds, weddingData.events).then((result) => {
                 if (result.error) {
                     console.warn('Could not update guest events', result.error);
-                    setSaveErrorDetail(result.error);
-                    setSaveError(`Could not update guest events.${isAdminMode ? adminRlsHint : ''}`);
+                    setSaveErrorDetail(result.detail || result.error);
+                    setSaveError(`${result.error}${isAdminMode ? adminRlsHint : ''}`);
                 }
             });
         }
@@ -1211,11 +1172,11 @@ export default function Dashboard({
         const guestToDelete = weddingData.rsvp.guests[index];
         if (!guestToDelete || !window.confirm(`Delete ${guestToDelete.guestName || 'this guest'}?`)) return;
         if (supabaseWeddingId && guestToDelete) {
-            const result = await deleteSupabaseGuest(guestToDelete.id);
+            const result = await deleteSupabaseGuest(supabaseWeddingId, guestToDelete.id);
             if (result.error) {
                 console.error('Could not delete guest', result.error);
                 setSaveError(`Could not delete guest.${isAdminMode ? adminRlsHint : ''}`);
-                setSaveErrorDetail(result.error);
+                setSaveErrorDetail(result.detail || result.error);
                 return;
             }
         }
@@ -1356,8 +1317,8 @@ export default function Dashboard({
         if (supabaseWeddingId) {
             const result = await importSupabaseGuests(supabaseWeddingId, importedGuests, guestImportMode, weddingData.events);
             if (result.error) {
-                console.warn('Could not import CSV', result.error);
-                setGuestImportWarnings([...warnings, `Could not import CSV. Please check the file and try again.${isAdminMode ? adminRlsHint : ''}`]);
+                console.warn('Could not import CSV', result.detail || result.error);
+                setGuestImportWarnings([...warnings, `${result.error}${isAdminMode ? adminRlsHint : ''}`]);
                 return;
             }
             const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
@@ -1511,12 +1472,11 @@ export default function Dashboard({
         if (!window.confirm(`Delete ${guestsToDelete.length} selected guest${guestsToDelete.length === 1 ? '' : 's'}?`)) return;
 
         if (supabaseWeddingId) {
-            const results = await Promise.all(guestsToDelete.map((guest) => deleteSupabaseGuest(guest.id)));
-            const failedResult = results.find((result) => result.error);
-            if (failedResult?.error) {
-                console.error('Could not delete selected guests', failedResult.error);
-                setSaveError(`Could not delete selected guests.${isAdminMode ? adminRlsHint : ''}`);
-                setSaveErrorDetail(failedResult.error);
+            const result = await deleteSupabaseGuests(supabaseWeddingId, guestsToDelete.map((guest) => guest.id));
+            if (result.error) {
+                console.error('Could not delete selected guests', result.detail || result.error);
+                setSaveError(`${result.error}${isAdminMode ? adminRlsHint : ''}`);
+                setSaveErrorDetail(result.detail || result.error);
                 return;
             }
 

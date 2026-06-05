@@ -197,10 +197,13 @@ export const updateWeddingShell = async (input: UpdateWeddingShellInput) => {
 export const updateWeddingPaymentStatus = async (input: UpdateWeddingPaymentInput) => {
   if (!supabase) return { error: 'Supabase is not configured.' };
 
-  const { error } = await supabase
-    .from('weddings')
-    .update({ payment_status: input.paymentStatus })
-    .eq('id', input.weddingId);
+  if (input.paymentStatus !== 'manual_pending') {
+    return { error: 'Couples can only request payment verification from the dashboard.' };
+  }
+
+  const { error } = await supabase.rpc('request_payment_verification', {
+    wedding_id: input.weddingId,
+  });
 
   if (error) {
     return { error: error.message };

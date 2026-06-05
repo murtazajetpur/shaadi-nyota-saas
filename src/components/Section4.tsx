@@ -10,7 +10,7 @@ import {
     type WeddingEvent,
     type WeddingGuest,
 } from '../data/sampleWeddingData';
-import { loadSupabaseRsvpResponses, saveSupabaseRsvpSubmission } from '../lib/supabaseWeddingData';
+import { loadSupabasePersonalizedRsvpResponses, saveSupabaseRsvpSubmission } from '../lib/supabaseWeddingData';
 
 interface Section4Props {
     rsvp: SampleWeddingData['rsvp'];
@@ -66,7 +66,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
 
         const loadResponses = async () => {
             if (!weddingId || !guest) return;
-            const result = await loadSupabaseRsvpResponses(weddingId, weddingSlug, [guest]);
+            const result = await loadSupabasePersonalizedRsvpResponses(weddingSlug, guest.inviteCode);
             if (!mounted || result.error) return;
 
             setResponses(events.map((event) => {

@@ -120,6 +120,29 @@ interface SupabaseRsvpResponseRow {
   updated_at: string | null;
 }
 
+interface PublicInviteRpcPayload {
+  wedding: SupabaseWeddingRow;
+  settings: SupabaseWeddingSettingsRow | null;
+  guest: SupabaseGuestRow;
+  events: SupabaseEventRow[];
+  rsvp_responses: SupabaseRsvpResponseRow[];
+}
+
+interface TransactionalRelationalRpcPayload {
+  success: boolean;
+  events: SupabaseEventRow[];
+  guests: SupabaseGuestRow[];
+  guest_event_invites: SupabaseGuestEventInviteRow[];
+  removed?: {
+    events?: number;
+    event_invites?: number;
+    event_rsvp_responses?: number;
+    guests?: number;
+    guest_invites?: number;
+    guest_rsvp_responses?: number;
+  };
+}
+
 const fallbackWedding = () => {
   const wedding = getWeddingBySlug(defaultDashboardWeddingSlug);
   return JSON.parse(JSON.stringify(wedding)) as SampleWeddingData;
@@ -215,14 +238,6 @@ type EventIdLookupSource = {
   event_name?: string | null;
 };
 
-type GuestIdLookupSource = {
-  id: string;
-  guestName?: string | null;
-  inviteCode?: string | null;
-  guest_name?: string | null;
-  invite_code?: string | null;
-};
-
 const createEventIdResolver = (events: EventIdLookupSource[] = []) => {
   const lookup = new Map<string, string>();
 
@@ -236,22 +251,6 @@ const createEventIdResolver = (events: EventIdLookupSource[] = []) => {
 
   return (eventIdOrKey: string) => {
     return lookup.get(normalizeEventLookupKey(eventIdOrKey)) ?? '';
-  };
-};
-
-const createGuestIdResolver = (guests: GuestIdLookupSource[] = []) => {
-  const lookup = new Map<string, string>();
-
-  guests.forEach((guest) => {
-    if (!isUuid(guest.id)) return;
-    [guest.id, guest.inviteCode ?? guest.invite_code, guest.guestName ?? guest.guest_name]
-      .map(normalizeEventLookupKey)
-      .filter(Boolean)
-      .forEach((key) => lookup.set(key, guest.id));
-  });
-
-  return (guestIdOrKey: string) => {
-    return lookup.get(normalizeEventLookupKey(guestIdOrKey)) ?? '';
   };
 };
 
@@ -469,36 +468,58 @@ export async function loadSupabaseWeddingBySlug(slug: string, options: { include
 export async function loadSupabasePersonalizedInvite(slug: string, inviteCode: string) {
   if (!supabase) return { wedding: null, weddingId: '', guest: undefined, visibleEvents: undefined, error: 'Supabase is not configured.' };
 
-  const publicBundle = await loadSupabaseWeddingBySlug(slug, { includeGuests: false });
-  if (!publicBundle.wedding || !publicBundle.weddingId) return { ...publicBundle, guest: undefined, visibleEvents: undefined };
+  const { data, error } = await supabase.rpc('get_public_invite_by_code', {
+    wedding_slug: slug,
+    invite_code: inviteCode,
+  });
 
-  const { data: guestRow, error: guestError } = await supabase
-    .from('guests')
-    .select('*')
-    .eq('wedding_id', publicBundle.weddingId)
-    .eq('invite_code', inviteCode)
-    .maybeSingle();
+  if (error) {
+    return { wedding: null, weddingId: '', guest: undefined, visibleEvents: undefined, error: error.message };
+  }
+  if (!data) {
+    return { wedding: null, weddingId: '', guest: undefined, visibleEvents: undefined, error: '' };
+  }
 
-  if (guestError) return { ...publicBundle, guest: undefined, visibleEvents: undefined, error: guestError.message };
-  if (!guestRow) return { ...publicBundle, guest: undefined, visibleEvents: undefined, error: '' };
-
-  const { data: inviteRows, error: invitesError } = await supabase
-    .from('guest_event_invites')
-    .select('guest_id,event_id')
-    .eq('wedding_id', publicBundle.weddingId)
-    .eq('guest_id', guestRow.id);
-
-  if (invitesError) return { ...publicBundle, guest: undefined, visibleEvents: undefined, error: invitesError.message };
-
-  const guest = mapGuestRows([guestRow as SupabaseGuestRow], (inviteRows ?? []) as SupabaseGuestEventInviteRow[])[0];
-  const visibleEvents = publicBundle.wedding.events.filter((event) => guest.invitedEventIds.includes(event.id));
+  const payload = data as PublicInviteRpcPayload;
+  const eventRows = payload.events ?? [];
+  const inviteRows = eventRows.map((event) => ({
+    guest_id: payload.guest.id,
+    event_id: event.id,
+  }));
+  const guest = mapGuestRows([payload.guest], inviteRows)[0];
+  const wedding = mapWeddingBundle(payload.wedding, payload.settings, eventRows, [payload.guest], inviteRows);
 
   return {
-    ...publicBundle,
+    wedding,
+    weddingId: payload.wedding.id,
     guest,
-    visibleEvents,
+    visibleEvents: wedding.events,
     error: '',
   };
+}
+
+export async function loadSupabasePersonalizedRsvpResponses(weddingSlug: string, inviteCode: string) {
+  if (!supabase) return { responses: [], error: 'Supabase is not configured.' };
+
+  const { data, error } = await supabase.rpc('get_public_invite_by_code', {
+    wedding_slug: weddingSlug,
+    invite_code: inviteCode,
+  });
+  if (error) return { responses: [], error: error.message };
+  if (!data) return { responses: [], error: 'Invalid or unavailable invitation.' };
+
+  const payload = data as PublicInviteRpcPayload;
+  const responses = (payload.rsvp_responses ?? []).map((response): StoredRsvpResponse => ({
+    weddingSlug,
+    inviteCode,
+    guestId: payload.guest.id,
+    eventId: response.event_id,
+    status: response.status,
+    mealPreference: payload.guest.meal_preference ?? '',
+    updatedAt: response.updated_at ?? '',
+  }));
+
+  return { responses, error: '' };
 }
 
 const isMissingEventAnimationColumnError = (message?: string | null) => (
@@ -536,17 +557,6 @@ const eventToRow = (
   sort_order: sortOrder,
 });
 
-const eventToUpdateRow = (
-  weddingId: string,
-  event: WeddingEvent,
-  sortOrder: number,
-  includeAnimationKey = true,
-  eventKeyOverride?: string | null
-) => {
-  const { id, wedding_id, ...row } = eventToRow(weddingId, event, sortOrder, includeAnimationKey, eventKeyOverride);
-  return row;
-};
-
 export async function createSupabaseEvent(weddingId: string, event: WeddingEvent, sortOrder: number) {
   if (!supabase) return { event: null, error: 'Supabase is not configured.' };
   const supabaseClient = supabase;
@@ -570,79 +580,18 @@ export async function createSupabaseEvent(weddingId: string, event: WeddingEvent
 
 export async function saveSupabaseEvents(weddingId: string, events: WeddingEvent[]) {
   if (!supabase) return { error: 'Supabase is not configured.' };
-  const supabaseClient = supabase;
-
-  const { data: existingRows, error: existingError } = await supabaseClient
-    .from('events')
-    .select('id,event_key,event_name')
-    .eq('wedding_id', weddingId);
-
-  if (existingError) return { error: `Loading existing events failed: ${existingError.message}` };
-
-  const existingEventRows = (existingRows ?? []) as EventIdLookupSource[];
-  const resolveExistingEventId = createEventIdResolver(existingEventRows);
-  const existingEventIds = new Set(existingEventRows.map((row) => row.id));
-  const existingEventKeyById = new Map(existingEventRows.map((row) => [row.id, row.event_key ?? row.eventKey ?? null]));
-  const eventsWithUuidIds: WeddingEvent[] = [];
-
-  for (const [index, event] of events.entries()) {
-    const storageKey = getEventKeyForStorage(event);
-    const matchedEventId = resolveExistingEventId(storageKey ?? '')
-      || resolveExistingEventId(event.eventName)
-      || (isUuid(event.id) && existingEventIds.has(event.id) ? event.id : '')
-      || (!isUuid(event.id) ? resolveExistingEventId(event.id) : '');
-
-    if (matchedEventId) {
-      eventsWithUuidIds.push({
-        ...event,
-        id: matchedEventId,
-        eventKey: existingEventKeyById.get(matchedEventId) || event.eventKey || storageKey || event.id,
-      });
-      continue;
-    }
-
-    const created = await createSupabaseEvent(weddingId, event, index);
-    if (created.error || !created.event) {
-      return { error: `Creating event "${event.eventName || event.id}" failed: ${created.error || 'Could not create event.'}`, events: eventsWithUuidIds };
-    }
-    eventsWithUuidIds.push(created.event);
+  const current = await loadSupabaseWeddingBundle(weddingId, { includeGuests: true });
+  if (current.error || !current.wedding) {
+    return { error: current.error || 'Could not load current guest assignments before saving events.' };
   }
 
-  const nextIds = new Set(eventsWithUuidIds.map((event) => event.id));
-  const idsToDelete = existingEventRows
-    .map((row) => row.id)
-    .filter((id) => !nextIds.has(id));
-
-  if (idsToDelete.length) {
-    const { error: deleteError } = await supabaseClient
-      .from('events')
-      .delete()
-      .eq('wedding_id', weddingId)
-      .in('id', idsToDelete);
-    if (deleteError) return { error: `Deleting removed events failed: ${deleteError.message}` };
-  }
-
-  if (!eventsWithUuidIds.length) return { error: '', events: eventsWithUuidIds };
-
-  for (const [index, event] of eventsWithUuidIds.entries()) {
-    const storedEventKey = existingEventKeyById.get(event.id) ?? getEventKeyForStorage(event);
-    const updateEvent = (includeAnimationKey = true) => supabaseClient
-      .from('events')
-      .update(eventToUpdateRow(weddingId, event, index, includeAnimationKey, storedEventKey))
-      .eq('id', event.id)
-      .eq('wedding_id', weddingId);
-
-    let { error } = await updateEvent();
-    if (isMissingEventAnimationColumnError(error?.message)) {
-      ({ error } = await updateEvent(false));
-    }
-
-    if (error) {
-      return { error: `Saving event "${event.eventName || event.eventKey || event.id}" failed: ${error.message}`, events: eventsWithUuidIds };
-    }
-  }
-
-  return { error: '', events: eventsWithUuidIds };
+  const submittedEventIds = new Set(events.map((event) => event.id));
+  const guests = current.wedding.rsvp.guests.map((guest) => ({
+    ...guest,
+    invitedEventIds: guest.invitedEventIds.filter((eventId) => submittedEventIds.has(eventId)),
+  }));
+  const result = await saveSupabaseRelationalData(weddingId, events, guests, 'replace');
+  return { error: result.error, detail: result.detail, events: result.events };
 }
 
 const getSchemaCacheMissingColumn = (errorMessage?: string) => {
@@ -749,10 +698,17 @@ export async function saveSupabaseWeddingSettings(weddingId: string, wedding: Sa
   return { error: 'Could not save wedding settings because required wedding_settings columns are missing.' };
 }
 
-export async function deleteSupabaseEvent(eventId: string) {
-  if (!supabase) return { error: 'Supabase is not configured.' };
-  const { error } = await supabase.from('events').delete().eq('id', eventId);
-  return { error: error?.message ?? '' };
+export async function deleteSupabaseEvent(weddingId: string, eventId: string) {
+  if (!supabase) return { error: 'Supabase is not configured.', detail: '', result: null };
+  const { data, error } = await supabase.rpc('delete_wedding_event_transactional', {
+    target_wedding_id: weddingId,
+    target_event_id: eventId,
+  });
+  return {
+    error: error ? transactionalSaveError(error.message) : '',
+    detail: error?.message ?? '',
+    result: data as Record<string, unknown> | null,
+  };
 }
 
 const guestToRow = (weddingId: string, guest: WeddingGuest) => ({
@@ -766,10 +722,89 @@ const guestToRow = (weddingId: string, guest: WeddingGuest) => ({
   meal_preference: guest.mealPreference || null,
 });
 
-const guestToUpdateRow = (weddingId: string, guest: WeddingGuest) => {
-  const { id, wedding_id, ...row } = guestToRow(weddingId, guest);
-  return row;
+const eventToTransactionalRow = (event: WeddingEvent, sortOrder: number) => ({
+  id: event.id,
+  event_key: getEventKeyForStorage(event),
+  event_visual_key: event.eventVisualKey,
+  event_text_style: event.eventTextStyle,
+  event_animation_key: event.eventAnimationKey,
+  event_name: event.eventName,
+  date_label: event.date,
+  start_time_label: event.startTime,
+  venue_name: event.venueName,
+  city: event.city,
+  maps_url: event.mapsUrl,
+  dress_code: event.dressCode,
+  foreground_image_src: event.foregroundImageSrc,
+  background_image_src: event.backgroundImageSrc,
+  calendar_title: event.calendarTitle,
+  calendar_description: event.calendarDescription,
+  sort_order: sortOrder,
+});
+
+const guestToTransactionalRow = (guest: WeddingGuest) => ({
+  id: guest.id,
+  guest_name: guest.guestName.trim() || 'Unnamed Guest',
+  phone: guest.phone,
+  invited_count: Math.max(1, Number(guest.invitedCount) || 1),
+  category: guest.category,
+  invite_code: guest.inviteCode,
+  meal_preference: guest.mealPreference || null,
+  invited_event_ids: guest.invitedEventIds,
+});
+
+const transactionalSaveError = (message?: string | null) => {
+  const normalized = message?.toLowerCase() ?? '';
+  if (normalized.includes('schema cache') && normalized.includes('save_wedding_')) {
+    return 'Could not save because the Phase 2 data-integrity SQL has not been applied or Supabase has not refreshed its schema cache. Run supabase/data_integrity_phase_2.sql and try again.';
+  }
+  if (normalized.includes('schema cache') && (
+    normalized.includes('replace_guest_event_invites_transactional') ||
+    normalized.includes('delete_wedding_event_transactional') ||
+    normalized.includes('delete_wedding_guests_transactional')
+  )) {
+    return 'Could not save because the Phase 2 data-integrity SQL has not been applied or Supabase has not refreshed its schema cache. Run supabase/data_integrity_phase_2.sql and try again.';
+  }
+  if (normalized.includes('duplicate') || normalized.includes('unique') || normalized.includes('already exists') || normalized.includes('already used')) {
+    return 'A duplicate event key or guest invite code was found. Please make each value unique and try again.';
+  }
+  if (normalized.includes('does not belong') || normalized.includes('do not match') || normalized.includes('access denied')) {
+    return 'Some saved selections no longer belong to this wedding. Refresh the page and try again.';
+  }
+  if (normalized.includes('requires') || normalized.includes('must be') || normalized.includes('invalid')) {
+    return message || 'Some submitted data is invalid. Please review it and try again.';
+  }
+  return 'The save could not be completed. No relational data was changed. Please try again.';
 };
+
+const mapTransactionalPayload = (payload: TransactionalRelationalRpcPayload) => ({
+  events: (payload.events ?? []).map(mapEventRow),
+  guests: mapGuestRows(payload.guests ?? [], payload.guest_event_invites ?? []),
+  removed: payload.removed,
+});
+
+export async function saveSupabaseRelationalData(
+  weddingId: string,
+  events: WeddingEvent[],
+  guests: WeddingGuest[],
+  guestMode: 'append' | 'replace' = 'replace'
+) {
+  if (!supabase) return { error: 'Supabase is not configured.', detail: '', events: [], guests: [] };
+
+  const { data, error } = await supabase.rpc('save_wedding_relational_data', {
+    target_wedding_id: weddingId,
+    event_rows: events.map(eventToTransactionalRow),
+    guest_rows: guests.map(guestToTransactionalRow),
+    guest_mode: guestMode,
+  });
+
+  if (error) {
+    return { error: transactionalSaveError(error.message), detail: error.message, events: [], guests: [] };
+  }
+
+  const mapped = mapTransactionalPayload(data as TransactionalRelationalRpcPayload);
+  return { error: '', detail: '', ...mapped };
+}
 
 export async function createSupabaseGuest(weddingId: string, guest: WeddingGuest) {
   if (!supabase) return { guest: null, error: 'Supabase is not configured.' };
@@ -797,122 +832,71 @@ export async function replaceSupabaseGuestInvites(
   eventIds: string[],
   events: WeddingEvent[] = []
 ) {
-  if (!supabase) return { error: 'Supabase is not configured.' };
+  if (!supabase) return { error: 'Supabase is not configured.', detail: '' };
 
-  const { error: deleteError } = await supabase
-    .from('guest_event_invites')
-    .delete()
-    .eq('wedding_id', weddingId)
-    .eq('guest_id', guestId);
-
-  if (deleteError) return { error: deleteError.message };
   const { resolvedIds, unresolvedIds, error: resolveError } = await resolveSupabaseEventIdsForWedding(weddingId, eventIds, events);
   if (resolveError) return { error: resolveError };
   if (unresolvedIds.length) {
     return { error: `Could not save guest event invites because these event selections do not map to Supabase event UUIDs: ${unresolvedIds.join(', ')}` };
   }
-  if (!resolvedIds.length) return { error: '' };
 
-  const { error } = await supabase
-    .from('guest_event_invites')
-    .insert(resolvedIds.map((eventId) => ({ wedding_id: weddingId, guest_id: guestId, event_id: eventId })));
+  const { error } = await supabase.rpc('replace_guest_event_invites_transactional', {
+    target_wedding_id: weddingId,
+    target_guest_id: guestId,
+    event_ids: resolvedIds,
+  });
 
-  return { error: error?.message ?? '' };
+  return {
+    error: error ? transactionalSaveError(error.message) : '',
+    detail: error?.message ?? '',
+  };
 }
 
 export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest[], events: WeddingEvent[] = []) {
-  if (!supabase) return { error: 'Supabase is not configured.' };
-
-  const { data: existingRows, error: existingError } = await supabase
-    .from('guests')
-    .select('id,invite_code,guest_name')
-    .eq('wedding_id', weddingId);
-
-  if (existingError) return { error: `Loading existing guests failed: ${existingError.message}` };
-
-  const existingGuestRows = (existingRows ?? []) as GuestIdLookupSource[];
-  const resolveExistingGuestId = createGuestIdResolver(existingGuestRows);
-  const existingGuestIds = new Set(existingGuestRows.map((row) => row.id));
-  const guestsWithUuidIds = guests.map((guest) => {
-    const matchedGuestId = resolveExistingGuestId(guest.inviteCode)
-      || resolveExistingGuestId(guest.guestName)
-      || (isUuid(guest.id) && existingGuestIds.has(guest.id) ? guest.id : '')
-      || (!isUuid(guest.id) ? resolveExistingGuestId(guest.id) : '');
-
-    return matchedGuestId ? { ...guest, id: matchedGuestId } : guest;
-  });
-
-  const nextIds = new Set(guestsWithUuidIds.map((guest) => guest.id).filter(isUuid));
-  const idsToDelete = existingGuestRows
-    .map((row) => row.id)
-    .filter((id) => !nextIds.has(id));
-
-  if (idsToDelete.length) {
-    const { error: deleteError } = await supabase
-      .from('guests')
-      .delete()
-      .eq('wedding_id', weddingId)
-      .in('id', idsToDelete);
-    if (deleteError) return { error: `Deleting removed guests failed: ${deleteError.message}` };
-  }
-
-  for (const guest of guestsWithUuidIds) {
-    if (isUuid(guest.id) && existingGuestIds.has(guest.id)) {
-      const { error: updateError } = await supabase
-        .from('guests')
-        .update(guestToUpdateRow(weddingId, guest))
-        .eq('id', guest.id)
-        .eq('wedding_id', weddingId);
-      if (updateError) return { error: `Saving guest "${guest.guestName || guest.inviteCode || guest.id}" failed: ${updateError.message}` };
-      continue;
-    }
-
-    const { data: insertedGuest, error: insertError } = await supabase
-      .from('guests')
-      .insert({
-        ...guestToRow(weddingId, guest),
-        id: undefined,
-      })
-      .select('id')
-      .single();
-    if (insertError) return { error: `Creating guest "${guest.guestName || guest.inviteCode || guest.id}" failed: ${insertError.message}` };
-    guest.id = insertedGuest.id;
-  }
-
-  const { error: deleteInvitesError } = await supabase
-    .from('guest_event_invites')
-    .delete()
-    .eq('wedding_id', weddingId);
-
-  if (deleteInvitesError) return { error: `Clearing guest event invites failed: ${deleteInvitesError.message}` };
-
+  if (!supabase) return { error: 'Supabase is not configured.', detail: '', guests: [] };
   const { resolveEventId, error: resolveError } = await getSupabaseEventIdResolver(weddingId, events);
   if (resolveError) return { error: `Resolving event invite IDs failed: ${resolveError}` };
 
   const unresolvedSelections = new Set<string>();
-  const inviteRows = guestsWithUuidIds.flatMap((guest) => {
-    const resolvedIds = guest.invitedEventIds
+  const guestsWithResolvedEvents = guests.map((guest) => {
+    const invitedEventIds = guest.invitedEventIds
       .map(resolveEventId)
       .filter((eventId, index, allIds) => Boolean(eventId) && allIds.indexOf(eventId) === index);
-    const unresolvedIds = guest.invitedEventIds.filter((eventId) => !resolveEventId(eventId));
-    unresolvedIds.forEach((eventId) => unresolvedSelections.add(eventId));
-    return resolvedIds.map((eventId) => ({ wedding_id: weddingId, guest_id: guest.id, event_id: eventId }));
+    guest.invitedEventIds.filter((eventId) => !resolveEventId(eventId)).forEach((eventId) => unresolvedSelections.add(eventId));
+    return { ...guest, invitedEventIds };
   });
 
   if (unresolvedSelections.size) {
     return { error: `Could not save guest event invites because these event selections do not map to Supabase event UUIDs: ${Array.from(unresolvedSelections).join(', ')}` };
   }
 
-  if (!inviteRows.length) return { error: '' };
+  const { data, error } = await supabase.rpc('save_wedding_guests_transactional', {
+    target_wedding_id: weddingId,
+    guest_rows: guestsWithResolvedEvents.map(guestToTransactionalRow),
+    guest_mode: 'replace',
+  });
+  if (error) return { error: transactionalSaveError(error.message), detail: error.message };
 
-  const { error } = await supabase.from('guest_event_invites').insert(inviteRows);
-  return { error: error?.message ? `Saving guest event invites failed: ${error.message}` : '' };
+  const mapped = mapTransactionalPayload(data as TransactionalRelationalRpcPayload);
+  return { error: '', detail: '', guests: mapped.guests };
 }
 
-export async function deleteSupabaseGuest(guestId: string) {
-  if (!supabase) return { error: 'Supabase is not configured.' };
-  const { error } = await supabase.from('guests').delete().eq('id', guestId);
-  return { error: error?.message ?? '' };
+export async function deleteSupabaseGuest(weddingId: string, guestId: string) {
+  if (!supabase) return { error: 'Supabase is not configured.', detail: '', result: null };
+  return deleteSupabaseGuests(weddingId, [guestId]);
+}
+
+export async function deleteSupabaseGuests(weddingId: string, guestIds: string[]) {
+  if (!supabase) return { error: 'Supabase is not configured.', detail: '', result: null };
+  const { data, error } = await supabase.rpc('delete_wedding_guests_transactional', {
+    target_wedding_id: weddingId,
+    guest_ids: guestIds,
+  });
+  return {
+    error: error ? transactionalSaveError(error.message) : '',
+    detail: error?.message ?? '',
+    result: data as Record<string, unknown> | null,
+  };
 }
 
 export async function importSupabaseGuests(
@@ -922,42 +906,25 @@ export async function importSupabaseGuests(
   events: WeddingEvent[] = []
 ) {
   if (!supabase) return { error: 'Supabase is not configured.' };
-
-  if (mode === 'replace') {
-    const { error: deleteError } = await supabase.from('guests').delete().eq('wedding_id', weddingId);
-    if (deleteError) return { error: deleteError.message };
-  }
-
+  const resolvedGuests: WeddingGuest[] = [];
   for (const guest of guests) {
-    const { data, error } = await supabase
-      .from('guests')
-      .insert({
-        wedding_id: weddingId,
-        guest_name: guest.guestName.trim() || 'Unnamed Guest',
-        phone: guest.phone,
-        invited_count: Math.max(1, Number(guest.invitedCount) || 1),
-        category: guest.category,
-        invite_code: guest.inviteCode,
-        meal_preference: guest.mealPreference || null,
-      })
-      .select('id')
-      .single();
-    if (error) return { error: error.message };
-
     const { resolvedIds, unresolvedIds, error: resolveError } = await resolveSupabaseEventIdsForWedding(weddingId, guest.invitedEventIds, events);
     if (resolveError) return { error: resolveError };
     if (unresolvedIds.length) {
       return { error: `Could not import guests because these event selections do not map to Supabase event UUIDs: ${unresolvedIds.join(', ')}` };
     }
-    if (resolvedIds.length) {
-      const { error: inviteError } = await supabase
-        .from('guest_event_invites')
-        .insert(resolvedIds.map((eventId) => ({ wedding_id: weddingId, guest_id: data.id, event_id: eventId })));
-      if (inviteError) return { error: inviteError.message };
-    }
+    resolvedGuests.push({ ...guest, invitedEventIds: resolvedIds });
   }
 
-  return { error: '' };
+  const { data, error } = await supabase.rpc('save_wedding_guests_transactional', {
+    target_wedding_id: weddingId,
+    guest_rows: resolvedGuests.map(guestToTransactionalRow),
+    guest_mode: mode,
+  });
+  if (error) return { error: transactionalSaveError(error.message), detail: error.message };
+
+  const mapped = mapTransactionalPayload(data as TransactionalRelationalRpcPayload);
+  return { error: '', detail: '', guests: mapped.guests };
 }
 
 export async function loadSupabaseRsvpResponses(
@@ -992,12 +959,10 @@ export async function loadSupabaseRsvpResponses(
 }
 
 export async function saveSupabaseRsvpSubmission({
-  weddingId,
   weddingSlug,
   guest,
   responses,
   mealPreference,
-  events = [],
 }: {
   weddingId: string;
   weddingSlug: string;
@@ -1008,42 +973,18 @@ export async function saveSupabaseRsvpSubmission({
 }) {
   if (!supabase) return { error: 'Supabase is not configured.' };
 
-  const { error: mealError } = await supabase
-    .from('guests')
-    .update({ meal_preference: mealPreference || null })
-    .eq('id', guest.id)
-    .eq('wedding_id', weddingId);
-
-  if (mealError) return { error: mealError.message };
-
   const activeResponses = responses
     .filter((response): response is { eventId: string; status: Exclude<RsvpStatus, ''> } => Boolean(response.status));
-  const { resolveEventId, error: resolveError } = await getSupabaseEventIdResolver(weddingId, events);
-  if (resolveError) return { error: resolveError };
-  const unresolvedIds = activeResponses
-    .map((response) => response.eventId)
-    .filter((eventId) => !resolveEventId(eventId));
-  if (unresolvedIds.length) {
-    return { error: `Could not submit RSVP because these event selections do not map to Supabase event UUIDs: ${unresolvedIds.join(', ')}` };
-  }
-
-  const responseByResolvedId = new Map(
-    activeResponses.map((response) => [resolveEventId(response.eventId), response.status])
-  );
-  const rows = Array.from(responseByResolvedId.entries())
-    .map(([eventId, status]) => ({
-      wedding_id: weddingId,
-      guest_id: guest.id,
-      event_id: eventId,
-      status,
-    }));
-
-  if (rows.length) {
-    const { error } = await supabase
-      .from('rsvp_responses')
-      .upsert(rows, { onConflict: 'guest_id,event_id' });
-    if (error) return { error: error.message };
-  }
+  const { error } = await supabase.rpc('submit_guest_rsvp', {
+    wedding_slug: weddingSlug,
+    invite_code: guest.inviteCode,
+    responses: activeResponses.map((response) => ({
+      event_id: response.eventId,
+      status: response.status,
+    })),
+    meal_preference: mealPreference || '',
+  });
+  if (error) return { error: error.message };
 
   const updatedAt = new Date().toISOString();
   const storedResponses: StoredRsvpResponse[] = responses.map((response) => ({
