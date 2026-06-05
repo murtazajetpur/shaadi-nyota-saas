@@ -125,7 +125,7 @@ function Theme2SharedInviteExperienceContent({
   const inviteCanvas = (
     <div className="theme2-phone-canvas-wrapper">
       <div className="theme2-blurred-backdrop" style={{ backgroundImage: `url("${activeBg}")` }} />
-      <audio ref={audioRef} loop preload="auto" src={audioSrc} />
+      <audio ref={audioRef} loop preload="metadata" src={audioSrc} />
       {(heroStarted || heroDone) && (
         <button className="theme2-audio-toggle-btn micro-interaction" onClick={toggleAudio} type="button" aria-label={audioPlaying ? 'Pause music' : 'Play music'}>
           {audioPlaying ? (

@@ -1,5 +1,6 @@
 .marketing-home {
   min-height: 100vh;
+  min-height: 100dvh;
   background:
     linear-gradient(90deg, rgba(108, 26, 35, 0.06) 1px, transparent 1px),
     linear-gradient(180deg, #fffaf0 0%, #f7eadb 42%, #fff8ec 100%);
@@ -141,6 +142,7 @@
   align-items: center;
   width: min(1180px, calc(100% - 32px));
   min-height: calc(100vh - 74px);
+  min-height: calc(100dvh - 74px);
   margin: 0 auto;
   padding: clamp(3rem, 7vw, 6.5rem) 0 4rem;
 }

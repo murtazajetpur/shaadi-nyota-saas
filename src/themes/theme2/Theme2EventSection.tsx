@@ -32,7 +32,7 @@ export function Theme2EventFrame({
 
   return (
     <div className={`theme2-section theme2-event-section theme2-event-${tone} ${className}`} ref={sectionRef}>
-      <img src={imageSrc} className="theme2-section-bg" alt={event.eventName} loading="lazy" />
+      <img src={imageSrc} className="theme2-section-bg" alt={event.eventName} loading="lazy" decoding="async" />
       <EventAnimationLayer animationKey={event.eventAnimationKey} eventCategory={event.eventKey ?? event.id} />
       <div className={`theme2-section-overlay theme2-event-overlay theme2-event-overlay-${tone}`} />
       <div className={`theme2-section-content theme2-event-content ${isVisible ? 'visible' : ''}`}>

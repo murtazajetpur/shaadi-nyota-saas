@@ -11,7 +11,6 @@ import {
     createSupabaseEvent,
     createSupabaseGuest,
     deleteSupabaseEvent,
-    deleteSupabaseGuest,
     deleteSupabaseGuests,
     importSupabaseGuests,
     loadSupabaseRsvpResponses,
@@ -152,6 +151,7 @@ const revealedImageOptions = getAllRevealedImages().map((option) => ({
     label: option.label,
     imageType: option.imageType,
     imageSrc: resolveAssetPath(option.src),
+    thumbnailSrc: resolveAssetPath(option.thumbnailSrc ?? option.previewSrc ?? option.src),
     altText: option.altText,
     themeLabel: 'Reveal Image Library',
     helper: option.helper,
@@ -160,6 +160,7 @@ const storyImageOptions = getAllStoryImages().map((option) => ({
     key: option.id,
     label: option.label,
     imageSrc: resolveAssetPath(option.src),
+    thumbnailSrc: resolveAssetPath(option.thumbnailSrc ?? option.previewSrc ?? option.src),
     altText: option.altText,
     themeLabel: 'Our Story Library',
 }));
@@ -167,6 +168,7 @@ const closingImagePresets = getAllClosingGalleryPresetPhotos().map((option) => (
     key: option.id,
     label: option.label,
     imageSrc: resolveAssetPath(option.src),
+    thumbnailSrc: resolveAssetPath(option.thumbnailSrc ?? option.previewSrc ?? option.src),
     themeLabel: option.sourceTheme === 'theme-2' ? 'Scroll Opening' : 'Preset Library',
 }));
 const musicOptions = Array.from(
@@ -178,6 +180,19 @@ const musicOptions = Array.from(
 const musicOptionLabels = Object.fromEntries(musicOptions.map((option) => [option.value, option.label]));
 const closingGalleryBucket = 'wedding-assets';
 const closingGalleryMaxImages = 3;
+const closingGalleryMaxUploadSizeBytes = 5 * 1024 * 1024;
+const closingGalleryAllowedUploadTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const closingGalleryAcceptedUploadTypes = 'image/jpeg,image/png,image/webp';
+const saveAllChangesLabel = 'Save All Changes';
+const discardUnsavedChangesLabel = 'Discard Unsaved Changes';
+const uploadSetupMessage = 'Image upload is not configured yet. Please create the wedding-assets Supabase Storage bucket and run the storage policies.';
+const rsvpStatusLabels: Record<string, string> = {
+    yes: 'Yes',
+    no: 'No',
+    maybe: 'Maybe',
+    pending: 'Pending',
+    '': 'Pending',
+};
 const revealStyleLabels: Record<string, string> = {
     envelope: 'Envelope Opening',
     scroll: 'Scroll Opening',
@@ -245,6 +260,23 @@ const applyAdminFields = (wedding: SampleWeddingData): SampleWeddingData => {
 
 const guestCsvBaseHeaders = ['guestName', 'phone', 'invitedCount', 'category'];
 const invitedCsvValues = new Set(['yes', 'y', 'true', '1']);
+
+const getSafeInvitedCount = (guest: WeddingGuest) => (
+    Math.max(1, Math.floor(Number(guest.invitedCount) || 1))
+);
+
+const normalizeWhatsAppPhone = (phone: string) => {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length === 10) return `91${digits}`;
+    if (digits.length >= 11 && digits.length <= 15) return digits;
+    return '';
+};
+
+const buildWhatsAppUrl = (phone: string, message: string) => {
+    const normalizedPhone = normalizeWhatsAppPhone(phone);
+    if (!normalizedPhone) return '';
+    return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;
+};
 
 const normalizeCsvHeader = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -484,6 +516,7 @@ export default function Dashboard({
     ));
     const [guestSearchQuery, setGuestSearchQuery] = useState('');
     const [guestImportMode, setGuestImportMode] = useState<CsvImportMode>('append');
+    const [selectedGuestCsvFile, setSelectedGuestCsvFile] = useState<File | null>(null);
     const [guestImportWarnings, setGuestImportWarnings] = useState<string[]>([]);
     const [closingImagePickerTarget, setClosingImagePickerTarget] = useState<number | 'add' | null>(null);
     const [isClosingImageUploading, setIsClosingImageUploading] = useState(false);
@@ -548,7 +581,7 @@ export default function Dashboard({
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'rsvp' && hasDashboardRsvpAccess) {
+        if ((activeTab === 'guests' || activeTab === 'rsvp') && hasDashboardRsvpAccess) {
             if (supabaseWeddingId) {
                 setIsRsvpLoading(true);
                 loadSupabaseRsvpResponses(
@@ -647,38 +680,33 @@ export default function Dashboard({
     }), [weddingData.events]);
     const guestSummary = useMemo(() => ({
         totalGuests: weddingData.rsvp.guests.length,
-        totalInvitedCount: weddingData.rsvp.guests.reduce((total, guest) => total + guest.invitedCount, 0),
+        totalInvitedCount: weddingData.rsvp.guests.reduce((total, guest) => total + getSafeInvitedCount(guest), 0),
         noEventGuests: weddingData.rsvp.guests.filter((guest) => guest.invitedEventIds.length === 0).length,
         missingPhoneGuests: weddingData.rsvp.guests.filter((guest) => !guest.phone.trim()).length,
     }), [weddingData.rsvp.guests]);
-    const filteredGuestRows = useMemo(() => {
-        const query = guestSearchQuery.trim().toLowerCase();
-        return weddingData.rsvp.guests
-            .map((guest, guestIndex) => ({ guest, guestIndex }))
-            .filter(({ guest }) => {
-                if (!query) return true;
-                return [guest.guestName, guest.phone, guest.category].some((value) => (
-                    value.toLowerCase().includes(query)
-                ));
-            });
-    }, [guestSearchQuery, weddingData.rsvp.guests]);
-    const areAllFilteredGuestsSelected = filteredGuestRows.length > 0 && filteredGuestRows.every(({ guest }) => (
-        selectedGuestIds.includes(guest.id)
-    ));
     const rsvpAnalytics = useMemo(() => {
         const relevantResponses = rsvpResponses.filter((response) => response.weddingSlug === weddingData.wedding.slug);
-        const getResponse = (guest: WeddingGuest, eventId: string) => relevantResponses.find((response) => (
-            response.guestId === guest.id && response.eventId === eventId
-        ));
+        const responseByGuestEvent = new Map(relevantResponses.map((response) => [
+            `${response.guestId}:${response.eventId}`,
+            response,
+        ]));
+        const eventNameById = new Map(weddingData.events.map((event) => [event.id, event.eventName || 'Event']));
+        const getResponse = (guest: WeddingGuest, eventId: string) => responseByGuestEvent.get(`${guest.id}:${eventId}`);
+        const createCounts = () => ({
+            people: { yes: 0, no: 0, maybe: 0, pending: 0 },
+            families: { yes: 0, no: 0, maybe: 0, pending: 0 },
+        });
+        const addStatus = (counts: ReturnType<typeof createCounts>, guest: WeddingGuest, eventId: string) => {
+            const status = getResponse(guest, eventId)?.status || 'pending';
+            const normalizedStatus = status === 'yes' || status === 'no' || status === 'maybe' ? status : 'pending';
+            counts.people[normalizedStatus] += getSafeInvitedCount(guest);
+            counts.families[normalizedStatus] += 1;
+        };
         const countStatusesForGuests = (guests: WeddingGuest[]) => {
-            const counts = { yes: 0, no: 0, maybe: 0, pending: 0 };
+            const counts = createCounts();
             guests.forEach((guest) => {
                 guest.invitedEventIds.forEach((eventId) => {
-                    const status = getResponse(guest, eventId)?.status ?? '';
-                    if (status === 'yes') counts.yes += 1;
-                    else if (status === 'no') counts.no += 1;
-                    else if (status === 'maybe') counts.maybe += 1;
-                    else counts.pending += 1;
+                    addStatus(counts, guest, eventId);
                 });
             });
             return counts;
@@ -686,13 +714,31 @@ export default function Dashboard({
         const totals = countStatusesForGuests(weddingData.rsvp.guests);
         const eventSummaries = weddingData.events.map((event) => {
             const invitedGuests = weddingData.rsvp.guests.filter((guest) => guest.invitedEventIds.includes(event.id));
+            const counts = createCounts();
+            invitedGuests.forEach((guest) => addStatus(counts, guest, event.id));
             return {
                 event,
                 invitedGuests,
-                counts: countStatusesForGuests(invitedGuests.map((guest) => ({
-                    ...guest,
-                    invitedEventIds: [event.id],
-                }))),
+                invitedPeople: invitedGuests.reduce((total, guest) => total + getSafeInvitedCount(guest), 0),
+                counts,
+            };
+        });
+        const eventMealSummaries = weddingData.events.map((event) => {
+            const invitedGuests = weddingData.rsvp.guests.filter((guest) => guest.invitedEventIds.includes(event.id));
+            const mealCounts = { veg: 0, nonVeg: 0, jain: 0, other: 0 };
+            invitedGuests.forEach((guest) => {
+                const response = getResponse(guest, event.id);
+                if (response?.status !== 'yes') return;
+                const mealPreference = response.mealPreference || guest.mealPreference || '';
+                const count = getSafeInvitedCount(guest);
+                if (mealPreference === 'veg') mealCounts.veg += count;
+                else if (mealPreference === 'nonVeg') mealCounts.nonVeg += count;
+                else if (mealPreference === 'jain') mealCounts.jain += count;
+                else mealCounts.other += count;
+            });
+            return {
+                event,
+                mealCounts,
             };
         });
         const guestMealPreferences = weddingData.rsvp.guests.map((guest) => (
@@ -712,14 +758,28 @@ export default function Dashboard({
                 .map((response) => response.updatedAt)
                 .sort()
                 .at(-1) ?? '';
-            return { guest, counts, mealPreference, lastUpdated };
+            const eventStatuses = guest.invitedEventIds.map((eventId) => {
+                const status = getResponse(guest, eventId)?.status || 'pending';
+                const label = rsvpStatusLabels[status] ?? 'Pending';
+                return {
+                    eventId,
+                    eventName: eventNameById.get(eventId) ?? 'Event',
+                    status,
+                    label,
+                };
+            });
+            const statusSummary = eventStatuses.length
+                ? eventStatuses.map((item) => `${item.eventName}: ${item.label}`).join(' | ')
+                : 'No events selected';
+            const compactSummary = `Yes ${counts.families.yes} | No ${counts.families.no} | Maybe ${counts.families.maybe} | Pending ${counts.families.pending}`;
+            return { guest, counts, mealPreference, lastUpdated, eventStatuses, statusSummary, compactSummary };
         });
         const categorySummaries = Array.from(new Set(weddingData.rsvp.guests.map((guest) => guest.category || 'Uncategorized'))).map((category) => {
             const guests = weddingData.rsvp.guests.filter((guest) => (guest.category || 'Uncategorized') === category);
             return {
                 category,
                 guestCount: guests.length,
-                invitedCount: guests.reduce((total, guest) => total + guest.invitedCount, 0),
+                invitedCount: guests.reduce((total, guest) => total + getSafeInvitedCount(guest), 0),
                 counts: countStatusesForGuests(guests),
             };
         });
@@ -727,11 +787,32 @@ export default function Dashboard({
         return {
             totals,
             eventSummaries,
+            eventMealSummaries,
             mealSummary,
             guestSummaries,
             categorySummaries,
+            guestSummaryById: new Map(guestSummaries.map((summary) => [summary.guest.id, summary])),
         };
     }, [rsvpResponses, weddingData]);
+    const filteredGuestRows = useMemo(() => {
+        const query = guestSearchQuery.trim().toLowerCase();
+        return weddingData.rsvp.guests
+            .map((guest, guestIndex) => ({ guest, guestIndex }))
+            .filter(({ guest }) => {
+                if (!query) return true;
+                const rsvpSummary = rsvpAnalytics.guestSummaryById.get(guest.id);
+                return [
+                    guest.guestName,
+                    guest.phone,
+                    guest.category,
+                    rsvpSummary?.statusSummary ?? '',
+                    rsvpSummary?.mealPreference ?? '',
+                ].some((value) => value.toLowerCase().includes(query));
+            });
+    }, [guestSearchQuery, rsvpAnalytics.guestSummaryById, weddingData.rsvp.guests]);
+    const areAllFilteredGuestsSelected = filteredGuestRows.length > 0 && filteredGuestRows.every(({ guest }) => (
+        selectedGuestIds.includes(guest.id)
+    ));
 
     const updateWeddingData = (updater: (current: SampleWeddingData) => SampleWeddingData) => {
         setWeddingData((current) => {
@@ -836,6 +917,7 @@ export default function Dashboard({
     };
 
     const handleResetDraft = async () => {
+        if (!window.confirm('Discard unsaved changes and reload the last saved version?')) return;
         clearDashboardDraft(dashboardDraftStorageKey);
         window.localStorage.removeItem(mockDashboardDraftStorageKey);
         if (supabaseWeddingId) {
@@ -953,6 +1035,14 @@ export default function Dashboard({
     };
 
     const uploadClosingGalleryImage = async (file: File) => {
+        if (!closingGalleryAllowedUploadTypes.has(file.type)) {
+            setSaveError('Please upload a JPG, PNG, or WebP image for the Closing Gallery.');
+            return;
+        }
+        if (file.size > closingGalleryMaxUploadSizeBytes) {
+            setSaveError('Please upload a Closing Gallery image smaller than 5 MB.');
+            return;
+        }
         if (!supabaseWeddingId || !supabase) {
             console.error('Closing Gallery upload failed: Supabase Storage is only available for saved Supabase weddings.');
             setSaveError('Could not upload image. Supabase Storage is only available for saved Supabase weddings.');
@@ -972,13 +1062,17 @@ export default function Dashboard({
             .from(closingGalleryBucket)
             .upload(storagePath, file, {
                 cacheControl: '3600',
+                contentType: file.type,
                 upsert: false,
             });
 
         if (uploadError) {
             setIsClosingImageUploading(false);
             console.error('Closing Gallery upload failed:', uploadError);
-            setSaveError(`Could not upload image. ${uploadError.message}`);
+            const uploadErrorMessage = uploadError.message.toLowerCase().includes('bucket')
+                ? uploadSetupMessage
+                : `Could not upload image. ${uploadError.message}`;
+            setSaveError(uploadErrorMessage);
             return;
         }
 
@@ -1011,6 +1105,19 @@ export default function Dashboard({
                 eventIndex === index ? { ...event, [key]: value } : event
             )),
         }));
+    };
+
+    const moveEvent = (index: number, direction: -1 | 1) => {
+        updateWeddingData((current) => {
+            const targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= current.events.length) return current;
+            const nextEvents = [...current.events];
+            [nextEvents[index], nextEvents[targetIndex]] = [nextEvents[targetIndex], nextEvents[index]];
+            return {
+                ...current,
+                events: nextEvents,
+            };
+        });
     };
 
     const addEvent = async () => {
@@ -1168,36 +1275,23 @@ export default function Dashboard({
         }));
     };
 
-    const deleteGuest = async (index: number) => {
-        const guestToDelete = weddingData.rsvp.guests[index];
-        if (!guestToDelete || !window.confirm(`Delete ${guestToDelete.guestName || 'this guest'}?`)) return;
-        if (supabaseWeddingId && guestToDelete) {
-            const result = await deleteSupabaseGuest(supabaseWeddingId, guestToDelete.id);
-            if (result.error) {
-                console.error('Could not delete guest', result.error);
-                setSaveError(`Could not delete guest.${isAdminMode ? adminRlsHint : ''}`);
-                setSaveErrorDetail(result.detail || result.error);
-                return;
-            }
-        }
-        updateWeddingData((current) => ({
-            ...current,
-            rsvp: {
-                ...current.rsvp,
-                guests: current.rsvp.guests.filter((_, guestIndex) => guestIndex !== index),
-            },
-        }));
-        setSelectedGuestIds((current) => current.filter((guestId) => guestId !== guestToDelete.id));
-        setSaveStatus('Guest deleted');
-    };
-
     const getGuestInviteLink = (guest: WeddingGuest) => {
         return `/${weddingData.wedding.slug}/invite/${guest.inviteCode}`;
     };
 
+    const getGuestInviteUrl = (guest: WeddingGuest) => `${window.location.origin}${getGuestInviteLink(guest)}`;
+
+    const getGuestWhatsAppUrl = (guest: WeddingGuest, messageType: 'invite' | 'reminder') => {
+        const inviteUrl = getGuestInviteUrl(guest);
+        const guestName = guest.guestName || 'there';
+        const message = messageType === 'invite'
+            ? `Hi ${guestName},\n\nWith great joy, we invite you to celebrate the wedding of ${weddingData.couple.displayName}.\n\nWe would be honoured to have you with us on this special occasion.\n\nPlease open your personalized wedding invitation here:\n${inviteUrl}\n\nLooking forward to celebrating together.`
+            : `Hi ${guestName},\n\nA gentle reminder to confirm your RSVP for ${weddingData.couple.displayName}'s wedding celebration.\n\nPlease open your invitation and share your response here:\n${inviteUrl}\n\nYour presence would mean a lot to us.`;
+        return buildWhatsAppUrl(guest.phone, message);
+    };
+
     const copyGuestInviteLink = async (guest: WeddingGuest) => {
-        const link = `${window.location.origin}${getGuestInviteLink(guest)}`;
-        await window.navigator.clipboard?.writeText(link);
+        await window.navigator.clipboard?.writeText(getGuestInviteUrl(guest));
     };
 
     const copyWeddingWebsiteUrl = async () => {
@@ -1207,7 +1301,7 @@ export default function Dashboard({
 
     const previewGuestInvite = async (guest: WeddingGuest) => {
         await handleSaveDraft();
-        window.open(getGuestInviteLink(guest), '_blank', 'noopener,noreferrer');
+        window.open(getGuestInviteUrl(guest), '_blank', 'noopener,noreferrer');
     };
 
     const downloadGuestCsvTemplate = () => {
@@ -1231,7 +1325,7 @@ export default function Dashboard({
                 guest.invitedCount,
                 guest.category,
                 guest.inviteCode,
-                getGuestInviteLink(guest),
+                getGuestInviteUrl(guest),
                 ...weddingData.events.map((event) => (
                     guest.invitedEventIds.includes(event.id) ? 'yes' : 'no'
                 )),
@@ -1241,9 +1335,7 @@ export default function Dashboard({
         downloadCsv(`${weddingData.wedding.slug}-guests.csv`, rows);
     };
 
-    const handleGuestCsvImport = async (event: ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
+    const importGuestCsvFile = async (file: File) => {
         if (!file) return;
 
         const rows = parseCsv(await file.text());
@@ -1332,6 +1424,7 @@ export default function Dashboard({
                 setSaveError('');
             }
             setGuestImportWarnings(warnings);
+            setSelectedGuestCsvFile(null);
             return;
         }
 
@@ -1345,6 +1438,16 @@ export default function Dashboard({
             },
         }));
         setGuestImportWarnings(warnings);
+        setSelectedGuestCsvFile(null);
+    };
+
+    const handleGuestCsvImport = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0] ?? null;
+        event.target.value = '';
+        setSelectedGuestCsvFile(file);
+        if (file) {
+            setGuestImportWarnings([]);
+        }
     };
 
     const exportRsvpCsv = () => {
@@ -1571,7 +1674,8 @@ export default function Dashboard({
                     </span>
                     {saveError && <em>{saveError}</em>}
                     {showTechnicalSaveDetail && <em className="technical-detail">Technical detail: {saveErrorDetail}</em>}
-                    <button type="button" onClick={handleResetDraft}>Reset Draft</button>
+                    <small className="dashboard-save-hint">Save buttons apply all unsaved dashboard changes.</small>
+                    <button type="button" onClick={handleResetDraft}>{discardUnsavedChangesLabel}</button>
                     {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                 </div>
                 <nav className="dashboard-tabs" aria-label="Dashboard sections">
@@ -1607,7 +1711,7 @@ export default function Dashboard({
                                 <h2>{weddingData.couple.displayName}</h2>
                             </div>
                             <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                Save Wedding Details
+                                {saveAllChangesLabel}
                             </button>
                         </div>
                         <div className="overview-grid">
@@ -1666,7 +1770,7 @@ export default function Dashboard({
                                 <h2>Edit the invite intro</h2>
                             </div>
                             <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                Save Opening Reveal
+                                {saveAllChangesLabel}
                             </button>
                         </div>
                         <p className="dashboard-note">
@@ -1718,7 +1822,7 @@ export default function Dashboard({
                                                 label={option.label}
                                                 helper={option.helper}
                                                 meta={option.themeLabel}
-                                                imageSrc={option.imageSrc}
+                                                imageSrc={option.thumbnailSrc}
                                                 selected={weddingData.hero.revealImageSrc === option.imageSrc}
                                                 onClick={() => applyRevealedImage(option)}
                                             />
@@ -1745,7 +1849,7 @@ export default function Dashboard({
                                 <h2>Edit the couple story</h2>
                             </div>
                             <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                Save Our Story
+                                {saveAllChangesLabel}
                             </button>
                         </div>
                         <p className="dashboard-note">
@@ -1791,7 +1895,7 @@ export default function Dashboard({
                                                 type="button"
                                                 onClick={() => applyStoryImage(option)}
                                             >
-                                                <img src={resolveAssetPath(option.imageSrc)} alt="" />
+                                                <img src={resolveAssetPath(option.thumbnailSrc)} alt="" loading="lazy" decoding="async" />
                                                 <strong>{option.label}</strong>
                                                 <span>{option.themeLabel}</span>
                                             </button>
@@ -1813,7 +1917,7 @@ export default function Dashboard({
                                 <h2>Edit couple details</h2>
                             </div>
                             <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                Save Couple Details
+                                {saveAllChangesLabel}
                             </button>
                         </div>
                         <label className="dashboard-check">
@@ -1843,7 +1947,7 @@ export default function Dashboard({
                             </div>
                             <div className="dashboard-header-actions">
                                 <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
-                                    Save Events
+                                    {saveAllChangesLabel}
                                 </button>
                                 <button className="dashboard-primary-btn" type="button" onClick={addEvent}>Add event</button>
                             </div>
@@ -1853,7 +1957,11 @@ export default function Dashboard({
                                 <div className="event-editor" key={event.id}>
                                     <div className="event-editor-header">
                                         <h3>{event.eventName || `Event ${index + 1}`}</h3>
-                                        <button type="button" onClick={() => deleteEvent(index)}>Delete</button>
+                                        <div className="event-order-actions">
+                                            <button type="button" onClick={() => moveEvent(index, -1)} disabled={index === 0}>Move Up</button>
+                                            <button type="button" onClick={() => moveEvent(index, 1)} disabled={index === weddingData.events.length - 1}>Move Down</button>
+                                            <button type="button" onClick={() => deleteEvent(index)}>Delete</button>
+                                        </div>
                                     </div>
                                     <div className="event-editor-body">
                                         <div className="event-editor-fields form-grid">
@@ -1914,7 +2022,7 @@ export default function Dashboard({
                                     </button>
                                 )}
                                 <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
-                                    Save Guests
+                                    {saveAllChangesLabel}
                                 </button>
                                 <button className="dashboard-primary-btn" type="button" onClick={addGuest}>Add guest</button>
                             </div>
@@ -1922,30 +2030,51 @@ export default function Dashboard({
                         <div className="guest-summary-grid">
                             <InfoBlock label="Families" value={String(guestSummary.totalGuests)} />
                             <InfoBlock label="Invited count" value={String(guestSummary.totalInvitedCount)} />
-                            <InfoBlock label="No events" value={String(guestSummary.noEventGuests)} />
+                            <InfoBlock label="Unassigned Families" value={String(guestSummary.noEventGuests)} />
                             <InfoBlock label="Missing phone" value={String(guestSummary.missingPhoneGuests)} />
                         </div>
-                        <div className="guest-csv-toolbar">
-                            <button className="dashboard-primary-btn secondary" type="button" onClick={downloadGuestCsvTemplate}>
-                                Download CSV Template
-                            </button>
-                            <button className="dashboard-primary-btn secondary" type="button" onClick={exportGuestsCsv}>
-                                Export Guests CSV
-                            </button>
-                            <label className="csv-mode-select">
-                                <span>Import mode</span>
-                                <select
-                                    value={guestImportMode}
-                                    onChange={(event) => setGuestImportMode(event.target.value as CsvImportMode)}
+                        <div className="guest-csv-panel">
+                            <div className="guest-csv-panel-header">
+                                <div>
+                                    <h3>Guest CSV Tools</h3>
+                                    <p>Use the template to prepare your guest list. You can append new guests or replace the current guest list after validation.</p>
+                                </div>
+                            </div>
+                            <div className="guest-csv-toolbar">
+                                <button className="dashboard-primary-btn secondary" type="button" onClick={downloadGuestCsvTemplate}>
+                                    Download CSV Template
+                                </button>
+                                <button className="dashboard-primary-btn secondary" type="button" onClick={exportGuestsCsv}>
+                                    Export Guests
+                                </button>
+                            </div>
+                            <div className="guest-csv-import-row">
+                                <label className="csv-mode-select">
+                                    <span>Import Mode</span>
+                                    <select
+                                        value={guestImportMode}
+                                        onChange={(event) => setGuestImportMode(event.target.value as CsvImportMode)}
+                                    >
+                                        <option value="append">Append new guests</option>
+                                        <option value="replace">Replace existing guests</option>
+                                    </select>
+                                </label>
+                                <label className="csv-file-control">
+                                    <span>Choose CSV File</span>
+                                    <input type="file" accept=".csv,text/csv" onChange={handleGuestCsvImport} />
+                                </label>
+                                <button
+                                    className="dashboard-primary-btn secondary"
+                                    type="button"
+                                    disabled={!selectedGuestCsvFile}
+                                    onClick={() => {
+                                        if (selectedGuestCsvFile) void importGuestCsvFile(selectedGuestCsvFile);
+                                    }}
                                 >
-                                    <option value="append">Append to current guests</option>
-                                    <option value="replace">Replace all guests</option>
-                                </select>
-                            </label>
-                            <label className="csv-file-control">
-                                <span>Import CSV</span>
-                                <input type="file" accept=".csv,text/csv" onChange={handleGuestCsvImport} />
-                            </label>
+                                    Import CSV
+                                </button>
+                                {selectedGuestCsvFile && <span className="csv-selected-file">{selectedGuestCsvFile.name}</span>}
+                            </div>
                         </div>
                         {guestImportWarnings.length > 0 && (
                             <div className="csv-warning-box">
@@ -1986,99 +2115,126 @@ export default function Dashboard({
                                         <th>Invited Count</th>
                                         <th>Category</th>
                                         <th>Invited Events</th>
+                                        <th>RSVP Summary</th>
                                         <th>Invite Link</th>
-                                        <th>Actions</th>
+                                        <th>WhatsApp</th>
+                                        <th>Last Updated</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredGuestRows.map(({ guest, guestIndex }) => (
-                                        <Fragment key={guest.id}>
-                                            <tr>
-                                                <td className="guest-select-column">
-                                                    <input
-                                                        aria-label={`Select ${guest.guestName || 'guest'}`}
-                                                        className="guest-select-checkbox"
-                                                        type="checkbox"
-                                                        checked={selectedGuestIds.includes(guest.id)}
-                                                        onChange={() => toggleGuestSelection(guest.id)}
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
-                                                        value={guest.guestName}
-                                                        onChange={(event) => updateGuest(guestIndex, 'guestName', event.target.value)}
-                                                        placeholder="Guest / family"
-                                                    />
-                                                    {validation.guests[guestIndex]?.guestName && <em>{validation.guests[guestIndex]?.guestName}</em>}
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        className={validation.guests[guestIndex]?.phone ? 'cell-error' : ''}
-                                                        value={guest.phone}
-                                                        onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
-                                                        placeholder="+91..."
-                                                    />
-                                                    {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
-                                                        type="number"
-                                                        min="1"
-                                                        value={guest.invitedCount}
-                                                        onChange={(event) => updateGuest(guestIndex, 'invitedCount', Number(event.target.value))}
-                                                    />
-                                                    {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        value={guest.category}
-                                                        onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
-                                                        placeholder="Category"
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <button
-                                                        className="guest-events-toggle"
-                                                        type="button"
-                                                        onClick={() => setExpandedGuestId(expandedGuestId === guest.id ? null : guest.id)}
-                                                    >
-                                                        {guest.invitedEventIds.length} selected
-                                                    </button>
-                                                    {validation.guests[guestIndex]?.invitedEventIds && <em>{validation.guests[guestIndex]?.invitedEventIds}</em>}
-                                                </td>
-                                                <td>
-                                                    <code>{getGuestInviteLink(guest)}</code>
-                                                    <div className="guest-link-actions compact">
-                                                        <button type="button" onClick={() => copyGuestInviteLink(guest)}>Copy</button>
-                                                        <button type="button" onClick={() => previewGuestInvite(guest)}>Preview</button>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <button className="delete-row-btn" type="button" onClick={() => deleteGuest(guestIndex)}>Delete</button>
-                                                </td>
-                                            </tr>
-                                            {expandedGuestId === guest.id && (
-                                                <tr className="guest-events-row" key={`${guest.id}-events`}>
-                                                    <td colSpan={8}>
-                                                        <div className="guest-event-options compact">
-                                                            {weddingData.events.map((event) => (
-                                                                <label key={event.id}>
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={guest.invitedEventIds.includes(event.id)}
-                                                                        onChange={() => toggleGuestEvent(guestIndex, event.id)}
-                                                                    />
-                                                                    {event.eventName}
-                                                                </label>
-                                                            ))}
+                                    {filteredGuestRows.map(({ guest, guestIndex }) => {
+                                        const guestRsvpSummary = rsvpAnalytics.guestSummaryById.get(guest.id);
+                                        const inviteWhatsAppUrl = getGuestWhatsAppUrl(guest, 'invite');
+                                        const reminderWhatsAppUrl = getGuestWhatsAppUrl(guest, 'reminder');
+
+                                        return (
+                                            <Fragment key={guest.id}>
+                                                <tr>
+                                                    <td className="guest-select-column">
+                                                        <input
+                                                            aria-label={`Select ${guest.guestName || 'guest'}`}
+                                                            className="guest-select-checkbox"
+                                                            type="checkbox"
+                                                            checked={selectedGuestIds.includes(guest.id)}
+                                                            onChange={() => toggleGuestSelection(guest.id)}
+                                                        />
+                                                    </td>
+                                                    <td>
+                                                        <input
+                                                            className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
+                                                            value={guest.guestName}
+                                                            onChange={(event) => updateGuest(guestIndex, 'guestName', event.target.value)}
+                                                            placeholder="Guest / family"
+                                                        />
+                                                        {validation.guests[guestIndex]?.guestName && <em>{validation.guests[guestIndex]?.guestName}</em>}
+                                                    </td>
+                                                    <td>
+                                                        <input
+                                                            className={validation.guests[guestIndex]?.phone ? 'cell-error' : ''}
+                                                            value={guest.phone}
+                                                            onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
+                                                            placeholder="+91..."
+                                                        />
+                                                        {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
+                                                    </td>
+                                                    <td>
+                                                        <input
+                                                            className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
+                                                            type="number"
+                                                            min="1"
+                                                            value={guest.invitedCount}
+                                                            onChange={(event) => updateGuest(guestIndex, 'invitedCount', Number(event.target.value))}
+                                                        />
+                                                        {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
+                                                    </td>
+                                                    <td>
+                                                        <input
+                                                            value={guest.category}
+                                                            onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
+                                                            placeholder="Category"
+                                                        />
+                                                    </td>
+                                                    <td>
+                                                        <button
+                                                            className="guest-events-toggle"
+                                                            type="button"
+                                                            onClick={() => setExpandedGuestId(expandedGuestId === guest.id ? null : guest.id)}
+                                                        >
+                                                            {guest.invitedEventIds.length} selected
+                                                        </button>
+                                                        {validation.guests[guestIndex]?.invitedEventIds && <em>{validation.guests[guestIndex]?.invitedEventIds}</em>}
+                                                    </td>
+                                                    <td>
+                                                        <div className="guest-rsvp-events">
+                                                            {guestRsvpSummary?.eventStatuses.length ? (
+                                                                guestRsvpSummary.eventStatuses.map((item) => (
+                                                                    <span key={item.eventId}>{item.eventName}: {item.label}</span>
+                                                                ))
+                                                            ) : (
+                                                                <span>No events selected</span>
+                                                            )}
                                                         </div>
                                                     </td>
+                                                    <td>
+                                                        <code>{getGuestInviteUrl(guest)}</code>
+                                                        <div className="guest-link-actions compact">
+                                                            <button type="button" onClick={() => copyGuestInviteLink(guest)}>Copy</button>
+                                                            <button type="button" onClick={() => previewGuestInvite(guest)}>Preview</button>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        {inviteWhatsAppUrl ? (
+                                                            <div className="guest-link-actions compact guest-whatsapp-actions">
+                                                                <a href={inviteWhatsAppUrl} target="_blank" rel="noreferrer">Send Invite</a>
+                                                                <a href={reminderWhatsAppUrl} target="_blank" rel="noreferrer">Reminder</a>
+                                                            </div>
+                                                        ) : (
+                                                            <button className="guest-missing-phone-btn" type="button" disabled>Missing phone</button>
+                                                        )}
+                                                    </td>
+                                                    <td>{guestRsvpSummary?.lastUpdated ? new Date(guestRsvpSummary.lastUpdated).toLocaleString() : 'Not submitted'}</td>
                                                 </tr>
-                                            )}
-                                        </Fragment>
-                                    ))}
+                                                {expandedGuestId === guest.id && (
+                                                    <tr className="guest-events-row" key={`${guest.id}-events`}>
+                                                        <td colSpan={10}>
+                                                            <div className="guest-event-options compact">
+                                                                {weddingData.events.map((event) => (
+                                                                    <label key={event.id}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={guest.invitedEventIds.includes(event.id)}
+                                                                            onChange={() => toggleGuestEvent(guestIndex, event.id)}
+                                                                        />
+                                                                        {event.eventName}
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </Fragment>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                             {filteredGuestRows.length === 0 && (
@@ -2113,65 +2269,64 @@ export default function Dashboard({
                             </div>
                         </div>
                         <div className="guest-summary-grid rsvp-summary-grid">
-                            <InfoBlock label="Families" value={String(weddingData.rsvp.guests.length)} />
-                            <InfoBlock label="Invited count" value={String(weddingData.rsvp.guests.reduce((total, guest) => total + guest.invitedCount, 0))} />
-                            <InfoBlock label="RSVP Yes" value={String(rsvpAnalytics.totals.yes)} />
-                            <InfoBlock label="RSVP No" value={String(rsvpAnalytics.totals.no)} />
-                            <InfoBlock label="Maybe" value={String(rsvpAnalytics.totals.maybe)} />
-                            <InfoBlock label="Pending" value={String(rsvpAnalytics.totals.pending)} />
+                            <InfoBlock label="Total Invited Guests" value={String(guestSummary.totalInvitedCount)} />
+                            <InfoBlock label="Confirmed Guests" value={String(rsvpAnalytics.totals.people.yes)} />
+                            <InfoBlock label="Maybe Guests" value={String(rsvpAnalytics.totals.people.maybe)} />
+                            <InfoBlock label="Declined Guests" value={String(rsvpAnalytics.totals.people.no)} />
+                            <InfoBlock label="Pending Guests" value={String(rsvpAnalytics.totals.people.pending)} />
+                        </div>
+                        <div className="guest-summary-grid rsvp-summary-grid secondary-summary-grid">
+                            <InfoBlock label="Total Families" value={String(weddingData.rsvp.guests.length)} />
+                            <InfoBlock label="Confirmed Families" value={String(rsvpAnalytics.totals.families.yes)} />
+                            <InfoBlock label="Maybe Families" value={String(rsvpAnalytics.totals.families.maybe)} />
+                            <InfoBlock label="Declined Families" value={String(rsvpAnalytics.totals.families.no)} />
+                            <InfoBlock label="Pending Families" value={String(rsvpAnalytics.totals.families.pending)} />
                         </div>
                         {isRsvpLoading && <p className="dashboard-note">Loading RSVP responses...</p>}
                         {!isRsvpLoading && rsvpResponses.filter((response) => response.weddingSlug === weddingData.wedding.slug).length === 0 && (
                             <p className="dashboard-note">No RSVP responses yet.</p>
                         )}
 
-                        <RsvpTable title="Event-wise RSVP summary" headers={['Event', 'Invited Families', 'Yes', 'No', 'Maybe', 'Pending']}>
-                            {rsvpAnalytics.eventSummaries.map(({ event, invitedGuests, counts }) => (
+                        <RsvpTable title="Event-wise Guest Count" headers={['Event', 'Invited Guests', 'Confirmed Guests', 'Maybe Guests', 'Declined Guests', 'Pending Guests']}>
+                            {rsvpAnalytics.eventSummaries.map(({ event, invitedPeople, counts }) => (
                                 <tr key={event.id}>
                                     <td>{event.eventName}</td>
-                                    <td>{invitedGuests.length}</td>
-                                    <td>{counts.yes}</td>
-                                    <td>{counts.no}</td>
-                                    <td>{counts.maybe}</td>
-                                    <td>{counts.pending}</td>
+                                    <td>{invitedPeople}</td>
+                                    <td>{counts.people.yes}</td>
+                                    <td>{counts.people.maybe}</td>
+                                    <td>{counts.people.no}</td>
+                                    <td>{counts.people.pending}</td>
                                 </tr>
                             ))}
                         </RsvpTable>
 
-                        <RsvpTable title="Meal preference summary" headers={['Veg', 'Non-veg', 'Jain', 'Not selected']}>
-                            <tr>
-                                <td>{rsvpAnalytics.mealSummary.veg}</td>
-                                <td>{rsvpAnalytics.mealSummary.nonVeg}</td>
-                                <td>{rsvpAnalytics.mealSummary.jain}</td>
-                                <td>{rsvpAnalytics.mealSummary.none}</td>
-                            </tr>
-                        </RsvpTable>
-
-                        <RsvpTable title="Guest-wise RSVP table" headers={['Guest / Family', 'Phone', 'Category', 'Invited Count', 'Invited Events', 'RSVP Status Summary', 'Meal Preference', 'Last Updated']}>
-                            {rsvpAnalytics.guestSummaries.map(({ guest, counts, mealPreference, lastUpdated }) => (
-                                <tr key={guest.id}>
-                                    <td>{guest.guestName || 'Missing name'}</td>
-                                    <td>{guest.phone || 'Missing phone'}</td>
-                                    <td>{guest.category || 'Uncategorized'}</td>
-                                    <td>{guest.invitedCount}</td>
-                                    <td>{guest.invitedEventIds.length}</td>
-                                    <td>Yes {counts.yes} · No {counts.no} · Maybe {counts.maybe} · Pending {counts.pending}</td>
-                                    <td>{mealPreference || 'Not selected'}</td>
-                                    <td>{lastUpdated ? new Date(lastUpdated).toLocaleString() : 'Not submitted'}</td>
+                        <RsvpTable
+                            title="Meal Preference by Event"
+                            helperText="Meal counts are calculated using invited guest count for confirmed RSVP responses. If a family has 5 invited guests and selects a meal preference, it counts as 5 meals."
+                            headers={['Event', 'Veg Guests', 'Non-Veg Guests', 'Jain Guests', 'Other / Not Specified']}
+                        >
+                            {rsvpAnalytics.eventMealSummaries.map(({ event, mealCounts }) => (
+                                <tr key={event.id}>
+                                    <td>{event.eventName}</td>
+                                    <td>{mealCounts.veg}</td>
+                                    <td>{mealCounts.nonVeg}</td>
+                                    <td>{mealCounts.jain}</td>
+                                    <td>{mealCounts.other}</td>
                                 </tr>
                             ))}
                         </RsvpTable>
 
-                        <RsvpTable title="Category-wise summary" headers={['Category', 'Families', 'Invited Count', 'Yes', 'No', 'Maybe', 'Pending']}>
-                            {rsvpAnalytics.categorySummaries.map(({ category, guestCount, invitedCount, counts }) => (
+                        <p className="dashboard-note">View guest-wise RSVP responses in the Guests tab.</p>
+
+                        <RsvpTable title="Category-wise Guest Summary" headers={['Category', 'Invited Guests', 'Confirmed Guests', 'Maybe Guests', 'Declined Guests', 'Pending Guests']}>
+                            {rsvpAnalytics.categorySummaries.map(({ category, invitedCount, counts }) => (
                                 <tr key={category}>
                                     <td>{category}</td>
-                                    <td>{guestCount}</td>
                                     <td>{invitedCount}</td>
-                                    <td>{counts.yes}</td>
-                                    <td>{counts.no}</td>
-                                    <td>{counts.maybe}</td>
-                                    <td>{counts.pending}</td>
+                                    <td>{counts.people.yes}</td>
+                                    <td>{counts.people.maybe}</td>
+                                    <td>{counts.people.no}</td>
+                                    <td>{counts.people.pending}</td>
                                 </tr>
                             ))}
                         </RsvpTable>
@@ -2188,7 +2343,7 @@ export default function Dashboard({
                                 <h2>Edit the final thank-you section</h2>
                             </div>
                             <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                Save Closing Gallery
+                                {saveAllChangesLabel}
                             </button>
                         </div>
                         <p className="dashboard-note">
@@ -2229,7 +2384,7 @@ export default function Dashboard({
                                         <div className="closing-selected-grid">
                                             {weddingData.closing.carouselImages.filter(Boolean).slice(0, closingGalleryMaxImages).map((imageSrc, imageIndex) => (
                                                 <article className="closing-selected-card" key={`${imageSrc}-${imageIndex}`}>
-                                                    <img src={resolveAssetPath(imageSrc)} alt="" />
+                                                    <img src={resolveAssetPath(imageSrc)} alt="" loading="lazy" decoding="async" />
                                                     <div>
                                                         <strong>Photo {imageIndex + 1}</strong>
                                                         <span>{imageSrc.startsWith('/assets/') ? 'Preset image' : 'Uploaded image'}</span>
@@ -2262,7 +2417,7 @@ export default function Dashboard({
                                                     <span>{isClosingImageUploading ? 'Uploading...' : 'Upload Image'}</span>
                                                     <input
                                                         type="file"
-                                                        accept="image/*"
+                                                        accept={closingGalleryAcceptedUploadTypes}
                                                         disabled={isClosingImageUploading}
                                                         onChange={(event) => {
                                                             const file = event.target.files?.[0];
@@ -2281,7 +2436,7 @@ export default function Dashboard({
                                                             type="button"
                                                             onClick={() => setClosingGalleryImage(closingImagePickerTarget, option.imageSrc)}
                                                         >
-                                                            <img src={resolveAssetPath(option.imageSrc)} alt="" />
+                                                            <img src={resolveAssetPath(option.thumbnailSrc)} alt="" loading="lazy" decoding="async" />
                                                             <strong>{option.label}</strong>
                                                             <span>{option.themeLabel}</span>
                                                         </button>
@@ -2363,7 +2518,7 @@ function OpeningRevealOptionCard({
             onClick={onClick}
         >
             {imageSrc ? (
-                <img src={resolveAssetPath(imageSrc)} alt="" />
+                <img src={resolveAssetPath(imageSrc)} alt="" loading="lazy" decoding="async" />
             ) : (
                 <span className="or-option-placeholder">Soon</span>
             )}
@@ -2561,7 +2716,7 @@ function OpeningRevealPreview({
                 }}
             >
                 {hasPoster ? (
-                    <img className="or-preview-poster" src={resolveAssetPath(hero.posterSrc)} alt="" />
+                    <img className="or-preview-poster" src={resolveAssetPath(hero.posterSrc)} alt="" decoding="async" />
                 ) : (
                     <div className="or-preview-empty">Poster image missing</div>
                 )}
@@ -2625,7 +2780,7 @@ function OpeningRevealPreview({
                         style={{ opacity: previewState === 'revealed' ? 1 : revealImageOpacity }}
                     >
                         {hasRevealImage ? (
-                            <img src={revealedImageSrc} alt={revealedImageAlt} />
+                            <img src={revealedImageSrc} alt={revealedImageAlt} decoding="async" />
                         ) : (
                             <div className="or-preview-empty">Revealed image missing</div>
                         )}
@@ -3038,7 +3193,17 @@ function EventVisualCard({
             onClick={onClick}
         >
             {visual ? (
-                <img src={resolveAssetPath(visual.imageSrc)} alt="" />
+                <img
+                    src={resolveAssetPath(visual.thumbnailSrc ?? visual.imageSrc)}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    onError={(event) => {
+                        if (event.currentTarget.dataset.fallbackApplied) return;
+                        event.currentTarget.dataset.fallbackApplied = 'true';
+                        event.currentTarget.src = resolveAssetPath(visual.imageSrc);
+                    }}
+                />
             ) : (
                 <span className="event-visual-card-empty">Auto</span>
             )}
@@ -3110,16 +3275,19 @@ function SelectField({
 
 function RsvpTable({
     title,
+    helperText,
     headers,
     children,
 }: {
     title: string;
+    helperText?: string;
     headers: string[];
     children: React.ReactNode;
 }) {
     return (
         <section className="rsvp-analytics-section">
             <h3>{title}</h3>
+            {helperText && <p className="rsvp-table-helper">{helperText}</p>}
             <div className="guest-table-wrap">
                 <table className="guest-table rsvp-analytics-table">
                     <thead>

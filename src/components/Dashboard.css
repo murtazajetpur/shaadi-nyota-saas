@@ -1,5 +1,6 @@
 .dashboard-page {
     min-height: 100vh;
+    min-height: 100dvh;
     background: #f6f4f0;
     color: #1f1f1f;
     display: grid;
@@ -10,7 +11,9 @@
 
 .dashboard-sidebar {
     min-height: 100vh;
+    min-height: 100dvh;
     height: 100vh;
+    height: 100dvh;
     background: #ffffff;
     border-right: 1px solid rgba(0, 0, 0, 0.08);
     padding: 28px 20px;
@@ -132,6 +135,12 @@
     color: #6b6b6b;
     font-size: 0.72rem;
     overflow-wrap: anywhere;
+}
+
+.dashboard-save-hint {
+    color: #6b6b6b;
+    font-size: 0.74rem;
+    line-height: 1.35;
 }
 
 .dashboard-draft-bar button {
@@ -529,9 +538,21 @@
     font-weight: 500;
 }
 
+.event-order-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .event-editor-header button {
     background: #ffffff;
     color: #7a1f1f;
+}
+
+.event-editor-header button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
 }
 
 .event-editor-body {
@@ -734,6 +755,7 @@
 .event-visual-modal {
     width: min(980px, 100%);
     max-height: min(760px, calc(100vh - 56px));
+    max-height: min(760px, calc(100dvh - 56px));
     overflow: auto;
     border-radius: 10px;
     background: #ffffff;
@@ -1947,19 +1969,42 @@
 }
 
 .dashboard-header-actions,
-.guest-csv-toolbar {
+.guest-csv-toolbar,
+.guest-csv-import-row {
     display: flex;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
 }
 
-.guest-csv-toolbar {
-    padding: 12px;
+.guest-csv-panel {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
     margin-bottom: 16px;
     border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 8px;
     background: #fbfaf8;
+}
+
+.guest-csv-panel-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f1f1f;
+}
+
+.guest-csv-panel-header p {
+    margin: 6px 0 0;
+    max-width: 720px;
+    color: #666666;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.guest-csv-toolbar,
+.guest-csv-import-row {
+    padding-top: 2px;
 }
 
 .csv-mode-select,
@@ -1988,6 +2033,12 @@
     padding: 8px 10px;
     font: inherit;
     background: #ffffff;
+}
+
+.csv-selected-file {
+    color: #555555;
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
 }
 
 .csv-warning-box {
@@ -2046,7 +2097,7 @@
 
 .guest-table {
     width: 100%;
-    min-width: 1020px;
+    min-width: 1220px;
     border-collapse: collapse;
     font-size: 0.9rem;
 }
@@ -2110,9 +2161,9 @@
 }
 
 .guest-events-toggle,
-.delete-row-btn,
 .guest-link-actions.compact button,
-.guest-link-actions.compact a {
+.guest-link-actions.compact a,
+.guest-missing-phone-btn {
     border: 1px solid rgba(0, 0, 0, 0.14);
     border-radius: 6px;
     background: #ffffff;
@@ -2124,8 +2175,11 @@
     cursor: pointer;
 }
 
-.delete-row-btn {
-    color: #7a1f1f;
+.guest-link-actions.compact button:disabled,
+.guest-missing-phone-btn:disabled,
+.guest-csv-import-row .dashboard-primary-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
 }
 
 .guest-link-actions.compact {
@@ -2133,6 +2187,23 @@
     gap: 6px;
     flex-wrap: wrap;
     margin-top: 6px;
+}
+
+.guest-rsvp-events {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.guest-rsvp-events span,
+.guest-missing-phone {
+    color: #555555;
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.guest-whatsapp-actions {
+    margin-top: 0;
 }
 
 .guest-events-row td {
@@ -2166,7 +2237,11 @@
 }
 
 .rsvp-summary-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.secondary-summary-grid {
+    margin-top: 12px;
 }
 
 .rsvp-analytics-section {
@@ -2178,6 +2253,14 @@
     font-size: 1.05rem;
     font-weight: 500;
     margin-bottom: 10px;
+}
+
+.rsvp-table-helper {
+    margin: -4px 0 12px;
+    max-width: 780px;
+    color: #666666;
+    font-size: 0.86rem;
+    line-height: 1.45;
 }
 
 .rsvp-analytics-table {
@@ -2379,6 +2462,7 @@
 
     .event-visual-modal {
         max-height: calc(100vh - 20px);
+        max-height: calc(100dvh - 20px);
         padding: 16px;
         border-radius: 8px;
     }

@@ -23,7 +23,7 @@ export default function Theme2FinalCarousel({ closing, couple }: Theme2FinalCaro
 
   return (
     <div className={`theme2-section theme2-final-section ${showGallery ? 'theme2-final-gallery' : 'theme2-final-simple'}`}>
-      <img src={resolveAssetPath(theme2Assets.background)} className="theme2-section-bg" alt="Final background" />
+      <img src={resolveAssetPath(theme2Assets.background)} className="theme2-section-bg" alt="Final background" loading="lazy" decoding="async" />
       <div className="theme2-section-overlay theme2-final-overlay" />
       <div className="theme2-section-content visible theme2-final-content">
         <h1 className="theme2-display-font theme2-final-heading">{closing.closingLine || 'With Love'}</h1>
@@ -38,6 +38,8 @@ export default function Theme2FinalCarousel({ closing, couple }: Theme2FinalCaro
                     src={src}
                     className={`theme2-carousel-img ${imageIndex === index ? 'active' : ''}`}
                     alt={`Memory ${imageIndex + 1}`}
+                    loading="lazy"
+                    decoding="async"
                   />
                 ))}
               </div>

@@ -34,6 +34,10 @@ export interface RegistryAsset {
   compatibleThemes?: string[];
   tags?: string[];
   previewSrc?: string;
+  thumbnailSrc?: string;
+  optimizedSrc?: string;
+  width?: number;
+  height?: number;
   intrinsicWidth?: number;
   intrinsicHeight?: number;
   aspectRatio?: string;
@@ -110,6 +114,8 @@ const baseAsset = <T extends RegistryAsset>(asset: T): T => ({
     ? Array.from(new Set([asset.sourceTheme, normalizeTemplateAssetKey(asset.sourceTheme)]))
     : undefined,
   ...assetAspectMetadataBySrc[asset.src],
+  thumbnailSrc: asset.thumbnailSrc ?? asset.src,
+  optimizedSrc: asset.optimizedSrc ?? asset.src,
   ...asset,
 });
 
@@ -132,25 +138,6 @@ const getEventAssetStyle = (id: string) => {
   if (id.includes('-faceless-')) return 'faceless';
   if (id.includes('-sketch-')) return 'sketch';
   return 'premium';
-};
-
-const eventAssetSrcById: Record<string, string> = {
-  'event-haldi-faceless-01': '/assets/events/haldi/event-haldi-faceless-01-9x16.png',
-  'event-haldi-faceless-02': '/assets/events/haldi/event-haldi-faceless-02-9x16.png',
-  'event-haldi-faceless-03': '/assets/events/haldi/event-haldi-faceless-03-9x16.png',
-  'event-haldi-faceless-04': '/assets/events/haldi/event-haldi-faceless-04-9x16.png',
-  'event-haldi-premium-01': '/assets/events/haldi/event-haldi-premium-01-9x16.png',
-  'event-haldi-premium-02': '/assets/events/haldi/event-haldi-premium-02-9x16.png',
-  'event-haldi-premium-03': '/assets/events/haldi/event-haldi-premium-03-9x16.png',
-  'event-haldi-premium-04': '/assets/events/haldi/event-haldi-premium-04-9x16.png',
-  'event-haldi-premium-05': '/assets/events/haldi/event-haldi-premium-05-9x16.png',
-  'event-haldi-premium-06': '/assets/events/haldi/event-haldi-premium-06-9x16.png',
-  'event-haldi-premium-07': '/assets/events/haldi/event-haldi-premium-07-9x16.png',
-  'event-haldi-premium-08': '/assets/events/haldi/event-haldi-premium-08-9x16.png',
-  'event-haldi-sketch-01': '/assets/events/haldi/event-haldi-sketch-01-9x16.png',
-  'event-haldi-sketch-02': '/assets/events/haldi/event-haldi-sketch-02-9x16.png',
-  'event-haldi-sketch-03': '/assets/events/haldi/event-haldi-sketch-03-9x16.png',
-  'event-haldi-sketch-04': '/assets/events/haldi/event-haldi-sketch-04-9x16.png',
 };
 
 const getEventAssetTokens = (category: string, id: string, style: string) => (
@@ -201,7 +188,8 @@ const makeEventAsset = (
   return baseAsset({
     id,
     label: makeEventAssetLabel(category, id, style),
-    src: eventAssetSrcById[id] ?? `/assets/events/${category}/${id}.png`,
+    src: `/assets/events/${category}/${id}.png`,
+    thumbnailSrc: `/assets/thumbnails/events/${category}/${id}.webp`,
     type: isBackground ? 'background' : 'image',
     section: 'events',
     category,
@@ -490,22 +478,6 @@ export const assetRegistry: SectionFirstAssetRegistry = {
         'event-haldi-sketch-02',
         'event-haldi-sketch-03',
         'event-haldi-sketch-04',
-        'event-haldi-premium-01-regenerated-9x20',
-        'event-haldi-premium-02-regenerated-9x20',
-        'event-haldi-premium-03-regenerated-9x20',
-        'event-haldi-premium-04-regenerated-9x20',
-        'event-haldi-premium-05-regenerated-9x20',
-        'event-haldi-premium-06-regenerated-9x20',
-        'event-haldi-premium-07-regenerated-9x20',
-        'event-haldi-premium-08-regenerated-9x20',
-        'event-haldi-faceless-01-regenerated-9x20',
-        'event-haldi-faceless-02-regenerated-9x20',
-        'event-haldi-faceless-03-regenerated-9x20',
-        'event-haldi-faceless-04-regenerated-9x20',
-        'event-haldi-sketch-01-regenerated-9x20',
-        'event-haldi-sketch-02-regenerated-9x20',
-        'event-haldi-sketch-03-regenerated-9x20',
-        'event-haldi-sketch-04-regenerated-9x20',
       ]),
       mehendi: makeEventAssets('mehendi', [
         'event-mehendi-premium-01',
@@ -836,7 +808,7 @@ const legacyEventAssetPathMap = Object.fromEntries(
     if (!oldCategory || !newCategory) return [];
     return [[
       `/assets/events/${oldCategory}/${oldId}.png`,
-      eventAssetSrcById[newId] ?? `/assets/events/${newCategory}/${newId}.png`,
+      `/assets/events/${newCategory}/${newId}.png`,
     ]];
   }),
 );
@@ -859,7 +831,7 @@ export const legacyAssetPathMap: Record<string, string> = {
   '/assets/our-story/images/story-couple-scroll-01.png': '/assets/our-story/images/story-pheras-01.png',
   '/assets/our-story/backgrounds/story-bg-scroll-floral-01.png': '/assets/our-story/images/story-pheras-01.png',
   '/assets/our-story/backgrounds/story-bg-scroll-generic-01.png': '/assets/our-story/images/story-pheras-01.png',
-  '/assets/haldi.png': '/assets/events/haldi/event-haldi-premium-03-9x16.png',
+  '/assets/haldi.png': '/assets/events/haldi/event-haldi-premium-03.png',
   '/assets/haldi-bg.png': '/assets/haldi-bg.png',
   '/assets/mehendi.png': '/assets/events/mehendi/event-mehendi-premium-01.png',
   '/assets/mehendi-bg.png': '/assets/mehendi-bg.png',
@@ -870,7 +842,7 @@ export const legacyAssetPathMap: Record<string, string> = {
   '/assets/reception.png': '/assets/events/reception/event-reception-premium-02.png',
   '/assets/reception-bg.png': '/assets/reception-bg.png',
   '/assets/event-gap-bg.png': '/assets/event-gap-bg.png',
-  '/assets/theme-2/haldi.png': '/assets/events/haldi/event-haldi-premium-05-9x16.png',
+  '/assets/theme-2/haldi.png': '/assets/events/haldi/event-haldi-premium-05.png',
   '/assets/theme-2/mehendi.png': '/assets/events/mehendi/event-mehendi-premium-04.png',
   '/assets/theme-2/sangeet.png': '/assets/events/sangeet/event-sangeet-premium-14.png',
   '/assets/theme-2/shaadi.png': '/assets/events/wedding/event-wedding-premium-35.png',

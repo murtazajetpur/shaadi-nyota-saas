@@ -13,8 +13,9 @@ The setup order below is for future reproducibility and production-readiness tes
 3. Run `supabase/seed.sql`
 4. For an existing project, run `supabase/security_hardening_phase_1.sql`
 5. Run `supabase/data_integrity_phase_2.sql`
-6. Add local env vars
-7. Configure Auth settings, including Confirm Email behavior
+6. Create the `wedding-assets` Storage bucket and run `supabase/storage_policies.sql`
+7. Add local env vars
+8. Configure Auth settings, including Confirm Email behavior
 
 ## 1. Create A Supabase Project
 
@@ -75,7 +76,28 @@ The seed adds minimal setup data:
 
 It does not seed full weddings, guests, or RSVP responses.
 
-## 5. Add Local Env Vars
+## 5. Configure Storage For Wedding Assets
+
+Closing Gallery uploads use Supabase Storage bucket `wedding-assets`.
+
+Create the bucket in Supabase Storage:
+
+- Bucket ID: `wedding-assets`
+- Public bucket: enabled
+
+Then run `supabase/storage_policies.sql`.
+
+Optional SQL for creating or repairing the bucket:
+
+```sql
+insert into storage.buckets (id, name, public)
+values ('wedding-assets', 'wedding-assets', true)
+on conflict (id) do update set public = true;
+```
+
+If the bucket is missing, the dashboard shows: "Image upload is not configured yet. Please create the wedding-assets Supabase Storage bucket and run the storage policies."
+
+## 6. Add Local Env Vars
 
 Copy `.env.example` to `.env` and fill in:
 
@@ -88,7 +110,7 @@ Use the project URL and anon public key from Supabase project settings.
 
 Do not commit `.env`. It is ignored by git.
 
-## 6. Auth Notes
+## 7. Auth Notes
 
 - Confirm Email can be disabled for local MVP testing.
 - Signup passes `full_name` through Supabase Auth user metadata.
@@ -99,7 +121,7 @@ Do not commit `.env`. It is ignored by git.
 - New profiles should default to `role = 'couple'`.
 - To test admin access locally, manually update the test user's `profiles.role` to `admin` in Supabase.
 
-## 7. Runtime Notes
+## 8. Runtime Notes
 
 - Active purchasable plans are `basic` (Basic Website, ₹3,000) and `rsvp` (Basic Website + RSVP Management, ₹5,000).
 - A legacy package value remains in the schema only for existing records and is not shown as an active purchasable plan.
@@ -117,6 +139,12 @@ Do not commit `.env`. It is ignored by git.
   fields while preserving admin controls.
 - Manual payment verification requests use `weddings.payment_status = 'manual_pending'`. The dashboard labels this as "Verification Requested". If an older database still only allows `unpaid` and `paid`, run `supabase/add_manual_payment_status.sql`.
 - Basic Website dashboards show Guests and RSVP Dashboard as locked upgrade panels. Admin editing remains unrestricted.
+- Dashboard section save buttons say "Save All Changes" because every save button persists the full builder payload: wedding shell, settings, events, guests, and guest-event assignments.
+- "Discard Unsaved Changes" clears the local draft and reloads the last saved Supabase version. It does not delete saved wedding data.
+- Event reordering uses existing `events.sort_order`; the dashboard updates local order immediately and persists the order on Save All Changes.
+- Guest invite, preview, CSV export, and WhatsApp guest actions continue to build links from `window.location.origin`, so local URLs use localhost and production/custom domains use the current deployed origin.
+- Guest WhatsApp actions open `wa.me` links only. They do not send messages automatically.
+- RSVP analytics now use each guest/family `invited_count` as the primary people count. Family/group counts remain visible as secondary metrics.
 - Dashboard/admin builder saves depend on the latest `wedding_settings` columns. If saving settings fails with a missing-column or schema-cache error, run `supabase/add_builder_settings_columns.sql`.
 - Dashboard/admin event saves need current event columns plus authenticated insert/update/delete privileges. If saving Events fails with an RLS or permission error, run `supabase/fix_admin_events.sql`.
 - To repair all dashboard/admin section editing permissions and current builder columns in one pass, run `supabase/fix_dashboard_admin_permissions.sql`.

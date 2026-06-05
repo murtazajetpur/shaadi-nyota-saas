@@ -32,12 +32,14 @@ export default function Theme2Couple({ couple, isHeroDone }: Theme2CoupleProps) 
         className="theme2-section-bg theme2-our-story-bg"
         alt=""
         loading="lazy"
+        decoding="async"
       />
       <img
         src={getTheme2CoupleImage(couple.backgroundImageSrc)}
         className="theme2-our-story-portrait"
         alt={couple.imageAlt || couple.displayName}
         loading="lazy"
+        decoding="async"
       />
       <div className="theme2-section-overlay theme2-our-story-overlay" />
       <div className={`theme2-section-content theme2-our-story-content ${isVisible ? 'visible' : ''}`}>

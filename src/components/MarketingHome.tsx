@@ -72,6 +72,7 @@ function BrandMark() {
         <img
           src="/assets/brand/shaadi-nyota-logo.png"
           alt=""
+          decoding="async"
           onError={() => setShowLogo(false)}
         />
       )}
@@ -94,7 +95,7 @@ function PhonePreview({
   return (
     <div className={`marketing-phone ${className}`}>
       <div className="marketing-phone-screen">
-        <img src={image} alt="" />
+        <img src={image} alt="" loading={className.includes('main') ? 'eager' : 'lazy'} decoding="async" />
         <div className="marketing-phone-copy">
           <span>{eyebrow}</span>
           <strong>{title}</strong>
@@ -175,7 +176,7 @@ export default function MarketingHome() {
           {templateCards.map((template) => (
             <article className="template-card" key={template.name}>
               <div className="template-preview">
-                <img src={template.image} alt="" />
+                <img src={template.image} alt="" loading="lazy" decoding="async" />
               </div>
               <div>
                 <h3>{template.name}</h3>

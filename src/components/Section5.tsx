@@ -35,6 +35,8 @@ export default function Section5({ closing }: Section5Props) {
                                 src={src}
                                 alt={`Memories ${index + 1}`}
                                 className={`carousel-image ${index === currentIndex ? 'active' : ''}`}
+                                loading="lazy"
+                                decoding="async"
                             />
                         ))}
                     </div>
