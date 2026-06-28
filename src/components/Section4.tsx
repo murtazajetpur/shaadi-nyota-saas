@@ -178,7 +178,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
     };
 
     return (
-        <section className="section-wrapper section-4 rsvp-section">
+        <section className="section-wrapper section-4 rsvp-section personalized-rsvp-section">
             <div className="rsvp-container personalized-rsvp-container">
                 <div className="rsvp-header-area compact-rsvp-header">
                     <div className="step-indicator">{guest.guestName}</div>

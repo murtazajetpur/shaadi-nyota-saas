@@ -21,6 +21,13 @@
     max-width: 380px;
     justify-content: flex-start;
     min-height: auto;
+    padding-bottom: max(2.5rem, calc(1.5rem + env(safe-area-inset-bottom)));
+}
+
+/* Personalized RSVP can exceed one viewport, so it must scroll naturally. */
+.personalized-rsvp-section {
+    scroll-snap-align: none;
+    scroll-snap-stop: normal;
 }
 
 .rsvp-header-area {
@@ -249,6 +256,7 @@
 
 .rsvp-submit-btn {
     width: 100%;
+    min-height: 48px;
     margin-top: 1.5rem;
     border: 1px solid rgba(0, 0, 0, 0.25);
     border-radius: 40px;
@@ -258,6 +266,8 @@
     font-size: 0.95rem;
     padding: 12px 24px;
     cursor: pointer;
+    touch-action: manipulation;
+    flex-shrink: 0;
 }
 
 .public-rsvp-message {
