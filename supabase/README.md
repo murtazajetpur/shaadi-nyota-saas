@@ -221,3 +221,6 @@ Manual checks:
 - Deleting an event shows the guest/RSVP impact warning and cascades only after
   confirmation.
 - Bulk guest delete validates all selected guests before deleting any of them.
+## Opening Reveal Skip Image Migration
+
+Opening Reveal can skip the post-video reveal image with `wedding_settings.hero_skip_reveal_image`. For existing projects, run `supabase/add_skip_reveal_image.sql` before expecting this setting to persist.

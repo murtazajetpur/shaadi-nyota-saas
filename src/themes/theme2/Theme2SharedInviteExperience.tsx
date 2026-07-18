@@ -50,7 +50,7 @@ function Theme2SharedInviteExperienceContent({
   const [heroStarted, setHeroStarted] = useState(false);
   const [heroDone, setHeroDone] = useState(false);
   const theme2CoupleBackground = getTheme2CoupleImage(data.couple.backgroundImageSrc || data.hero.revealImageSrc);
-  const openingRevealImage = data.hero.revealImageSrc || theme2CoupleBackground;
+  const openingRevealImage = data.hero.skipRevealImage ? theme2CoupleBackground : (data.hero.revealImageSrc || theme2CoupleBackground);
   const [activeBg, setActiveBg] = useState(openingRevealImage);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +90,10 @@ function Theme2SharedInviteExperienceContent({
     });
   }, [openingRevealImage, theme2CoupleBackground, eventsToShow, heroStarted, shouldShowOurStory]);
 
+
+  const completeHeroReveal = () => {
+    setHeroDone(true);
+  };
   const toggleAudio = () => {
     if (!audioRef.current) return;
     if (audioPlaying) {
@@ -146,16 +150,18 @@ function Theme2SharedInviteExperienceContent({
         ref={canvasRef}
         onScroll={handleScroll}
       >
-        <Theme2HeroReveal
-          hero={data.hero}
-          couple={data.couple}
-          onStarted={() => setHeroStarted(true)}
-          onDone={() => setHeroDone(true)}
-          onPlayAudio={playAudioWithFade}
-          enableResponsiveVideo={enableResponsiveOpeningVideo}
-          className="theme2-hero-reveal-section"
-          showScrollPrompt={heroDone}
-        />
+        {!(data.hero.skipRevealImage && heroDone) && (
+          <Theme2HeroReveal
+            hero={data.hero}
+            couple={data.couple}
+            onStarted={() => setHeroStarted(true)}
+            onDone={completeHeroReveal}
+            onPlayAudio={playAudioWithFade}
+            enableResponsiveVideo={enableResponsiveOpeningVideo}
+            className="theme2-hero-reveal-section"
+            showScrollPrompt={heroDone && !data.hero.skipRevealImage}
+          />
+        )}
 
         {heroStarted && (
           <WeddingSectionRenderer

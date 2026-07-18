@@ -23,7 +23,8 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
     const [isPlaying, setIsPlaying] = useState(false);
     const [ctaFadingOut, setCtaFadingOut] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(previewMode);
-    const [revealImageOpacity, setRevealImageOpacity] = useState(previewMode ? 1 : 0);
+    const skipRevealImage = hero.skipRevealImage === true;
+    const [revealImageOpacity, setRevealImageOpacity] = useState(previewMode && !skipRevealImage ? 1 : 0);
     const [isCompleting, setIsCompleting] = useState(false);
     const revealedRef = useRef(false);
     const completeTimeoutRef = useRef<number | null>(null);
@@ -33,10 +34,10 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
     };
 
     useEffect(() => {
-        if (!hero.revealImageSrc) return;
+        if (skipRevealImage || !hero.revealImageSrc) return;
         const revealImage = new Image();
         revealImage.src = hero.revealImageSrc;
-    }, [hero.revealImageSrc]);
+    }, [hero.revealImageSrc, skipRevealImage]);
 
     useEffect(() => {
         return () => {
@@ -104,10 +105,31 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
         }
     };
 
+    function completeHeroAfterRevealSettles() {
+        if (completeTimeoutRef.current !== null) return;
+        if (skipRevealImage) {
+            completeTimeoutRef.current = window.setTimeout(() => {
+                onHeroComplete();
+            }, 0);
+            return;
+        }
+        setRevealImageOpacity(1);
+        setIsCompleting(true);
+        completeTimeoutRef.current = window.setTimeout(() => {
+            onHeroComplete();
+        }, 450);
+    }
     const checkTime = () => {
         if (videoRef.current && isPlaying) {
             const time = videoRef.current.currentTime;
             const duration = videoRef.current.duration;
+
+            if (skipRevealImage) {
+                if (Number.isFinite(duration) && duration > 0 && duration - time <= 0.12) {
+                    completeHeroAfterRevealSettles();
+                }
+                return;
+            }
 
             const progress = getOpeningRevealCrossfadeProgress(time, duration);
             setRevealImageOpacity(progress);
@@ -130,16 +152,8 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
             animationFrame = requestAnimationFrame(loop);
         }
         return () => cancelAnimationFrame(animationFrame);
-    }, [isPlaying, onGaneshaReveal]);
+    }, [isPlaying, onGaneshaReveal, skipRevealImage]);
 
-    const completeHeroAfterRevealSettles = () => {
-        if (completeTimeoutRef.current !== null) return;
-        setRevealImageOpacity(1);
-        setIsCompleting(true);
-        completeTimeoutRef.current = window.setTimeout(() => {
-            onHeroComplete();
-        }, 450);
-    };
 
     return (
         <div className={`hero-container ${isCompleting ? 'is-completing' : ''} ${previewMode ? 'hero-preview-mode' : ''}`}>
@@ -157,7 +171,7 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
                     onCanPlay={handleVideoReady}
                     onLoadedData={handleVideoReady}
                     onEnded={() => {
-                        if (!revealedRef.current) {
+                        if (!skipRevealImage && !revealedRef.current) {
                             revealedRef.current = true;
                             onGaneshaReveal();
                         }
@@ -166,12 +180,21 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
                 />
             )}
 
-            <img
-                className="hero-reveal-image"
-                src={hero.revealImageSrc}
-                alt={hero.revealImageAlt}
-                style={{ opacity: revealImageOpacity }}
-            />
+            {skipRevealImage && previewMode ? (
+                <img
+                    className="hero-reveal-image"
+                    src={hero.posterSrc}
+                    alt="Opening reveal poster"
+                    style={{ opacity: 1 }}
+                />
+            ) : !skipRevealImage && (
+                <img
+                    className="hero-reveal-image"
+                    src={hero.revealImageSrc}
+                    alt={hero.revealImageAlt}
+                    style={{ opacity: revealImageOpacity }}
+                />
+            )}
 
             {!previewMode && (
                 <div

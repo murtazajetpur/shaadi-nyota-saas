@@ -42,6 +42,7 @@ interface SupabaseWeddingSettingsRow {
   hero_scroll_hint_text: string | null;
   hero_video_src: string | null;
   hero_poster_src: string | null;
+  hero_skip_reveal_image: boolean | null;
   hero_reveal_image_src: string | null;
   hero_reveal_image_type: RevealImageType | null;
   hero_reveal_image_alt: string | null;
@@ -387,6 +388,7 @@ const mapWeddingBundle = (
       scrollHintText: valueOr(settings?.hero_scroll_hint_text, fallback.hero.scrollHintText),
       videoSrc: heroVideoSrc,
       posterSrc: valueOr(settings?.hero_poster_src, fallback.hero.posterSrc),
+      skipRevealImage: settings?.hero_skip_reveal_image ?? fallback.hero.skipRevealImage,
       revealImageSrc: valueOr(settings?.hero_reveal_image_src, fallback.hero.revealImageSrc),
       revealImageType: valueOr(settings?.hero_reveal_image_type, fallback.hero.revealImageType),
       revealImageAlt: valueOr(settings?.hero_reveal_image_alt, fallback.hero.revealImageAlt),
@@ -673,6 +675,7 @@ const getSchemaCacheMissingColumn = (errorMessage?: string) => {
 };
 
 const closingSettingsColumns = new Set([
+  'hero_skip_reveal_image',
   'closing_include_photos',
   'closing_layout',
   'closing_line',
@@ -693,6 +696,7 @@ export async function saveSupabaseWeddingSettings(weddingId: string, wedding: Sa
     hero_scroll_hint_text: wedding.hero.scrollHintText,
     hero_video_src: wedding.hero.videoSrc,
     hero_poster_src: wedding.hero.posterSrc,
+    hero_skip_reveal_image: wedding.hero.skipRevealImage === true,
     hero_reveal_image_src: wedding.hero.revealImageSrc,
     hero_reveal_image_type: wedding.hero.revealImageType,
     hero_reveal_image_alt: wedding.hero.revealImageAlt,

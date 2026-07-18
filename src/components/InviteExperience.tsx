@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Hero from './Hero';
 import AudioPlayer from './AudioPlayer';
 import DemoWatermarkOverlay from './DemoWatermarkOverlay';
@@ -42,9 +42,12 @@ function ClassicInviteExperience({
 }: ClassicInviteExperienceProps) {
   const [heroDone, setHeroDone] = useState(false);
   const [heroStarted, setHeroStarted] = useState(false);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
   const contentReady = previewMode || forceSectionsVisible || heroDone;
 
-  const handleHeroComplete = useCallback(() => setHeroDone(true), []);
+  const handleHeroComplete = useCallback(() => {
+    setHeroDone(true);
+  }, []);
 
   useEffect(() => {
     if (!heroStarted) return;
@@ -59,7 +62,9 @@ function ClassicInviteExperience({
     };
 
     const runPreload = async () => {
-      await preloadImage(data.hero.revealImageSrc);
+      if (!data.hero.skipRevealImage) {
+        await preloadImage(data.hero.revealImageSrc);
+      }
 
       if (data.couple.enabled) {
         await preloadImage(data.couple.backgroundImageSrc);
@@ -77,7 +82,7 @@ function ClassicInviteExperience({
   }, [heroStarted, data, eventsToShow]);
 
   const inviteCanvas = (
-    <div className={`phone-canvas ${!contentReady ? 'no-scroll' : 'ready-to-snap'} ${previewMode || previewScrollFrame ? 'preview-mode' : ''}`}>
+    <div ref={canvasRef} className={`phone-canvas ${!contentReady ? 'no-scroll' : 'ready-to-snap'} ${previewMode || previewScrollFrame ? 'preview-mode' : ''}`}>
       {(heroStarted || heroDone) && (
         <AudioPlayer
           triggerPlay={heroStarted || heroDone}
@@ -86,16 +91,18 @@ function ClassicInviteExperience({
         />
       )}
 
-      <Hero
-        hero={data.hero}
-        audioSrc={data.music.audioSrc}
-        onHeroStart={() => setHeroStarted(true)}
-        onGaneshaReveal={() => undefined}
-        onHeroComplete={handleHeroComplete}
-        enableResponsiveVideo={enableResponsiveOpeningVideo}
-        showScrollPrompt={heroDone}
-        previewMode={previewMode}
-      />
+      {!(data.hero.skipRevealImage && heroDone) && (
+        <Hero
+          hero={data.hero}
+          audioSrc={data.music.audioSrc}
+          onHeroStart={() => setHeroStarted(true)}
+          onGaneshaReveal={() => undefined}
+          onHeroComplete={handleHeroComplete}
+          enableResponsiveVideo={enableResponsiveOpeningVideo}
+          showScrollPrompt={heroDone && !data.hero.skipRevealImage}
+          previewMode={previewMode}
+        />
+      )}
 
       {contentReady && (
         <WeddingSectionRenderer

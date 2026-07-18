@@ -114,12 +114,14 @@
 }
 
 .event-text-panel {
-    width: 100%;
+    width: min(84%, 44vh);
+    max-height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
+    min-height: 0;
 }
 
 .event-text-panel > * {
@@ -136,6 +138,8 @@
     font-size: 3.5rem;
     line-height: 0.95;
     margin-bottom: 0.35rem;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
 }
 
 .event-section-text-position-top .wedding-title,
@@ -146,13 +150,13 @@
 .event-section-text-position-top .event-details,
 .event-section-text-position-middle .event-details {
     font-size: 0.95rem;
-    line-height: 1.6;
-    margin-bottom: 2rem;
+    line-height: 1.48;
+    margin-bottom: clamp(0.9rem, 2vh, 1.25rem);
 }
 
 .event-section-text-position-top .event-actions,
 .event-section-text-position-middle .event-actions {
-    gap: 1.5rem;
+    gap: clamp(0.65rem, 2.2vw, 1.1rem);
     flex-wrap: wrap;
 }
 
@@ -170,6 +174,8 @@
     color: var(--color-text);
     margin-bottom: 0.5rem;
     line-height: 1;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
 }
 
 .wedding-title {
@@ -183,8 +189,8 @@
     font-weight: 300;
     letter-spacing: 0.06em;
     color: var(--color-text);
-    line-height: 1.6;
-    margin-bottom: 2rem;
+    line-height: 1.48;
+    margin-bottom: clamp(0.9rem, 2vh, 1.25rem);
     text-transform: uppercase;
 }
 
@@ -329,3 +335,4 @@
     font-size: 0.78rem;
     letter-spacing: 0.08em;
 }
+

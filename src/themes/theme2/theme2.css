@@ -380,9 +380,9 @@
 .theme2-event-text-position-middle .theme2-event-content {
   align-self: center;
   justify-self: auto;
-  width: 100%;
+  width: min(84%, 44vh);
   min-height: auto;
-  max-height: none;
+  max-height: 40%;
   text-align: center;
   margin-left: auto;
   margin-right: auto;
@@ -407,26 +407,28 @@
   font-size: 3.4rem;
   line-height: 0.98;
   margin-bottom: 0.35rem;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 .theme2-event-text-position-top .theme2-body-font,
 .theme2-event-text-position-middle .theme2-body-font {
   font-size: 0.95rem;
-  line-height: 1.35;
+  line-height: 1.32;
 }
 
 .theme2-event-text-position-top .theme2-event-date,
 .theme2-event-text-position-middle .theme2-event-date,
 .theme2-event-text-position-top .theme2-event-venue,
 .theme2-event-text-position-middle .theme2-event-venue {
-  margin-top: clamp(0.55rem, 1.5vh, 1rem);
+  margin-top: clamp(0.45rem, 1.25vh, 0.8rem);
   margin-bottom: 0;
 }
 
 .theme2-event-text-position-top .theme2-event-actions,
 .theme2-event-text-position-middle .theme2-event-actions {
-  margin-top: clamp(0.7rem, 2vh, 1.2rem);
-  gap: clamp(0.4rem, 1.5vw, 0.75rem);
+  margin-top: clamp(0.65rem, 1.6vh, 1rem);
+  gap: clamp(0.45rem, 1.6vw, 0.85rem);
 }
 
 .theme2-event-text-position-top .theme2-event-btn,
@@ -747,3 +749,4 @@
   text-transform: uppercase;
   color: inherit;
 }
+

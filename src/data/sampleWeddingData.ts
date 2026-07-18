@@ -109,6 +109,7 @@ export interface SampleWeddingData {
     scrollHintText: string;
     videoSrc: string;
     posterSrc: string;
+    skipRevealImage: boolean;
     revealImageSrc: string;
     revealImageType: RevealImageType;
     revealImageAlt: string;
@@ -173,6 +174,7 @@ const sharedThemeMedia = {
     scrollHintText: '',
     videoSrc: '/assets/hero-v1.mp4',
     posterSrc: '/assets/hero-poster-v1.jpeg',
+    skipRevealImage: false,
     revealImageSrc: '/assets/Ganesha Image.png',
     revealImageType: 'blessing' as RevealImageType,
     revealImageAlt: 'Lord Ganesha',
@@ -223,6 +225,7 @@ const theme2OpeningReveal = {
     scrollHintText: '',
     videoSrc: '/assets/theme-2/main-hero-video.mp4',
     posterSrc: '/assets/theme-2/hero-poster.png',
+    skipRevealImage: false,
     revealImageSrc: '/assets/opening-reveal/envelope/revealed-images/revealed-generic-classic-01.png',
     revealImageType: 'floral' as RevealImageType,
     revealImageAlt: 'Decorative wedding reveal image',
@@ -242,6 +245,7 @@ const palaceDoorOpeningReveal = {
     scrollHintText: '',
     videoSrc: '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01.mp4',
     posterSrc: '/assets/opening-reveal/palace-door/posters/opening-reveal-palace-door-poster-01.png',
+    skipRevealImage: false,
     revealImageSrc: '/assets/opening-reveal/envelope/revealed-images/revealed-hindu-classic-01.png',
     revealImageType: 'blessing' as RevealImageType,
     revealImageAlt: 'Hindu wedding blessing reveal',

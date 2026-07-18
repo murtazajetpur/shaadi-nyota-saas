@@ -148,6 +148,7 @@ create table if not exists public.wedding_settings (
   hero_scroll_hint_text text,
   hero_video_src text,
   hero_poster_src text,
+  hero_skip_reveal_image boolean not null default false,
   hero_reveal_image_src text,
   hero_reveal_image_type text default 'blessing' check (hero_reveal_image_type in ('blessing', 'couple', 'floral')),
   hero_reveal_image_alt text,

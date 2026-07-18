@@ -39,7 +39,7 @@ export default function Theme2InviteExperience({
   const [heroStarted, setHeroStarted] = useState(false);
   const [heroDone, setHeroDone] = useState(false);
   const theme2CoupleBackground = getTheme2CoupleImage(data.couple.backgroundImageSrc || data.hero.revealImageSrc);
-  const openingRevealImage = data.hero.revealImageSrc || theme2CoupleBackground;
+  const openingRevealImage = data.hero.skipRevealImage ? theme2CoupleBackground : (data.hero.revealImageSrc || theme2CoupleBackground);
   const experienceResetKey = [
     data.wedding.slug,
     data.wedding.themeKey,
@@ -58,6 +58,7 @@ export default function Theme2InviteExperience({
   const bgSequence = useMemo(() => enabledSections.flatMap((section) => {
     switch (section.type) {
       case 'reveal':
+        if (data.hero.skipRevealImage && heroDone) return null;
         return [openingRevealImage];
       case 'story':
         return [theme2CoupleBackground, theme2Assets.storyBackground];
@@ -97,6 +98,10 @@ export default function Theme2InviteExperience({
     });
   }, [openingRevealImage, theme2CoupleBackground, eventsToShow, heroStarted, shouldShowOurStory]);
 
+
+  const completeHeroReveal = () => {
+    setHeroDone(true);
+  };
   const toggleAudio = () => {
     if (!audioRef.current) return;
     if (audioPlaying) {
@@ -132,17 +137,18 @@ export default function Theme2InviteExperience({
   const renderTheme2Section = (section: WeddingSectionConfig) => {
     switch (section.type) {
       case 'reveal':
+        if (data.hero.skipRevealImage && heroDone) return null;
         return (
           <Theme2HeroReveal
             key={section.id}
             hero={data.hero}
             couple={data.couple}
             onStarted={() => setHeroStarted(true)}
-            onDone={() => setHeroDone(true)}
+            onDone={completeHeroReveal}
             onPlayAudio={playAudioWithFade}
             enableResponsiveVideo={enableResponsiveOpeningVideo}
             className="theme2-hero-reveal-section"
-            showScrollPrompt={heroDone}
+            showScrollPrompt={heroDone && !data.hero.skipRevealImage}
           />
         );
       case 'story':

@@ -129,7 +129,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
 
     const handleSubmit = async () => {
         const updatedAt = new Date().toISOString();
-        const mealValue = hasPositiveResponse ? mealPreference : '';
+        const mealValue = hasPositiveResponse && rsvp.mealPreferenceEnabled ? mealPreference : '';
 
         if (weddingId) {
             const result = await saveSupabaseRsvpSubmission({

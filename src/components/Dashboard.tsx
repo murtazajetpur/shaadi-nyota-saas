@@ -1038,6 +1038,18 @@ export default function Dashboard({
         }));
     };
 
+    const updateRsvp = <Key extends keyof SampleWeddingData['rsvp']>(
+        key: Key,
+        value: SampleWeddingData['rsvp'][Key]
+    ) => {
+        updateWeddingData((current) => ({
+            ...current,
+            rsvp: {
+                ...current.rsvp,
+                [key]: value,
+            },
+        }));
+    };
     const setClosingGalleryImage = (target: number | 'add', imageSrc: string) => {
         updateWeddingData((current) => {
             const images = current.closing.carouselImages.filter(Boolean);
@@ -1841,7 +1853,7 @@ export default function Dashboard({
                             </button>
                         </div>
                         <p className="dashboard-note">
-                            Opening Reveal combines the first animation with the image guests see when the animation completes.
+                            Opening Reveal controls the first animation and the optional image guests can see before the invitation content.
                         </p>
 
                         <div className="opening-reveal-layout">
@@ -1874,28 +1886,36 @@ export default function Dashboard({
                                             optionLabels={musicOptionLabels}
                                             onChange={applyMusic}
                                         />
+                                        <CheckboxField
+                                            label="Skip reveal image after video"
+                                            checked={weddingData.hero.skipRevealImage === true}
+                                            helperText="When enabled, guests go from the opening video directly to Our Story/content."
+                                            onChange={(checked) => updateHero('skipRevealImage', checked)}
+                                        />
                                     </div>
                                 </section>
 
-                                <section className="opening-reveal-group">
-                                    <div className="opening-reveal-group-header">
-                                        <span>Revealed Image</span>
-                                        <p>This image appears after the opening animation completes.</p>
-                                    </div>
-                                    <div className="opening-reveal-option-grid">
-                                        {revealedImageOptions.map((option) => (
-                                            <OpeningRevealOptionCard
-                                                key={option.key}
-                                                label={option.label}
-                                                helper={option.helper}
-                                                meta={option.themeLabel}
-                                                imageSrc={option.thumbnailSrc}
-                                                selected={weddingData.hero.revealImageSrc === option.imageSrc}
-                                                onClick={() => applyRevealedImage(option)}
-                                            />
-                                        ))}
-                                    </div>
-                                </section>
+                                {weddingData.hero.skipRevealImage !== true && (
+                                    <section className="opening-reveal-group">
+                                        <div className="opening-reveal-group-header">
+                                            <span>Revealed Image</span>
+                                            <p>This image appears after the opening animation completes.</p>
+                                        </div>
+                                        <div className="opening-reveal-option-grid">
+                                            {revealedImageOptions.map((option) => (
+                                                <OpeningRevealOptionCard
+                                                    key={option.key}
+                                                    label={option.label}
+                                                    helper={option.helper}
+                                                    meta={option.themeLabel}
+                                                    imageSrc={option.thumbnailSrc}
+                                                    selected={weddingData.hero.revealImageSrc === option.imageSrc}
+                                                    onClick={() => applyRevealedImage(option)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
                             </div>
 
                             <OpeningRevealPreview
@@ -2031,53 +2051,82 @@ export default function Dashboard({
                                         </div>
                                     </div>
                                     <div className="event-editor-body">
-                                        <div className="event-editor-fields form-grid">
-                                            <TextField label="Event name" value={event.eventName} error={validation.events[index]?.eventName} onChange={(value) => updateEvent(index, 'eventName', value)} />
-                                            <SelectField
-                                                label="Event type"
-                                                value={event.eventKey ?? ''}
-                                                options={eventTypeOptions}
-                                                optionLabels={eventTypeLabels}
-                                                onChange={(value) => updateEvent(index, 'eventKey', value)}
-                                            />
-                                            <SelectField
-                                                label="Text Style"
-                                                value={event.eventTextStyle ?? 'auto'}
-                                                options={eventTextStyleOptions}
-                                                optionLabels={eventTextStyleLabels}
-                                                onChange={(value) => updateEvent(index, 'eventTextStyle', value as WeddingEvent['eventTextStyle'])}
-                                            />
-                                            <SelectField
-                                                label="Text Position"
-                                                value={normalizeEventTextPositionOption(event.eventTextPosition)}
-                                                options={eventTextPositionOptions}
-                                                optionLabels={eventTextPositionLabels}
-                                                onChange={(value) => updateEvent(index, 'eventTextPosition', value as NonNullable<WeddingEvent['eventTextPosition']>)}
-                                            />
-                                            <SelectField
-                                                label="Event Animation"
-                                                value={normalizeEventAnimationKey(event.eventAnimationKey)}
-                                                options={eventAnimationKeys}
-                                                optionLabels={eventAnimationOptionLabels}
-                                                onChange={(value) => updateEvent(index, 'eventAnimationKey', value as WeddingEvent['eventAnimationKey'])}
-                                            />
-                                            <CheckboxField
-                                                label="Show Add to Calendar"
-                                                checked={event.eventShowCalendar !== false}
-                                                onChange={(checked) => updateEvent(index, 'eventShowCalendar', checked)}
-                                            />
-                                            <CheckboxField
-                                                label="Show invited count"
-                                                checked={event.eventShowInvitedCount === true}
-                                                helperText="Shows each guest/family their invited count for this event."
-                                                onChange={(checked) => updateEvent(index, 'eventShowInvitedCount', checked)}
-                                            />
-                                            <TextField label="Date" value={event.date} error={validation.events[index]?.date} onChange={(value) => updateEvent(index, 'date', value)} />
-                                            <TextField label="Start time" value={event.startTime} error={validation.events[index]?.startTime} onChange={(value) => updateEvent(index, 'startTime', value)} />
-                                            <TextField label="Venue name" value={event.venueName} error={validation.events[index]?.venueName} onChange={(value) => updateEvent(index, 'venueName', value)} />
-                                            <TextField label="City" value={event.city} onChange={(value) => updateEvent(index, 'city', value)} />
-                                            <TextField label="Google Maps link (optional)" value={event.mapsUrl} onChange={(value) => updateEvent(index, 'mapsUrl', value)} />
+                                        <div className="event-editor-main">
+                                            <section className="event-settings-group">
+                                                <div className="event-settings-group-header">
+                                                    <span>Basic Details</span>
+                                                    <p>Name the function and choose the event category.</p>
+                                                </div>
+                                                <div className="event-editor-fields form-grid">
+                                                    <TextField label="Event name" value={event.eventName} error={validation.events[index]?.eventName} onChange={(value) => updateEvent(index, 'eventName', value)} />
+                                                    <SelectField
+                                                        label="Event type"
+                                                        value={event.eventKey ?? ''}
+                                                        options={eventTypeOptions}
+                                                        optionLabels={eventTypeLabels}
+                                                        onChange={(value) => updateEvent(index, 'eventKey', value)}
+                                                    />
+                                                    <TextField label="Date" value={event.date} error={validation.events[index]?.date} onChange={(value) => updateEvent(index, 'date', value)} />
+                                                    <TextField label="Start time" value={event.startTime} error={validation.events[index]?.startTime} onChange={(value) => updateEvent(index, 'startTime', value)} />
+                                                </div>
+                                            </section>
+
+                                            <section className="event-settings-group">
+                                                <div className="event-settings-group-header">
+                                                    <span>Location</span>
+                                                    <p>Add venue details and an optional Google Maps link.</p>
+                                                </div>
+                                                <div className="event-editor-fields form-grid">
+                                                    <TextField label="Venue name" value={event.venueName} error={validation.events[index]?.venueName} onChange={(value) => updateEvent(index, 'venueName', value)} />
+                                                    <TextField label="City" value={event.city} onChange={(value) => updateEvent(index, 'city', value)} />
+                                                    <TextField label="Google Maps link (optional)" value={event.mapsUrl} onChange={(value) => updateEvent(index, 'mapsUrl', value)} />
+                                                </div>
+                                            </section>
+
+                                            <section className="event-settings-group">
+                                                <div className="event-settings-group-header">
+                                                    <span>Display</span>
+                                                    <p>Control text readability, placement, animation, and guest actions.</p>
+                                                </div>
+                                                <div className="event-editor-fields form-grid">
+                                                    <SelectField
+                                                        label="Text Style"
+                                                        value={event.eventTextStyle ?? 'auto'}
+                                                        options={eventTextStyleOptions}
+                                                        optionLabels={eventTextStyleLabels}
+                                                        onChange={(value) => updateEvent(index, 'eventTextStyle', value as WeddingEvent['eventTextStyle'])}
+                                                    />
+                                                    <SelectField
+                                                        label="Text Position"
+                                                        value={normalizeEventTextPositionOption(event.eventTextPosition)}
+                                                        options={eventTextPositionOptions}
+                                                        optionLabels={eventTextPositionLabels}
+                                                        onChange={(value) => updateEvent(index, 'eventTextPosition', value as NonNullable<WeddingEvent['eventTextPosition']>)}
+                                                    />
+                                                    <SelectField
+                                                        label="Event Animation"
+                                                        value={normalizeEventAnimationKey(event.eventAnimationKey)}
+                                                        options={eventAnimationKeys}
+                                                        optionLabels={eventAnimationOptionLabels}
+                                                        onChange={(value) => updateEvent(index, 'eventAnimationKey', value as WeddingEvent['eventAnimationKey'])}
+                                                    />
+                                                </div>
+                                                <div className="event-toggle-grid">
+                                                    <CheckboxField
+                                                        label="Show Add to Calendar"
+                                                        checked={event.eventShowCalendar !== false}
+                                                        onChange={(checked) => updateEvent(index, 'eventShowCalendar', checked)}
+                                                    />
+                                                    <CheckboxField
+                                                        label="Show invited count"
+                                                        checked={event.eventShowInvitedCount === true}
+                                                        helperText="Shows each guest/family their invited count for this event."
+                                                        onChange={(checked) => updateEvent(index, 'eventShowInvitedCount', checked)}
+                                                    />
+                                                </div>
+                                            </section>
                                         </div>
+
                                         <EventVisualPicker
                                             event={event}
                                             themeKey={weddingData.wedding.themeKey}
@@ -2347,6 +2396,9 @@ export default function Dashboard({
                                 <h2>RSVP analytics</h2>
                             </div>
                             <div className="dashboard-header-actions">
+                                <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
+                                    {saveAllChangesLabel}
+                                </button>
                                 <button className="dashboard-primary-btn secondary" type="button" onClick={exportRsvpCsv}>
                                     Export RSVP CSV
                                 </button>
@@ -2357,6 +2409,18 @@ export default function Dashboard({
                                 )}
                             </div>
                         </div>
+                        <section className="rsvp-settings-card">
+                            <div>
+                                <h3>RSVP form settings</h3>
+                                <p>Control what guests see when they submit their RSVP.</p>
+                            </div>
+                            <CheckboxField
+                                label="Show Meal Preference"
+                                checked={weddingData.rsvp.mealPreferenceEnabled}
+                                helperText="When hidden, guests can RSVP without selecting Veg, Non-Veg, or Jain."
+                                onChange={(checked) => updateRsvp('mealPreferenceEnabled', checked)}
+                            />
+                        </section>
                         <div className="guest-summary-grid rsvp-summary-grid">
                             <InfoBlock label="Total Invited Guests" value={String(guestSummary.totalInvitedCount)} />
                             <InfoBlock label="Confirmed Guests" value={String(rsvpAnalytics.totals.people.yes)} />
@@ -2389,21 +2453,23 @@ export default function Dashboard({
                             ))}
                         </RsvpTable>
 
-                        <RsvpTable
-                            title="Meal Preference by Event"
-                            helperText="Meal counts are calculated using invited guest count for confirmed RSVP responses. If a family has 5 invited guests and selects a meal preference, it counts as 5 meals."
-                            headers={['Event', 'Veg Guests', 'Non-Veg Guests', 'Jain Guests', 'Other / Not Specified']}
-                        >
-                            {rsvpAnalytics.eventMealSummaries.map(({ event, mealCounts }) => (
-                                <tr key={event.id}>
-                                    <td>{event.eventName}</td>
-                                    <td>{mealCounts.veg}</td>
-                                    <td>{mealCounts.nonVeg}</td>
-                                    <td>{mealCounts.jain}</td>
-                                    <td>{mealCounts.other}</td>
-                                </tr>
-                            ))}
-                        </RsvpTable>
+                        {weddingData.rsvp.mealPreferenceEnabled && (
+                            <RsvpTable
+                                title="Meal Preference by Event"
+                                helperText="Meal counts are calculated using invited guest count for confirmed RSVP responses. If a family has 5 invited guests and selects a meal preference, it counts as 5 meals."
+                                headers={['Event', 'Veg Guests', 'Non-Veg Guests', 'Jain Guests', 'Other / Not Specified']}
+                            >
+                                {rsvpAnalytics.eventMealSummaries.map(({ event, mealCounts }) => (
+                                    <tr key={event.id}>
+                                        <td>{event.eventName}</td>
+                                        <td>{mealCounts.veg}</td>
+                                        <td>{mealCounts.nonVeg}</td>
+                                        <td>{mealCounts.jain}</td>
+                                        <td>{mealCounts.other}</td>
+                                    </tr>
+                                ))}
+                            </RsvpTable>
+                        )}
 
                         <p className="dashboard-note">View guest-wise RSVP responses in the Guests tab.</p>
 
@@ -2642,7 +2708,8 @@ function OpeningRevealPreview({
     const resolvedMusicSrc = resolveAssetPath(musicSrc);
     const hasMusic = Boolean(resolvedMusicSrc.trim());
     const isScrollOpeningPreview = isScrollReveal(hero);
-    const revealLayerVisible = true;
+    const skipRevealImage = hero.skipRevealImage === true;
+    const revealLayerVisible = !skipRevealImage;
     const revealedImageSrc = resolveAssetPath(hero.revealImageSrc || (isScrollOpeningPreview ? couple.backgroundImageSrc : ''));
     const revealedImageAlt = hero.revealImageAlt || couple.displayName || 'Revealed image';
     const hasRevealImage = Boolean(revealedImageSrc.trim());
@@ -2665,7 +2732,7 @@ function OpeningRevealPreview({
             window.cancelAnimationFrame(animationFrameRef.current);
             animationFrameRef.current = null;
         }
-    }, [hero.videoSrc, hero.posterSrc, hero.revealImageSrc, hero.revealCtaText, couple.backgroundImageSrc, musicSrc]);
+    }, [hero.videoSrc, hero.posterSrc, hero.revealImageSrc, hero.revealCtaText, hero.skipRevealImage, couple.backgroundImageSrc, musicSrc]);
 
     useEffect(() => () => {
         audioRef.current?.pause();
@@ -2686,9 +2753,9 @@ function OpeningRevealPreview({
             setPreviewCurrentTime(currentTime);
 
             const duration = videoRef.current.duration;
-            const progress = getOpeningRevealCrossfadeProgress(currentTime, duration);
+            const progress = skipRevealImage ? 0 : getOpeningRevealCrossfadeProgress(currentTime, duration);
             setRevealImageOpacity(progress);
-            if (progress > 0 && revealTriggeredAt === null) {
+            if (!skipRevealImage && progress > 0 && revealTriggeredAt === null) {
                 setRevealTriggeredAt(currentTime);
             }
 
@@ -2703,7 +2770,7 @@ function OpeningRevealPreview({
                 animationFrameRef.current = null;
             }
         };
-    }, [previewState, revealTriggeredAt]);
+    }, [previewState, revealTriggeredAt, skipRevealImage]);
 
     const playPreview = (restart = false) => {
         if (!hasVideo) {
@@ -2821,7 +2888,7 @@ function OpeningRevealPreview({
                         onEnded={() => {
                             audioRef.current?.pause();
                             setRevealTriggeredAt(videoRef.current?.currentTime ?? null);
-                            setRevealImageOpacity(1);
+                            setRevealImageOpacity(skipRevealImage ? 0 : 1);
                             setPreviewState('revealed');
                         }}
                     />

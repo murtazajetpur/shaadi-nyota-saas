@@ -43,6 +43,7 @@ export default function Theme2HeroReveal({
   const responsiveVideoSrc = useOpeningRevealVideoSrc(videoSrc);
   const selectedVideoSrc = enableResponsiveVideo ? responsiveVideoSrc : videoSrc;
   const posterSrc = hero.posterSrc && !hero.posterSrc.includes('/assets/hero-poster-v1') ? hero.posterSrc : theme2Assets.heroPoster;
+  const skipRevealImage = hero.skipRevealImage === true;
   const revealImage = hero.revealImageSrc || mandapImage;
 
   const getRevealProgress = (currentTime: number, duration: number) => {
@@ -66,7 +67,7 @@ export default function Theme2HeroReveal({
     event?.stopPropagation();
     if (isRevealed) return;
 
-    if (!isRevealImageReady && revealImagePreloadRef.current) {
+    if (!skipRevealImage && !isRevealImageReady && revealImagePreloadRef.current) {
       await revealImagePreloadRef.current;
     }
 
@@ -86,7 +87,9 @@ export default function Theme2HeroReveal({
     setIsRevealImageReady(false);
     revealImagePreloadRef.current = null;
 
-    if (revealImage) {
+    if (skipRevealImage) {
+      setIsRevealImageReady(true);
+    } else if (revealImage) {
       const image = new Image();
       image.decoding = 'sync';
       image.src = revealImage;
@@ -113,11 +116,15 @@ export default function Theme2HeroReveal({
         window.clearTimeout(doneTimeoutRef.current);
       }
     };
-  }, [revealImage]);
+  }, [revealImage, skipRevealImage]);
 
   const completeReveal = () => {
     if (doneCalledRef.current) return;
     doneCalledRef.current = true;
+    if (skipRevealImage) {
+      onDone();
+      return;
+    }
     setIsRevealComplete(true);
     setMandapOpacity(1);
     setVideoOpacity(0);
@@ -132,6 +139,17 @@ export default function Theme2HeroReveal({
 
     const tick = () => {
       if (!videoRef.current) return;
+
+      if (skipRevealImage) {
+        const { currentTime, duration } = videoRef.current;
+        if (Number.isFinite(duration) && duration > 0 && duration - currentTime <= 0.12) {
+          completeReveal();
+          return;
+        }
+        animationFrameRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
+
       const progress = getRevealProgress(videoRef.current.currentTime, videoRef.current.duration);
       setMandapOpacity(progress);
       if (progress >= 0.98) {
@@ -150,26 +168,28 @@ export default function Theme2HeroReveal({
         animationFrameRef.current = null;
       }
     };
-  }, [isRevealed, hero.revealImageShowAtSeconds]);
+  }, [isRevealed, hero.revealImageShowAtSeconds, skipRevealImage]);
 
   return (
     <div
       className={`theme2-hero-reveal ${className}`}
       style={{
-        backgroundImage: `url(${isRevealed ? revealImage : posterSrc})`,
+        backgroundImage: `url(${isRevealed && !skipRevealImage ? revealImage : posterSrc})`,
         backgroundPosition: 'center',
         backgroundSize: 'cover',
       }}
       onClick={handleTap}
     >
-      <img
-        src={revealImage}
-        className="theme2-hero-poster"
-        loading="eager"
-        decoding="sync"
-        style={{ opacity: isRevealComplete ? 1 : mandapOpacity, transition: 'opacity 120ms linear', zIndex: 13 }}
-        alt={couple.displayName}
-      />
+      {!skipRevealImage && (
+        <img
+          src={revealImage}
+          className="theme2-hero-poster"
+          loading="eager"
+          decoding="sync"
+          style={{ opacity: isRevealComplete ? 1 : mandapOpacity, transition: 'opacity 120ms linear', zIndex: 13 }}
+          alt={couple.displayName}
+        />
+      )}
 
       <video
         key={selectedVideoSrc}

@@ -8,6 +8,7 @@ alter table public.wedding_settings
   add column if not exists hero_scroll_hint_text text,
   add column if not exists hero_video_src text,
   add column if not exists hero_poster_src text,
+  add column if not exists hero_skip_reveal_image boolean not null default false,
   add column if not exists hero_reveal_image_src text,
   add column if not exists hero_reveal_image_type text default 'blessing',
   add column if not exists hero_reveal_image_alt text,
