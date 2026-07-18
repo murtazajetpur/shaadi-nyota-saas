@@ -149,7 +149,7 @@ export default function Theme2InviteExperience({
         return <Theme2Couple key={section.id} couple={data.couple} isHeroDone={heroDone} />;
       case 'events':
         return eventsToShow.map((event) => (
-          <Theme2EventSection key={event.id} event={event} coupleDisplayName={data.couple.displayName} isHeroDone={heroDone} />
+          <Theme2EventSection key={event.id} event={event} coupleDisplayName={data.couple.displayName} isHeroDone={heroDone} guest={guest} />
         ));
       case 'rsvp':
         return (

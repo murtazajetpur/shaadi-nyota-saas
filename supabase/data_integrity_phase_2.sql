@@ -1,10 +1,65 @@
--- Shaadi Nyota data integrity hardening - Phase 2.
---
--- Run after supabase/security_hardening_phase_1.sql.
--- PostgreSQL functions are transactional: any validation error or statement
--- failure rolls back every change made by that RPC call.
-
 begin;
+
+alter table public.events
+  add column if not exists event_text_position text,
+  add column if not exists event_show_calendar boolean,
+  add column if not exists event_show_invited_count boolean;
+
+alter table public.guest_event_invites
+  add column if not exists invited_count integer;
+
+update public.events
+set event_text_position = case
+  when event_text_position = 'middle' or event_text_position like 'center%' then 'middle'
+  else 'top'
+end
+where event_text_position is null
+   or event_text_position not in ('top', 'middle');
+
+alter table public.events
+  alter column event_text_position set default 'top',
+  alter column event_text_position set not null,
+  alter column event_show_calendar set default true;
+
+update public.events
+set event_show_calendar = true
+where event_show_calendar is null;
+
+update public.events
+set event_show_invited_count = false
+where event_show_invited_count is null;
+
+update public.guest_event_invites as invite
+set invited_count = greatest(1, coalesce(guest_row.invited_count, 1))
+from public.guests as guest_row
+where invite.guest_id = guest_row.id
+  and invite.invited_count is null;
+
+update public.guest_event_invites
+set invited_count = 1
+where invited_count is null;
+
+alter table public.events
+  alter column event_show_calendar set not null,
+  alter column event_show_invited_count set default false,
+  alter column event_show_invited_count set not null;
+
+alter table public.guest_event_invites
+  alter column invited_count set default 1,
+  alter column invited_count set not null;
+
+alter table public.guest_event_invites
+  drop constraint if exists guest_event_invites_invited_count_check;
+
+alter table public.guest_event_invites
+  add constraint guest_event_invites_invited_count_check check (invited_count >= 1);
+
+alter table public.events
+  drop constraint if exists events_event_text_position_check;
+
+alter table public.events
+  add constraint events_event_text_position_check
+  check (event_text_position in ('top', 'middle'));
 
 create or replace function public.can_manage_wedding(target_wedding_id uuid)
 returns boolean
@@ -238,7 +293,7 @@ begin
 
     insert into public.events (
       id, wedding_id, event_key, event_visual_key, event_text_style,
-      event_animation_key, event_name, date_label, start_time_label, venue_name,
+      event_text_position, event_animation_key, event_show_calendar, event_show_invited_count, event_name, date_label, start_time_label, venue_name,
       city, maps_url, dress_code, foreground_image_src, background_image_src,
       calendar_title, calendar_description, sort_order
     )
@@ -248,7 +303,13 @@ begin
       nullif(btrim(event_item ->> 'event_key'), ''),
       nullif(event_item ->> 'event_visual_key', ''),
       coalesce(nullif(event_item ->> 'event_text_style', ''), 'auto'),
+      case
+        when event_item ->> 'event_text_position' = 'middle' or event_item ->> 'event_text_position' like 'center%' then 'middle'
+        else 'top'
+      end,
       coalesce(nullif(event_item ->> 'event_animation_key', ''), 'none'),
+      coalesce(nullif(event_item ->> 'event_show_calendar', '')::boolean, true),
+      coalesce(nullif(event_item ->> 'event_show_invited_count', '')::boolean, false),
       btrim(event_item ->> 'event_name'),
       event_item ->> 'date_label',
       event_item ->> 'start_time_label',
@@ -266,7 +327,10 @@ begin
       event_key = excluded.event_key,
       event_visual_key = excluded.event_visual_key,
       event_text_style = excluded.event_text_style,
+      event_text_position = excluded.event_text_position,
       event_animation_key = excluded.event_animation_key,
+      event_show_calendar = excluded.event_show_calendar,
+      event_show_invited_count = excluded.event_show_invited_count,
       event_name = excluded.event_name,
       date_label = excluded.date_label,
       start_time_label = excluded.start_time_label,
@@ -319,11 +383,17 @@ begin
   where wedding_id = target_wedding_id
     and guest_id in (select guest_id from phase2_guest_map);
 
-  insert into public.guest_event_invites (wedding_id, guest_id, event_id)
+  insert into public.guest_event_invites (wedding_id, guest_id, event_id, invited_count)
   select distinct
     target_wedding_id,
     phase2_guest_map.guest_id,
-    phase2_event_map.event_id
+    phase2_event_map.event_id,
+    greatest(1, coalesce(
+      nullif(guest_value -> 'invited_event_counts' ->> event_ref.value, '')::integer,
+      nullif(guest_value -> 'invited_event_counts' ->> phase2_event_map.event_id::text, '')::integer,
+      nullif(guest_value ->> 'invited_count', '')::integer,
+      1
+    ))
   from jsonb_array_elements(coalesce(guest_rows, '[]'::jsonb)) as guest_value
   join phase2_guest_map on phase2_guest_map.client_id = (guest_value ->> 'id')
   cross join jsonb_array_elements_text(coalesce(guest_value -> 'invited_event_ids', '[]'::jsonb)) as event_ref(value)
@@ -401,7 +471,10 @@ begin
     'event_key', event_key,
     'event_visual_key', event_visual_key,
     'event_text_style', event_text_style,
+    'event_text_position', event_text_position,
     'event_animation_key', event_animation_key,
+    'event_show_calendar', event_show_calendar,
+    'event_show_invited_count', event_show_invited_count,
     'event_name', event_name,
     'date_label', date_label,
     'start_time_label', start_time_label,
@@ -423,28 +496,38 @@ begin
 end;
 $$;
 
+drop function if exists public.replace_guest_event_invites_transactional(uuid, uuid, jsonb);
+
 create or replace function public.replace_guest_event_invites_transactional(
   target_wedding_id uuid,
   target_guest_id uuid,
-  event_ids jsonb
+  event_ids jsonb,
+  event_counts jsonb default '{}'::jsonb
 )
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
+declare
+  target_guest public.guests%rowtype;
 begin
   if not public.can_manage_wedding(target_wedding_id) then
     raise exception 'Wedding not found or access denied.' using errcode = '42501';
   end if;
-  if not exists (
-    select 1 from public.guests
-    where id = target_guest_id and wedding_id = target_wedding_id
-  ) then
+
+  select * into target_guest
+  from public.guests
+  where id = target_guest_id and wedding_id = target_wedding_id;
+
+  if not found then
     raise exception 'Guest does not belong to this wedding.' using errcode = '22023';
   end if;
   if jsonb_typeof(coalesce(event_ids, '[]'::jsonb)) <> 'array' then
     raise exception 'Event IDs must be a JSON array.' using errcode = '22023';
+  end if;
+  if jsonb_typeof(coalesce(event_counts, '{}'::jsonb)) <> 'object' then
+    raise exception 'Event counts must be a JSON object.' using errcode = '22023';
   end if;
   if exists (
     select 1
@@ -459,8 +542,12 @@ begin
   delete from public.guest_event_invites
   where wedding_id = target_wedding_id and guest_id = target_guest_id;
 
-  insert into public.guest_event_invites (wedding_id, guest_id, event_id)
-  select distinct target_wedding_id, target_guest_id, event_ref.value::uuid
+  insert into public.guest_event_invites (wedding_id, guest_id, event_id, invited_count)
+  select distinct
+    target_wedding_id,
+    target_guest_id,
+    event_ref.value::uuid,
+    greatest(1, coalesce(nullif(event_counts ->> event_ref.value, '')::integer, target_guest.invited_count, 1))
   from jsonb_array_elements_text(coalesce(event_ids, '[]'::jsonb)) as event_ref(value);
 
   return jsonb_build_object('success', true);
@@ -552,16 +639,57 @@ begin
 end;
 $$;
 
+create or replace function public.get_public_invite_by_code(wedding_slug text, invite_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  target_wedding public.weddings%rowtype;
+  target_guest public.guests%rowtype;
+begin
+  select * into target_wedding
+  from public.weddings
+  where slug = $1 and status = 'published' and payment_status = 'paid';
+  if not found then return null; end if;
+
+  select * into target_guest
+  from public.guests
+  where wedding_id = target_wedding.id and guests.invite_code = $2;
+  if not found then return null; end if;
+
+  return jsonb_build_object(
+    'wedding', to_jsonb(target_wedding) - 'owner_id' - 'created_by',
+    'settings', (select to_jsonb(settings) from public.wedding_settings as settings where settings.wedding_id = target_wedding.id),
+    'guest', to_jsonb(target_guest),
+    'events', coalesce((
+      select jsonb_agg((to_jsonb(event_row) || jsonb_build_object('guest_invited_count', coalesce(invite.invited_count, target_guest.invited_count, 1))) order by event_row.sort_order)
+      from public.events as event_row
+      join public.guest_event_invites as invite
+        on invite.wedding_id = target_wedding.id
+       and invite.guest_id = target_guest.id
+       and invite.event_id = event_row.id
+      where event_row.wedding_id = target_wedding.id
+    ), '[]'::jsonb),
+    'rsvp_responses', coalesce((
+      select jsonb_agg(to_jsonb(response_row) order by response_row.updated_at)
+      from public.rsvp_responses as response_row
+      where response_row.wedding_id = target_wedding.id and response_row.guest_id = target_guest.id
+    ), '[]'::jsonb)
+  );
+end;
+$$;
 revoke all on function public.can_manage_wedding(uuid) from public;
 revoke all on function public.save_wedding_relational_data(uuid, jsonb, jsonb, text) from public;
 revoke all on function public.save_wedding_guests_transactional(uuid, jsonb, text) from public;
-revoke all on function public.replace_guest_event_invites_transactional(uuid, uuid, jsonb) from public;
+revoke all on function public.replace_guest_event_invites_transactional(uuid, uuid, jsonb, jsonb) from public;
 revoke all on function public.delete_wedding_event_transactional(uuid, uuid) from public;
 revoke all on function public.delete_wedding_guests_transactional(uuid, jsonb) from public;
 
 grant execute on function public.save_wedding_relational_data(uuid, jsonb, jsonb, text) to authenticated;
 grant execute on function public.save_wedding_guests_transactional(uuid, jsonb, text) to authenticated;
-grant execute on function public.replace_guest_event_invites_transactional(uuid, uuid, jsonb) to authenticated;
+grant execute on function public.replace_guest_event_invites_transactional(uuid, uuid, jsonb, jsonb) to authenticated;
 grant execute on function public.delete_wedding_event_transactional(uuid, uuid) to authenticated;
 grant execute on function public.delete_wedding_guests_transactional(uuid, jsonb) to authenticated;
 

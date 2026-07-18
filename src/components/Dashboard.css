@@ -627,14 +627,29 @@
     box-shadow: none;
 }
 
-.event-live-preview .event-content-overlay {
-    padding-top: 13%;
+.event-live-preview .event-section-text-position-top .event-content-overlay {
+    top: 8%;
+    height: 40%;
+    padding-top: 0;
+    padding-bottom: 0;
 }
 
-.event-live-preview .theme2-event-content {
-    margin-top: 13%;
+.event-live-preview .event-section-text-position-middle .event-content-overlay {
+    top: 30%;
+    height: 40%;
+    padding-top: 0;
+    padding-bottom: 0;
 }
 
+.event-live-preview .theme2-event-text-position-top .theme2-event-content {
+    margin-top: 8%;
+    margin-bottom: auto;
+}
+
+.event-live-preview .theme2-event-text-position-middle .theme2-event-content {
+    margin-top: auto;
+    margin-bottom: auto;
+}
 .event-live-preview .event-title {
     font-family: var(--font-primary);
     font-size: 3.5rem;
@@ -2479,4 +2494,100 @@
     .event-visual-card-grid.modal-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+}
+
+
+
+
+
+.event-live-preview .event-section-text-position-top .event-title,
+.event-live-preview .event-section-text-position-middle .event-title {
+    font-size: 3.5rem;
+    line-height: 0.95;
+    margin-bottom: 0.35rem;
+}
+
+.event-live-preview .event-section-text-position-top .wedding-title,
+.event-live-preview .event-section-text-position-middle .wedding-title {
+    font-size: 3.8rem;
+}
+
+.event-live-preview .event-section-text-position-top .event-details,
+.event-live-preview .event-section-text-position-middle .event-details {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+}
+
+.event-live-preview .event-section-text-position-top .event-actions,
+.event-live-preview .event-section-text-position-middle .event-actions {
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.event-live-preview .event-section-text-position-top .minimal-link-btn,
+.event-live-preview .event-section-text-position-middle .minimal-link-btn {
+    font-size: 0.85rem;
+}
+
+.event-live-preview .theme2-event-text-position-top .theme2-display-font,
+.event-live-preview .theme2-event-text-position-middle .theme2-display-font {
+    font-size: 3.4rem;
+    line-height: 0.98;
+    margin-bottom: 0.35rem;
+}
+
+.event-live-preview .theme2-event-text-position-top .theme2-body-font,
+.event-live-preview .theme2-event-text-position-middle .theme2-body-font {
+    font-size: 0.95rem;
+    line-height: 1.35;
+}
+
+.event-live-preview .theme2-event-text-position-top .theme2-event-actions,
+.event-live-preview .theme2-event-text-position-middle .theme2-event-actions {
+    margin-top: clamp(0.7rem, 2vh, 1.2rem);
+}
+
+
+
+.dashboard-checkbox-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dashboard-checkbox-field input[type="checkbox"] {
+    width: 18px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0;
+    accent-color: #7b2f2a;
+}
+
+.guest-event-count-option {
+    align-items: stretch !important;
+    flex-direction: column;
+    border-radius: 12px !important;
+    gap: 8px !important;
+}
+
+.guest-event-count-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.guest-event-count-input {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: #6b5a52;
+}
+
+.guest-event-count-input input {
+    width: 64px !important;
+    min-width: 64px !important;
+    padding: 6px 8px !important;
 }

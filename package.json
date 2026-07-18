@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "generate:event-thumbnails": "node scripts/generate-event-thumbnails.mjs",
+    "prepare:hero-demo": "node scripts/record-hero-demo.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

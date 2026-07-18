@@ -225,6 +225,18 @@ const eventTextStyleLabels: Record<string, string> = {
     light: 'Light text',
     dark: 'Dark text',
 };
+const eventTextPositionOptions = ['top', 'middle'];
+const eventTextPositionLabels: Record<string, string> = {
+    top: 'Top',
+    middle: 'Middle',
+};
+const normalizeEventTextPositionOption = (position?: string): NonNullable<WeddingEvent['eventTextPosition']> => {
+    if (position === 'middle' || position?.startsWith('center')) {
+        return 'middle';
+    }
+
+    return 'top';
+};
 const eventAnimationKeys = eventAnimationOptions.map((option) => option.id);
 const dashboardBaseWedding = getWeddingBySlug(defaultDashboardWeddingSlug) ?? sampleWeddingData;
 const isScrollReveal = (hero: SampleWeddingData['hero']) => (
@@ -261,8 +273,13 @@ const applyAdminFields = (wedding: SampleWeddingData): SampleWeddingData => {
 const guestCsvBaseHeaders = ['guestName', 'phone', 'invitedCount', 'category'];
 const invitedCsvValues = new Set(['yes', 'y', 'true', '1']);
 
-const getSafeInvitedCount = (guest: WeddingGuest) => (
-    Math.max(1, Math.floor(Number(guest.invitedCount) || 1))
+const normalizeInvitedCount = (value: unknown) => (
+    Math.max(1, Math.floor(Number(value) || 1))
+);
+
+
+const getGuestEventInvitedCount = (guest: WeddingGuest, eventId: string) => (
+    normalizeInvitedCount(guest.invitedEventCounts?.[eventId] ?? guest.invitedCount)
 );
 
 const normalizeWhatsAppPhone = (phone: string) => {
@@ -353,13 +370,17 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
         ? wedding.events.map((event, index) => {
             const fallbackEvent = defaults.events[index] ?? defaultEventMedia;
             const eventTextStyle: WeddingEvent['eventTextStyle'] = event.eventTextStyle === 'light' || event.eventTextStyle === 'dark' ? event.eventTextStyle : 'auto';
+            const eventTextPosition = normalizeEventTextPositionOption(event.eventTextPosition);
             return {
                 ...fallbackEvent,
                 ...event,
                 eventKey: event.eventKey ?? '',
                 eventVisualKey: event.eventVisualKey ?? '',
                 eventTextStyle,
+                eventTextPosition,
                 eventAnimationKey: normalizeEventAnimationKey(event.eventAnimationKey),
+                eventShowCalendar: event.eventShowCalendar !== false,
+                eventShowInvitedCount: event.eventShowInvitedCount === true,
             };
         })
         : defaults.events;
@@ -398,7 +419,12 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
                 ...defaults.rsvp.mealOptions,
                 ...wedding.rsvp.mealOptions,
             },
-            guests: wedding.rsvp.guests ?? defaults.rsvp.guests,
+            guests: (wedding.rsvp.guests ?? defaults.rsvp.guests).map((guest) => ({
+                ...guest,
+                invitedCount: normalizeInvitedCount(guest.invitedCount),
+                invitedEventIds: guest.invitedEventIds ?? [],
+                invitedEventCounts: guest.invitedEventCounts ?? {},
+            })),
         },
         closing: {
             ...defaults.closing,
@@ -676,11 +702,14 @@ export default function Dashboard({
         category: 'Preview',
         inviteCode: 'preview',
         invitedEventIds: weddingData.events.map((event) => event.id),
+        invitedEventCounts: Object.fromEntries(weddingData.events.map((event) => [event.id, 1])),
         mealPreference: '',
     }), [weddingData.events]);
     const guestSummary = useMemo(() => ({
         totalGuests: weddingData.rsvp.guests.length,
-        totalInvitedCount: weddingData.rsvp.guests.reduce((total, guest) => total + getSafeInvitedCount(guest), 0),
+        totalInvitedCount: weddingData.rsvp.guests.reduce((total, guest) => (
+            total + guest.invitedEventIds.reduce((eventTotal, eventId) => eventTotal + getGuestEventInvitedCount(guest, eventId), 0)
+        ), 0),
         noEventGuests: weddingData.rsvp.guests.filter((guest) => guest.invitedEventIds.length === 0).length,
         missingPhoneGuests: weddingData.rsvp.guests.filter((guest) => !guest.phone.trim()).length,
     }), [weddingData.rsvp.guests]);
@@ -699,7 +728,7 @@ export default function Dashboard({
         const addStatus = (counts: ReturnType<typeof createCounts>, guest: WeddingGuest, eventId: string) => {
             const status = getResponse(guest, eventId)?.status || 'pending';
             const normalizedStatus = status === 'yes' || status === 'no' || status === 'maybe' ? status : 'pending';
-            counts.people[normalizedStatus] += getSafeInvitedCount(guest);
+            counts.people[normalizedStatus] += getGuestEventInvitedCount(guest, eventId);
             counts.families[normalizedStatus] += 1;
         };
         const countStatusesForGuests = (guests: WeddingGuest[]) => {
@@ -719,7 +748,7 @@ export default function Dashboard({
             return {
                 event,
                 invitedGuests,
-                invitedPeople: invitedGuests.reduce((total, guest) => total + getSafeInvitedCount(guest), 0),
+                invitedPeople: invitedGuests.reduce((total, guest) => total + getGuestEventInvitedCount(guest, event.id), 0),
                 counts,
             };
         });
@@ -730,7 +759,7 @@ export default function Dashboard({
                 const response = getResponse(guest, event.id);
                 if (response?.status !== 'yes') return;
                 const mealPreference = response.mealPreference || guest.mealPreference || '';
-                const count = getSafeInvitedCount(guest);
+                const count = getGuestEventInvitedCount(guest, event.id);
                 if (mealPreference === 'veg') mealCounts.veg += count;
                 else if (mealPreference === 'nonVeg') mealCounts.nonVeg += count;
                 else if (mealPreference === 'jain') mealCounts.jain += count;
@@ -779,7 +808,9 @@ export default function Dashboard({
             return {
                 category,
                 guestCount: guests.length,
-                invitedCount: guests.reduce((total, guest) => total + getSafeInvitedCount(guest), 0),
+                invitedCount: guests.reduce((total, guest) => (
+                    total + guest.invitedEventIds.reduce((eventTotal, eventId) => eventTotal + getGuestEventInvitedCount(guest, eventId), 0)
+                ), 0),
                 counts: countStatusesForGuests(guests),
             };
         });
@@ -902,7 +933,12 @@ export default function Dashboard({
                 setSaveError(`${relationalResult.error}${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
-            weddingToSave.events = relationalResult.events;
+            const submittedEventsById = new Map(weddingToSave.events.map((event) => [event.id, event]));
+            weddingToSave.events = relationalResult.events.map((savedEvent) => ({
+                ...savedEvent,
+                eventTextPosition: submittedEventsById.get(savedEvent.id)?.eventTextPosition ?? savedEvent.eventTextPosition,
+                eventShowCalendar: submittedEventsById.get(savedEvent.id)?.eventShowCalendar ?? savedEvent.eventShowCalendar,
+            }));
             weddingToSave.rsvp.guests = relationalResult.guests;
         }
 
@@ -1127,7 +1163,9 @@ export default function Dashboard({
             eventKey: '',
             eventVisualKey: '',
             eventTextStyle: 'auto',
+            eventTextPosition: 'top',
             eventAnimationKey: 'none',
+            eventShowCalendar: true,
             eventName: 'New Event',
             date: '1st January 2027',
             startTime: '7:00 PM',
@@ -1188,6 +1226,7 @@ export default function Dashboard({
                 guests: current.rsvp.guests.map((guest) => ({
                     ...guest,
                     invitedEventIds: guest.invitedEventIds.filter((eventId) => eventId !== eventToDelete?.id),
+                    invitedEventCounts: Object.fromEntries(Object.entries(guest.invitedEventCounts ?? {}).filter(([eventId]) => eventId !== eventToDelete?.id)),
                 })),
             },
         }));
@@ -1211,9 +1250,16 @@ export default function Dashboard({
 
     const toggleGuestEvent = (guestIndex: number, eventId: string) => {
         const currentGuest = weddingData.rsvp.guests[guestIndex];
-        const nextEventIds = currentGuest.invitedEventIds.includes(eventId)
+        const isSelected = currentGuest.invitedEventIds.includes(eventId);
+        const nextEventIds = isSelected
             ? currentGuest.invitedEventIds.filter((id) => id !== eventId)
             : [...currentGuest.invitedEventIds, eventId];
+        const nextEventCounts = { ...(currentGuest.invitedEventCounts ?? {}) };
+        if (isSelected) {
+            delete nextEventCounts[eventId];
+        } else {
+            nextEventCounts[eventId] = getGuestEventInvitedCount(currentGuest, eventId);
+        }
 
         updateWeddingData((current) => ({
             ...current,
@@ -1221,13 +1267,13 @@ export default function Dashboard({
                 ...current.rsvp,
                 guests: current.rsvp.guests.map((guest, index) => {
                     if (index !== guestIndex) return guest;
-                    return { ...guest, invitedEventIds: nextEventIds };
+                    return { ...guest, invitedEventIds: nextEventIds, invitedEventCounts: nextEventCounts };
                 }),
             },
         }));
 
         if (supabaseWeddingId) {
-            replaceSupabaseGuestInvites(supabaseWeddingId, currentGuest.id, nextEventIds, weddingData.events).then((result) => {
+            replaceSupabaseGuestInvites(supabaseWeddingId, currentGuest.id, nextEventIds, weddingData.events, nextEventCounts).then((result) => {
                 if (result.error) {
                     console.warn('Could not update guest events', result.error);
                     setSaveErrorDetail(result.detail || result.error);
@@ -1235,6 +1281,25 @@ export default function Dashboard({
                 }
             });
         }
+    };
+
+    const updateGuestEventInvitedCount = (guestIndex: number, eventId: string, value: number) => {
+        updateWeddingData((current) => ({
+            ...current,
+            rsvp: {
+                ...current.rsvp,
+                guests: current.rsvp.guests.map((guest, index) => {
+                    if (index !== guestIndex) return guest;
+                    return {
+                        ...guest,
+                        invitedEventCounts: {
+                            ...(guest.invitedEventCounts ?? {}),
+                            [eventId]: normalizeInvitedCount(value),
+                        },
+                    };
+                }),
+            },
+        }));
     };
 
     const addGuest = async () => {
@@ -1246,6 +1311,7 @@ export default function Dashboard({
             category: '',
             inviteCode: Math.random().toString(36).slice(2, 8),
             invitedEventIds: [],
+            invitedEventCounts: {},
         };
 
         if (supabaseWeddingId) {
@@ -1403,6 +1469,7 @@ export default function Dashboard({
                 category,
                 inviteCode: createUniqueInviteCode(existingCodes),
                 invitedEventIds,
+                invitedEventCounts: Object.fromEntries(invitedEventIds.map((eventId) => [eventId, invitedCount])),
             };
         });
 
@@ -1981,11 +2048,29 @@ export default function Dashboard({
                                                 onChange={(value) => updateEvent(index, 'eventTextStyle', value as WeddingEvent['eventTextStyle'])}
                                             />
                                             <SelectField
+                                                label="Text Position"
+                                                value={normalizeEventTextPositionOption(event.eventTextPosition)}
+                                                options={eventTextPositionOptions}
+                                                optionLabels={eventTextPositionLabels}
+                                                onChange={(value) => updateEvent(index, 'eventTextPosition', value as NonNullable<WeddingEvent['eventTextPosition']>)}
+                                            />
+                                            <SelectField
                                                 label="Event Animation"
                                                 value={normalizeEventAnimationKey(event.eventAnimationKey)}
                                                 options={eventAnimationKeys}
                                                 optionLabels={eventAnimationOptionLabels}
                                                 onChange={(value) => updateEvent(index, 'eventAnimationKey', value as WeddingEvent['eventAnimationKey'])}
+                                            />
+                                            <CheckboxField
+                                                label="Show Add to Calendar"
+                                                checked={event.eventShowCalendar !== false}
+                                                onChange={(checked) => updateEvent(index, 'eventShowCalendar', checked)}
+                                            />
+                                            <CheckboxField
+                                                label="Show invited count"
+                                                checked={event.eventShowInvitedCount === true}
+                                                helperText="Shows each guest/family their invited count for this event."
+                                                onChange={(checked) => updateEvent(index, 'eventShowInvitedCount', checked)}
                                             />
                                             <TextField label="Date" value={event.date} error={validation.events[index]?.date} onChange={(value) => updateEvent(index, 'date', value)} />
                                             <TextField label="Start time" value={event.startTime} error={validation.events[index]?.startTime} onChange={(value) => updateEvent(index, 'startTime', value)} />
@@ -2112,7 +2197,6 @@ export default function Dashboard({
                                         </th>
                                         <th>Guest / Family Name</th>
                                         <th>Phone</th>
-                                        <th>Invited Count</th>
                                         <th>Category</th>
                                         <th>Invited Events</th>
                                         <th>RSVP Summary</th>
@@ -2157,16 +2241,7 @@ export default function Dashboard({
                                                         />
                                                         {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
                                                     </td>
-                                                    <td>
-                                                        <input
-                                                            className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
-                                                            type="number"
-                                                            min="1"
-                                                            value={guest.invitedCount}
-                                                            onChange={(event) => updateGuest(guestIndex, 'invitedCount', Number(event.target.value))}
-                                                        />
-                                                        {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
-                                                    </td>
+
                                                     <td>
                                                         <input
                                                             value={guest.category}
@@ -2216,16 +2291,30 @@ export default function Dashboard({
                                                 </tr>
                                                 {expandedGuestId === guest.id && (
                                                     <tr className="guest-events-row" key={`${guest.id}-events`}>
-                                                        <td colSpan={10}>
+                                                        <td colSpan={9}>
                                                             <div className="guest-event-options compact">
                                                                 {weddingData.events.map((event) => (
-                                                                    <label key={event.id}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={guest.invitedEventIds.includes(event.id)}
-                                                                            onChange={() => toggleGuestEvent(guestIndex, event.id)}
-                                                                        />
-                                                                        {event.eventName}
+                                                                    <label key={event.id} className="guest-event-count-option">
+                                                                        <span className="guest-event-count-check">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={guest.invitedEventIds.includes(event.id)}
+                                                                                onChange={() => toggleGuestEvent(guestIndex, event.id)}
+                                                                            />
+                                                                            {event.eventName}
+                                                                        </span>
+                                                                        {guest.invitedEventIds.includes(event.id) && (
+                                                                            <span className="guest-event-count-input">
+                                                                                <span>Guests</span>
+                                                                                <input
+                                                                                    aria-label={`${event.eventName} invited guests`}
+                                                                                    type="number"
+                                                                                    min="1"
+                                                                                    value={getGuestEventInvitedCount(guest, event.id)}
+                                                                                    onChange={(inputEvent) => updateGuestEventInvitedCount(guestIndex, event.id, Number(inputEvent.target.value))}
+                                                                                />
+                                                                            </span>
+                                                                        )}
                                                                     </label>
                                                                 ))}
                                                             </div>
@@ -3246,6 +3335,31 @@ function TextField({ label, value, error, onChange }: { label: string; value: st
     );
 }
 
+function CheckboxField({
+    label,
+    checked,
+    helperText,
+    onChange,
+}: {
+    label: string;
+    checked: boolean;
+    helperText?: string;
+    onChange: (checked: boolean) => void;
+}) {
+    return (
+        <label className="dashboard-field dashboard-checkbox-field">
+            <span>
+                <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(event) => onChange(event.target.checked)}
+                />
+                {label}
+            </span>
+            {helperText && <em>{helperText}</em>}
+        </label>
+    );
+}
 function SelectField({
     label,
     value,

@@ -376,6 +376,65 @@
 .theme2-event-content {
   margin-top: 12dvh;
 }
+.theme2-event-text-position-top .theme2-event-content,
+.theme2-event-text-position-middle .theme2-event-content {
+  align-self: center;
+  justify-self: auto;
+  width: 100%;
+  min-height: auto;
+  max-height: none;
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.theme2-event-text-position-top .theme2-event-content {
+  margin-top: 8dvh;
+  margin-bottom: auto;
+}
+
+.theme2-event-text-position-middle .theme2-event-content {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.theme2-event-text-position-top .theme2-event-actions,
+.theme2-event-text-position-middle .theme2-event-actions {
+  justify-content: center;
+}
+.theme2-event-text-position-top .theme2-display-font,
+.theme2-event-text-position-middle .theme2-display-font {
+  font-size: 3.4rem;
+  line-height: 0.98;
+  margin-bottom: 0.35rem;
+}
+
+.theme2-event-text-position-top .theme2-body-font,
+.theme2-event-text-position-middle .theme2-body-font {
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.theme2-event-text-position-top .theme2-event-date,
+.theme2-event-text-position-middle .theme2-event-date,
+.theme2-event-text-position-top .theme2-event-venue,
+.theme2-event-text-position-middle .theme2-event-venue {
+  margin-top: clamp(0.55rem, 1.5vh, 1rem);
+  margin-bottom: 0;
+}
+
+.theme2-event-text-position-top .theme2-event-actions,
+.theme2-event-text-position-middle .theme2-event-actions {
+  margin-top: clamp(0.7rem, 2vh, 1.2rem);
+  gap: clamp(0.4rem, 1.5vw, 0.75rem);
+}
+
+.theme2-event-text-position-top .theme2-event-btn,
+.theme2-event-text-position-middle .theme2-event-btn {
+  font-size: 0.75rem;
+  padding: 0.45rem 0.7rem;
+}
+
 
 .theme2-event-date {
   margin: 1.2rem 0;
@@ -672,4 +731,19 @@
     max-width: 100%;
     box-shadow: none;
   }
+}
+
+
+
+
+
+
+
+.theme2-event-invited-count {
+  margin: 0.65rem 0 0;
+  font-size: 0.76rem;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: inherit;
 }

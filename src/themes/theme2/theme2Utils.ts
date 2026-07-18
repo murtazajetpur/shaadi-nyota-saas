@@ -62,8 +62,8 @@ export const getTheme2CoupleImage = (src: string) => (
 );
 
 export const toGoogleCalendarUrl = (event: WeddingEvent, coupleDisplayName: string) => {
-  const text = event.calendarTitle || `${event.eventName} - ${coupleDisplayName}`;
-  const details = event.calendarDescription || `Wedding celebration for ${coupleDisplayName}.`;
+  const text = `${coupleDisplayName} ${event.eventName}`.trim();
+  const details = `${event.eventName} celebration for ${coupleDisplayName}.`;
   const location = [event.venueName, event.city].filter(Boolean).join(', ');
   const start = event.date && event.startTime ? `${event.date} ${event.startTime}` : '';
   const parsed = start ? new Date(start) : null;

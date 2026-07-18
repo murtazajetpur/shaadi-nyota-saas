@@ -189,8 +189,9 @@ transactional RPCs for destructive dashboard operations:
   transaction.
 - `save_wedding_guests_transactional(wedding_id, guests, mode)` powers CSV
   append/replace imports without deleting current guests before validation.
-- `replace_guest_event_invites_transactional(wedding_id, guest_id, event_ids)`
-  validates event ownership before replacing one guest's assignments.
+- `replace_guest_event_invites_transactional(wedding_id, guest_id, event_ids, event_counts)`
+  validates event ownership before replacing one guest's assignments and stores
+  per-event invited counts.
 - `delete_wedding_event_transactional(wedding_id, event_id)` validates ownership
   and reports how many guest assignments/RSVP responses will be removed by FK
   cascade.
@@ -200,6 +201,12 @@ transactional RPCs for destructive dashboard operations:
 These RPCs require the current authenticated user to own the wedding or be an
 admin. Existing foreign-key cascades still intentionally remove event/guest
 assignments and RSVP rows when the corresponding event or guest is deleted.
+
+For existing projects that already ran an older Phase 2 script, run
+`supabase/add_event_invited_counts.sql`. It adds `events.event_show_invited_count`,
+`guest_event_invites.invited_count`, initializes old guest-event assignments from
+`guests.invited_count`, refreshes `get_public_invite_by_code`, and recreates the
+transactional guest/event save RPCs.
 
 Manual checks:
 

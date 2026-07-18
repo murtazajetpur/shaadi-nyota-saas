@@ -81,7 +81,11 @@ interface SupabaseEventRow {
   event_key: string | null;
   event_visual_key: string | null;
   event_text_style: WeddingEvent['eventTextStyle'] | null;
+  event_text_position?: NonNullable<WeddingEvent['eventTextPosition']> | null;
   event_animation_key: WeddingEvent['eventAnimationKey'] | null;
+  event_show_calendar?: boolean | null;
+  event_show_invited_count?: boolean | null;
+  guest_invited_count?: number | null;
   event_name: string;
   date_label: string | null;
   start_time_label: string | null;
@@ -110,6 +114,7 @@ interface SupabaseGuestRow {
 interface SupabaseGuestEventInviteRow {
   guest_id: string;
   event_id: string;
+  invited_count?: number | null;
 }
 
 interface SupabaseRsvpResponseRow {
@@ -222,6 +227,18 @@ const normalizeEventTextStyle = (value?: string | null): WeddingEvent['eventText
   value === 'light' || value === 'dark' ? value : 'auto'
 );
 
+const normalizeEventTextPosition = (value?: string | null): NonNullable<WeddingEvent['eventTextPosition']> => {
+  if (value === 'middle' || value?.startsWith('center')) {
+    return 'middle';
+  }
+
+  return 'top';
+};
+
+const getLegacyEventTextPosition = (value?: string | null) => (
+  normalizeEventTextPosition(value) === 'middle' ? 'center' : 'top-center'
+);
+
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const isUuid = (value: string) => uuidPattern.test(value);
@@ -294,7 +311,11 @@ const mapEventRow = (row: SupabaseEventRow): WeddingEvent => ({
   eventKey: row.event_key ?? '',
   eventVisualKey: row.event_visual_key ?? '',
   eventTextStyle: normalizeEventTextStyle(row.event_text_style),
+  eventTextPosition: normalizeEventTextPosition(row.event_text_position),
   eventAnimationKey: normalizeEventAnimationKey(row.event_animation_key),
+  eventShowCalendar: row.event_show_calendar !== false,
+  eventShowInvitedCount: row.event_show_invited_count === true,
+  guestInvitedCount: row.guest_invited_count ?? undefined,
   eventName: row.event_name,
   date: row.date_label ?? '',
   startTime: row.start_time_label ?? '',
@@ -308,21 +329,28 @@ const mapEventRow = (row: SupabaseEventRow): WeddingEvent => ({
   calendarDescription: row.calendar_description ?? '',
 });
 
+const normalizeInvitedCount = (value: unknown) => Math.max(1, Math.floor(Number(value) || 1));
+
 const mapGuestRows = (
   guests: SupabaseGuestRow[],
   invites: SupabaseGuestEventInviteRow[]
-): WeddingGuest[] => guests.map((guest) => ({
-  id: guest.id,
-  guestName: guest.guest_name,
-  phone: guest.phone ?? '',
-  invitedCount: guest.invited_count ?? 1,
-  category: guest.category ?? '',
-  inviteCode: guest.invite_code,
-  invitedEventIds: invites
-    .filter((invite) => invite.guest_id === guest.id)
-    .map((invite) => invite.event_id),
-  mealPreference: guest.meal_preference ?? '',
-}));
+): WeddingGuest[] => guests.map((guest) => {
+  const guestInvites = invites.filter((invite) => invite.guest_id === guest.id);
+  return {
+    id: guest.id,
+    guestName: guest.guest_name,
+    phone: guest.phone ?? '',
+    invitedCount: normalizeInvitedCount(guest.invited_count),
+    category: guest.category ?? '',
+    inviteCode: guest.invite_code,
+    invitedEventIds: guestInvites.map((invite) => invite.event_id),
+    invitedEventCounts: Object.fromEntries(guestInvites.map((invite) => [
+      invite.event_id,
+      normalizeInvitedCount(invite.invited_count ?? guest.invited_count),
+    ])),
+    mealPreference: guest.meal_preference ?? '',
+  };
+});
 
 const mapWeddingBundle = (
   wedding: SupabaseWeddingRow,
@@ -427,7 +455,7 @@ export async function loadSupabaseWeddingBundle(
   if (options.includeGuests) {
     const [{ data: guestRows, error: guestsError }, { data: inviteRows, error: invitesError }] = await Promise.all([
       supabase.from('guests').select('*').eq('wedding_id', weddingId).order('created_at', { ascending: true }),
-      supabase.from('guest_event_invites').select('guest_id,event_id').eq('wedding_id', weddingId),
+      supabase.from('guest_event_invites').select('guest_id,event_id,invited_count').eq('wedding_id', weddingId),
     ]);
     if (guestsError) return { wedding: null, error: guestsError.message };
     if (invitesError) return { wedding: null, error: invitesError.message };
@@ -485,6 +513,7 @@ export async function loadSupabasePersonalizedInvite(slug: string, inviteCode: s
   const inviteRows = eventRows.map((event) => ({
     guest_id: payload.guest.id,
     event_id: event.id,
+    invited_count: event.guest_invited_count ?? payload.guest.invited_count ?? 1,
   }));
   const guest = mapGuestRows([payload.guest], inviteRows)[0];
   const wedding = mapWeddingBundle(payload.wedding, payload.settings, eventRows, [payload.guest], inviteRows);
@@ -526,6 +555,19 @@ const isMissingEventAnimationColumnError = (message?: string | null) => (
   Boolean(message?.toLowerCase().includes('event_animation_key'))
 );
 
+const isMissingEventTextPositionColumnError = (message?: string | null) => (
+  Boolean(message?.toLowerCase().includes('event_text_position'))
+);
+
+const isMissingEventShowCalendarColumnError = (message?: string | null) => (
+  Boolean(message?.toLowerCase().includes('event_show_calendar'))
+);
+
+const isMissingEventShowInvitedCountColumnError = (message?: string | null) => (
+  Boolean(message?.toLowerCase().includes('event_show_invited_count'))
+);
+
+
 const getEventKeyForStorage = (event: WeddingEvent) => (
   event.eventKey?.trim() || (!isUuid(event.id) ? event.id : null)
 );
@@ -535,14 +577,21 @@ const eventToRow = (
   event: WeddingEvent,
   sortOrder: number,
   includeAnimationKey = true,
-  eventKeyOverride?: string | null
+  eventKeyOverride?: string | null,
+  includeTextPosition = true,
+  useLegacyTextPosition = false,
+  includeShowCalendar = true,
+  includeShowInvitedCount = true
 ) => ({
   id: isUuid(event.id) ? event.id : undefined,
   wedding_id: weddingId,
   event_key: eventKeyOverride !== undefined ? eventKeyOverride : getEventKeyForStorage(event),
   event_visual_key: event.eventVisualKey?.trim() || null,
   event_text_style: normalizeEventTextStyle(event.eventTextStyle),
+  ...(includeTextPosition ? { event_text_position: useLegacyTextPosition ? getLegacyEventTextPosition(event.eventTextPosition) : normalizeEventTextPosition(event.eventTextPosition) } : {}),
   ...(includeAnimationKey ? { event_animation_key: normalizeEventAnimationKey(event.eventAnimationKey) } : {}),
+  ...(includeShowCalendar ? { event_show_calendar: event.eventShowCalendar !== false } : {}),
+  ...(includeShowInvitedCount ? { event_show_invited_count: event.eventShowInvitedCount === true } : {}),
   event_name: event.eventName.trim() || 'Untitled Event',
   date_label: event.date,
   start_time_label: event.startTime,
@@ -560,17 +609,40 @@ const eventToRow = (
 export async function createSupabaseEvent(weddingId: string, event: WeddingEvent, sortOrder: number) {
   if (!supabase) return { event: null, error: 'Supabase is not configured.' };
   const supabaseClient = supabase;
-  const insertEvent = (includeAnimationKey = true) => supabaseClient
+  const insertEvent = (includeAnimationKey = true, includeTextPosition = true, useLegacyTextPosition = false, includeShowCalendar = true, includeShowInvitedCount = true) => supabaseClient
     .from('events')
     .insert({
-      ...eventToRow(weddingId, event, sortOrder, includeAnimationKey),
+      ...eventToRow(weddingId, event, sortOrder, includeAnimationKey, undefined, includeTextPosition, useLegacyTextPosition, includeShowCalendar, includeShowInvitedCount),
       id: undefined,
     })
     .select('*')
     .single();
-  let { data, error } = await insertEvent();
+  let includeAnimationKey = true;
+  let includeTextPosition = true;
+  let includeShowCalendar = true;
+  let includeShowInvitedCount = true;
+  let { data, error } = await insertEvent(includeAnimationKey, includeTextPosition, false, includeShowCalendar, includeShowInvitedCount);
   if (isMissingEventAnimationColumnError(error?.message)) {
-    ({ data, error } = await insertEvent(false));
+    includeAnimationKey = false;
+    ({ data, error } = await insertEvent(includeAnimationKey, includeTextPosition, false, includeShowCalendar, includeShowInvitedCount));
+  }
+  if (isMissingEventTextPositionColumnError(error?.message)) {
+    includeTextPosition = false;
+    ({ data, error } = await insertEvent(includeAnimationKey, includeTextPosition, false, includeShowCalendar, includeShowInvitedCount));
+  }
+  if (isMissingEventShowCalendarColumnError(error?.message)) {
+    includeShowCalendar = false;
+    ({ data, error } = await insertEvent(includeAnimationKey, includeTextPosition, false, includeShowCalendar, includeShowInvitedCount));
+  }
+  if (isMissingEventShowInvitedCountColumnError(error?.message)) {
+    includeShowInvitedCount = false;
+    ({ data, error } = await insertEvent(includeAnimationKey, includeTextPosition, false, includeShowCalendar, includeShowInvitedCount));
+  }
+  if (includeTextPosition && error) {
+    const firstError = error;
+    const retry = await insertEvent(includeAnimationKey, includeTextPosition, true, includeShowCalendar, includeShowInvitedCount);
+    data = retry.data;
+    error = retry.error ? firstError : null;
   }
 
   return error
@@ -716,18 +788,21 @@ const guestToRow = (weddingId: string, guest: WeddingGuest) => ({
   wedding_id: weddingId,
   guest_name: guest.guestName.trim() || 'Unnamed Guest',
   phone: guest.phone,
-  invited_count: Math.max(1, Number(guest.invitedCount) || 1),
+  invited_count: normalizeInvitedCount(guest.invitedCount),
   category: guest.category,
   invite_code: guest.inviteCode,
   meal_preference: guest.mealPreference || null,
 });
 
-const eventToTransactionalRow = (event: WeddingEvent, sortOrder: number) => ({
+const eventToTransactionalRow = (event: WeddingEvent, sortOrder: number, useLegacyTextPosition = false) => ({
   id: event.id,
   event_key: getEventKeyForStorage(event),
   event_visual_key: event.eventVisualKey,
   event_text_style: event.eventTextStyle,
+  event_text_position: useLegacyTextPosition ? getLegacyEventTextPosition(event.eventTextPosition) : normalizeEventTextPosition(event.eventTextPosition),
   event_animation_key: event.eventAnimationKey,
+  event_show_calendar: event.eventShowCalendar !== false,
+  event_show_invited_count: event.eventShowInvitedCount === true,
   event_name: event.eventName,
   date_label: event.date,
   start_time_label: event.startTime,
@@ -746,17 +821,21 @@ const guestToTransactionalRow = (guest: WeddingGuest) => ({
   id: guest.id,
   guest_name: guest.guestName.trim() || 'Unnamed Guest',
   phone: guest.phone,
-  invited_count: Math.max(1, Number(guest.invitedCount) || 1),
+  invited_count: normalizeInvitedCount(guest.invitedCount),
   category: guest.category,
   invite_code: guest.inviteCode,
   meal_preference: guest.mealPreference || null,
   invited_event_ids: guest.invitedEventIds,
+  invited_event_counts: guest.invitedEventCounts ?? {},
 });
 
 const transactionalSaveError = (message?: string | null) => {
   const normalized = message?.toLowerCase() ?? '';
   if (normalized.includes('schema cache') && normalized.includes('save_wedding_')) {
     return 'Could not save because the Phase 2 data-integrity SQL has not been applied or Supabase has not refreshed its schema cache. Run supabase/data_integrity_phase_2.sql and try again.';
+  }
+  if (normalized.includes('event_text_position')) {
+    return 'Could not save event text position because the event_text_position SQL has not been applied yet. Run supabase/add_event_text_position.sql and try again.';
   }
   if (normalized.includes('schema cache') && (
     normalized.includes('replace_guest_event_invites_transactional') ||
@@ -790,13 +869,23 @@ export async function saveSupabaseRelationalData(
   guestMode: 'append' | 'replace' = 'replace'
 ) {
   if (!supabase) return { error: 'Supabase is not configured.', detail: '', events: [], guests: [] };
+  const supabaseClient = supabase;
 
-  const { data, error } = await supabase.rpc('save_wedding_relational_data', {
+  const saveRelationalData = (useLegacyTextPosition = false) => supabaseClient.rpc('save_wedding_relational_data', {
     target_wedding_id: weddingId,
-    event_rows: events.map(eventToTransactionalRow),
+    event_rows: events.map((event, index) => eventToTransactionalRow(event, index, useLegacyTextPosition)),
     guest_rows: guests.map(guestToTransactionalRow),
     guest_mode: guestMode,
   });
+
+  let { data, error } = await saveRelationalData();
+
+  if (error) {
+    const firstError = error;
+    const retry = await saveRelationalData(true);
+    data = retry.data;
+    error = retry.error ? firstError : null;
+  }
 
   if (error) {
     return { error: transactionalSaveError(error.message), detail: error.message, events: [], guests: [] };
@@ -830,7 +919,8 @@ export async function replaceSupabaseGuestInvites(
   weddingId: string,
   guestId: string,
   eventIds: string[],
-  events: WeddingEvent[] = []
+  events: WeddingEvent[] = [],
+  eventCounts: Record<string, number> = {}
 ) {
   if (!supabase) return { error: 'Supabase is not configured.', detail: '' };
 
@@ -840,10 +930,17 @@ export async function replaceSupabaseGuestInvites(
     return { error: `Could not save guest event invites because these event selections do not map to Supabase event UUIDs: ${unresolvedIds.join(', ')}` };
   }
 
+  const { resolveEventId } = await getSupabaseEventIdResolver(weddingId, events);
+  const resolvedEventCounts = Object.fromEntries(Object.entries(eventCounts).map(([eventId, count]) => [
+    resolveEventId(eventId) ?? eventId,
+    normalizeInvitedCount(count),
+  ]));
+
   const { error } = await supabase.rpc('replace_guest_event_invites_transactional', {
     target_wedding_id: weddingId,
     target_guest_id: guestId,
     event_ids: resolvedIds,
+    event_counts: resolvedEventCounts,
   });
 
   return {
@@ -859,11 +956,22 @@ export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest
 
   const unresolvedSelections = new Set<string>();
   const guestsWithResolvedEvents = guests.map((guest) => {
-    const invitedEventIds = guest.invitedEventIds
-      .map(resolveEventId)
-      .filter((eventId, index, allIds) => Boolean(eventId) && allIds.indexOf(eventId) === index);
-    guest.invitedEventIds.filter((eventId) => !resolveEventId(eventId)).forEach((eventId) => unresolvedSelections.add(eventId));
-    return { ...guest, invitedEventIds };
+    const resolvedPairs = guest.invitedEventIds
+      .map((eventId) => ({ originalId: eventId, resolvedId: resolveEventId(eventId) }))
+      .filter((pair) => {
+        if (!pair.resolvedId) {
+          unresolvedSelections.add(pair.originalId);
+          return false;
+        }
+        return true;
+      })
+      .filter((pair, index, pairs) => pairs.findIndex((item) => item.resolvedId === pair.resolvedId) === index);
+    const invitedEventIds = resolvedPairs.map((pair) => pair.resolvedId);
+    const invitedEventCounts = Object.fromEntries(resolvedPairs.map(({ originalId, resolvedId }) => [
+      resolvedId,
+      normalizeInvitedCount(guest.invitedEventCounts?.[originalId] ?? guest.invitedEventCounts?.[resolvedId] ?? guest.invitedCount),
+    ]));
+    return { ...guest, invitedEventIds, invitedEventCounts };
   });
 
   if (unresolvedSelections.size) {
@@ -906,14 +1014,32 @@ export async function importSupabaseGuests(
   events: WeddingEvent[] = []
 ) {
   if (!supabase) return { error: 'Supabase is not configured.' };
-  const resolvedGuests: WeddingGuest[] = [];
-  for (const guest of guests) {
-    const { resolvedIds, unresolvedIds, error: resolveError } = await resolveSupabaseEventIdsForWedding(weddingId, guest.invitedEventIds, events);
-    if (resolveError) return { error: resolveError };
-    if (unresolvedIds.length) {
-      return { error: `Could not import guests because these event selections do not map to Supabase event UUIDs: ${unresolvedIds.join(', ')}` };
-    }
-    resolvedGuests.push({ ...guest, invitedEventIds: resolvedIds });
+  const { resolveEventId, error: resolveError } = await getSupabaseEventIdResolver(weddingId, events);
+  if (resolveError) return { error: resolveError };
+
+  const unresolvedSelections = new Set<string>();
+  const resolvedGuests: WeddingGuest[] = guests.map((guest) => {
+    const resolvedPairs = guest.invitedEventIds
+      .map((eventId) => ({ originalId: eventId, resolvedId: resolveEventId(eventId) }))
+      .filter((pair) => {
+        if (!pair.resolvedId) {
+          unresolvedSelections.add(pair.originalId);
+          return false;
+        }
+        return true;
+      })
+      .filter((pair, index, pairs) => pairs.findIndex((item) => item.resolvedId === pair.resolvedId) === index);
+    const invitedEventIds = resolvedPairs.map((pair) => pair.resolvedId);
+    const invitedEventCounts = Object.fromEntries(resolvedPairs.map(({ originalId, resolvedId }) => [
+      resolvedId,
+      normalizeInvitedCount(guest.invitedEventCounts?.[originalId] ?? guest.invitedEventCounts?.[resolvedId] ?? guest.invitedCount),
+    ]));
+
+    return { ...guest, invitedEventIds, invitedEventCounts };
+  });
+
+  if (unresolvedSelections.size) {
+    return { error: `Could not import guests because these event selections do not map to Supabase event UUIDs: ${Array.from(unresolvedSelections).join(', ')}` };
   }
 
   const { data, error } = await supabase.rpc('save_wedding_guests_transactional', {
@@ -999,4 +1125,3 @@ export async function saveSupabaseRsvpSubmission({
 
   return { error: '', storedResponses };
 }
-

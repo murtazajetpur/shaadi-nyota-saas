@@ -21,6 +21,12 @@ interface Section4Props {
     personalizedInviteMode?: boolean;
 }
 
+const normalizeInvitedCount = (value: unknown) => Math.max(1, Math.floor(Number(value) || 1));
+
+const getEventInvitedCount = (event: WeddingEvent, guest: WeddingGuest) => (
+    normalizeInvitedCount(event.guestInvitedCount ?? guest.invitedEventCounts?.[event.id] ?? guest.invitedCount)
+);
+
 const loadStoredRsvpResponses = () => {
     try {
         return JSON.parse(window.localStorage.getItem(mockRsvpResponsesStorageKey) ?? '[]') as StoredRsvpResponse[];
@@ -191,11 +197,13 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                 <div className="rsvp-event-list compact-rsvp-list">
                     {events.map((event) => {
                         const selectedStatus = responses.find((response) => response.eventId === event.id)?.status ?? '';
+                        const invitedCount = event.eventShowInvitedCount === true ? getEventInvitedCount(event, guest) : null;
                         return (
                             <div className="rsvp-event-row fade-in" key={event.id}>
                                 <div className="rsvp-event-copy">
                                     <h3>{event.eventName}</h3>
                                     <p>{event.date} - {event.startTime}</p>
+                                    {invitedCount !== null && <p className="rsvp-event-invited-count">Invitees: {invitedCount}</p>}
                                 </div>
                                 <div className="rsvp-segmented-control">
                                     {(['yes', 'no', 'maybe'] as RsvpStatus[]).map((status) => (

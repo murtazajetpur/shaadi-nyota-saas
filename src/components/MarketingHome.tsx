@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import './MarketingHome.css';
 import { buildPaymentWhatsAppUrl, packageDetails } from '../data/paymentConfig';
+import Section2 from './Section2';
+import { EventSection } from './Section3';
+import type { WeddingEvent } from '../data/sampleWeddingData';
 
 const templateCards = [
   {
@@ -8,55 +11,167 @@ const templateCards = [
     theme: 'envelope-opening',
     previewHref: '/templates/classic-envelope',
     image: '/assets/opening-reveal/envelope/posters/opening-envelope-poster.jpeg',
-    description: 'A graceful first tap with a classic invitation reveal and blessing moment.',
-    badges: ['Cinematic Opening', 'Mobile First', 'Classic'],
+    revealImage: '/assets/opening-reveal/envelope/revealed-images/revealed-hindu-classic-01.png',
+    description: 'A graceful envelope reveal for timeless wedding invitations.',
   },
   {
     name: 'Scroll Opening',
     theme: 'scroll-opening',
     previewHref: '/templates/scroll-opening',
     image: '/assets/opening-reveal/scroll/posters/opening-scroll-poster.png',
-    description: 'A soft scroll-inspired reveal for couples who want a modern romantic mood.',
-    badges: ['Floral Reveal', 'RSVP Ready', 'Elegant'],
+    revealImage: '/assets/opening-reveal/scroll/revealed-images/revealed-couple-scroll-01.png',
+    description: 'A cinematic scroll-inspired opening for traditional storytelling.',
   },
   {
     name: 'Palace Door Opening',
     theme: 'palace-door-opening',
     previewHref: '/templates/palace-door-opening',
     image: '/assets/opening-reveal/palace-door/posters/opening-reveal-palace-door-poster-01.png',
-    description: 'A royal entrance that feels ceremonial, grand, and unmistakably wedding-first.',
-    badges: ['Royal Opening', 'Premium', 'Ceremonial'],
+    revealImage: '/assets/opening-reveal/envelope/revealed-images/revealed-generic-classic-04.png',
+    description: 'A royal entrance reveal for grand wedding celebrations.',
   },
 ];
 
-const guestFlow = [
-  'Opening Reveal',
-  'Our Story',
-  'Events',
-  'RSVP',
-  'Closing Gallery',
+const trustValues = [
+  'Opening Reveals',
+  'Event Sections',
+  'RSVP Dashboard',
+  'Guest Links',
+];
+
+const storyExamples = [
+  {
+    label: 'Romantic',
+    displayName: 'Aarav & Meera',
+    introLine: 'are getting married',
+    title: 'Two Hearts, One Beginning',
+    copy: 'A celebration of love, family, and the journey ahead.',
+    image: '/assets/our-story/images/story-holding-hands-02.png',
+  },
+  {
+    label: 'Royal',
+    displayName: 'Kabir & Anaya',
+    introLine: 'are getting married',
+    title: 'A Love Written in Grace',
+    copy: 'From the first meeting to forever, every moment becomes part of the story.',
+    image: '/assets/our-story/images/story-arch-pose-01.png',
+  },
+  {
+    label: 'Floral',
+    displayName: 'Riya & Arjun',
+    introLine: 'are getting married',
+    title: 'Our Beautiful Beginning',
+    copy: 'Join us as we begin a new chapter surrounded by blessings and joy.',
+    image: '/assets/our-story/images/story-floral-swing-02.png',
+  },
+  {
+    label: 'Minimal',
+    displayName: 'Isha & Dev',
+    introLine: 'are getting married',
+    title: 'Together, Always',
+    copy: 'A simple, elegant space for the couple story.',
+    image: '/assets/our-story/images/story-back-walk-01.png',
+  },
+];
+
+const eventExamples = [
+  {
+    label: 'Haldi',
+    eventVisualKey: 'event-haldi-premium-06',
+    eventTextStyle: 'dark',
+    date: 'Friday, 24 January 2026',
+    time: '10:00 AM onwards',
+    venue: 'The Royal Courtyard, Jaipur',
+    copy: 'A joyful morning of colors, blessings, and laughter.',
+    image: '/assets/thumbnails/events/haldi/event-haldi-premium-06.webp',
+  },
+  {
+    label: 'Mehendi',
+    eventVisualKey: 'event-mehendi-premium-03',
+    eventTextStyle: 'dark',
+    date: 'Friday, 24 January 2026',
+    time: '4:00 PM onwards',
+    venue: 'Garden Pavilion',
+    copy: 'An evening of music, mehendi, and memories.',
+    image: '/assets/thumbnails/events/mehendi/event-mehendi-premium-01.webp',
+  },
+  {
+    label: 'Sangeet',
+    eventVisualKey: 'event-sangeet-premium-05',
+    eventTextStyle: 'light',
+    date: 'Saturday, 25 January 2026',
+    time: '7:30 PM onwards',
+    venue: 'Grand Ballroom',
+    copy: 'A night of performances, dancing, and celebration.',
+    image: '/assets/thumbnails/events/sangeet/event-sangeet-premium-05.webp',
+  },
+  {
+    label: 'Wedding',
+    eventVisualKey: 'event-wedding-premium-16',
+    eventTextStyle: 'dark',
+    date: 'Sunday, 26 January 2026',
+    time: '11:30 AM onwards',
+    venue: 'Palace Lawns',
+    copy: 'Join us for the beginning of forever.',
+    image: '/assets/thumbnails/events/wedding/event-wedding-premium-16.webp',
+  },
+  {
+    label: 'Reception',
+    eventVisualKey: 'event-reception-premium-02',
+    eventTextStyle: 'dark',
+    date: 'Sunday, 26 January 2026',
+    time: '8:00 PM onwards',
+    venue: 'Crystal Banquet',
+    copy: 'Celebrate the newlyweds with dinner, joy, and blessings.',
+    image: '/assets/thumbnails/events/reception/event-reception-premium-02.webp',
+  },
+  {
+    label: 'Celebration',
+    eventVisualKey: 'event-generic-premium-01',
+    eventTextStyle: 'dark',
+    date: 'Custom event',
+    time: 'As planned',
+    venue: 'Your chosen venue',
+    copy: 'Add any family celebration with its own artwork and guest visibility.',
+    image: '/assets/thumbnails/events/generic/event-generic-premium-01.webp',
+  },
+];
+
+const functionNames = [
+  'Haldi',
+  'Mehendi',
+  'Sangeet',
+  'Wedding',
+  'Reception',
+  'Nikaah',
+  'Walima',
+  'Engagement',
+  'Cocktail',
+  'Custom Events',
 ];
 
 const features = [
   ['Cinematic Opening Reveals', 'Envelope, scroll, and palace-door openings that make the first tap feel special.'],
-  ['Our Story Section', 'Share your story with elegant text, portraits, and wedding-first layouts.'],
-  ['Event-wise Details', 'Haldi, Mehendi, Sangeet, wedding, reception, and custom celebrations.'],
+  ['Section-by-section Customization', 'Choose story visuals, event artwork, closing gallery photos, music, and invite details.'],
+  ['Event-wise Details', 'Haldi, Mehendi, Sangeet, wedding, reception, and custom celebrations can each feel unique.'],
   ['Guest-wise Invite Links', 'Create personalized invite links for each family or guest group.'],
-  ['RSVP Management', 'Track attendance, invited events, and meal preferences in one dashboard.'],
-  ['Closing Gallery', 'End with a polished thank-you note and optional couple photos.'],
+  ['RSVP Management', 'Track attendance, event-wise invites, and response status in one dashboard.'],
+  ['WhatsApp Actions', 'Use invite and reminder links to follow up with guests faster.'],
   ['Mobile-first Design', 'Built for the phone screen where your guests will actually open it.'],
   ['Manual Payment Support', 'Simple WhatsApp/UPI payment flow with verification before publishing.'],
 ];
 
 const faqs = [
-  ['Can I customize the invite?', 'Yes. You can edit sections, opening reveal, story, events, music, photos, and closing content from the dashboard.'],
-  ['Can guests RSVP online?', 'Yes. RSVP is included in Nyota Plus with event-wise responses and meal preferences.'],
-  ['Can I create different invites for different guests?', 'Yes. Nyota Plus supports personalized invite links and event-wise guest visibility.'],
+  ['Can I customize sections?', 'Yes. You can edit opening reveal, story, events, music, closing content, and visuals from the dashboard.'],
+  ['Can I choose different opening styles?', 'Yes. Start with Classic Envelope, Scroll Opening, or Palace Door Opening, then customize the rest of the invite.'],
+  ['Can guests RSVP online?', 'Yes. RSVP is included in Nyota Plus with event-wise responses, guest list management, and dashboard tracking.'],
+  ['Can I invite different guests to different events?', 'Yes. With Nyota Plus, each guest or family can be invited to the exact events you choose.'],
+  ['Can I manage guests from the dashboard?', 'Yes. Nyota Plus includes guest list management, personalized links, RSVP summaries, and export-ready data.'],
+  ['Can I see a preview before paying?', 'Yes. You can build and review your wedding website before requesting payment verification.'],
+  ['Can I use my own photos or visuals?', 'Yes. You can choose from presets and use supported upload flows where available in the builder.'],
+  ['Can I update details later?', 'Yes. You can update event details and content from the dashboard, then save the latest version.'],
+  ['Is this suitable for Indian wedding functions?', 'Yes. Shaadi Nyota is designed around Haldi, Mehendi, Sangeet, wedding, reception, and custom celebrations.'],
   ['How does payment work?', 'Payment is handled manually via WhatsApp/UPI. After payment, request verification from your dashboard.'],
-  ['How long does it take to make the website live?', 'After payment verification, your website is reviewed and made live within 24-48 hours.'],
-  ['Can I update event details later?', 'Yes. You can update event details from the dashboard and save the changes.'],
-  ['Can I add my own photos?', 'Yes. Current sections support selectable/uploaded images where enabled, with more upload flows planned.'],
-  ['Is it mobile-friendly?', 'Yes. The invitation experience is designed primarily for mobile guests.'],
 ];
 
 const contactUrl = buildPaymentWhatsAppUrl(
@@ -73,6 +188,7 @@ function BrandMark() {
           src="/assets/brand/shaadi-nyota-logo.png"
           alt=""
           decoding="async"
+          draggable={false}
           onError={() => setShowLogo(false)}
         />
       )}
@@ -81,31 +197,122 @@ function BrandMark() {
   );
 }
 
-function PhonePreview({
-  image,
-  title,
-  eyebrow,
-  className = '',
+function ShowcaseImage({
+  src,
+  alt,
+  className,
+  eager = false,
 }: {
-  image: string;
-  title: string;
-  eyebrow: string;
+  src: string;
+  alt: string;
   className?: string;
+  eager?: boolean;
 }) {
   return (
-    <div className={`marketing-phone ${className}`}>
-      <div className="marketing-phone-screen">
-        <img src={image} alt="" loading={className.includes('main') ? 'eager' : 'lazy'} decoding="async" />
-        <div className="marketing-phone-copy">
-          <span>{eyebrow}</span>
-          <strong>{title}</strong>
+    <img
+      className={className}
+      src={src}
+      alt={alt}
+      loading={eager ? 'eager' : 'lazy'}
+      decoding="async"
+      draggable={false}
+    />
+  );
+}
+
+function HeroProductPreview() {
+  return (
+    <div className="hero-product-preview" aria-label="Shaadi Nyota product preview">
+      <div className="hero-preview-phone">
+        <div className="hero-preview-screen">
+          <ShowcaseImage
+            src="/assets/opening-reveal/palace-door/posters/opening-reveal-palace-door-poster-01.png"
+            alt="Palace Door opening preview"
+            eager
+          />
+          <div className="hero-preview-overlay">
+            <span>Opening Reveal</span>
+            <strong>Royal first tap</strong>
+          </div>
         </div>
+      </div>
+      <div className="hero-floating-card story-card">
+        <ShowcaseImage src="/assets/our-story/images/story-holding-hands-02.png" alt="Our Story preview" />
+        <span>Our Story</span>
+      </div>
+      <div className="hero-floating-card event-card">
+        <ShowcaseImage src="/assets/thumbnails/events/wedding/event-wedding-premium-16.webp" alt="Wedding event preview" />
+        <span>Event Sections</span>
+      </div>
+      <div className="hero-dashboard-mini">
+        <span>RSVP Dashboard</span>
+        <strong>124</strong>
+        <p>responses tracked</p>
       </div>
     </div>
   );
 }
 
+function toMarketingWeddingEvent(event: (typeof eventExamples)[number]): WeddingEvent {
+  return {
+    id: event.label.toLowerCase(),
+    eventKey: event.label.toLowerCase(),
+    eventVisualKey: event.eventVisualKey,
+    eventTextStyle: event.eventTextStyle as WeddingEvent['eventTextStyle'],
+    eventAnimationKey: 'none',
+    eventName: event.label,
+    date: event.date,
+    startTime: event.time,
+    venueName: event.venue,
+    city: '',
+    mapsUrl: 'https://maps.google.com',
+    dressCode: '',
+    foregroundImageSrc: '',
+    backgroundImageSrc: '',
+    calendarTitle: `${event.label} Ceremony`,
+    calendarDescription: event.copy,
+  };
+}
+
+function toMarketingCouple(story: (typeof storyExamples)[number]) {
+  return {
+    enabled: true,
+    brideName: story.displayName.split('&')[1]?.trim() ?? 'Meera',
+    groomName: story.displayName.split('&')[0]?.trim() ?? 'Aarav',
+    displayName: story.displayName,
+    introLine: story.introLine,
+    blessingLine: '',
+    storyTitle: story.title,
+    storyText: story.copy,
+    backgroundImageSrc: story.image,
+    imageAlt: `${story.label} Our Story preview`,
+  };
+}
+
 export default function MarketingHome() {
+  const [activeStoryIndex, setActiveStoryIndex] = useState(0);
+  const [activeEventIndex, setActiveEventIndex] = useState(0);
+  const activeStory = storyExamples[activeStoryIndex];
+  const activeStoryCouple = toMarketingCouple(activeStory);
+  const activeEvent = eventExamples[activeEventIndex];
+  const activeWeddingEvent = toMarketingWeddingEvent(activeEvent);
+
+  const showPreviousStory = () => {
+    setActiveStoryIndex((current) => (current === 0 ? storyExamples.length - 1 : current - 1));
+  };
+
+  const showNextStory = () => {
+    setActiveStoryIndex((current) => (current === storyExamples.length - 1 ? 0 : current + 1));
+  };
+
+  const showPreviousEvent = () => {
+    setActiveEventIndex((current) => (current === 0 ? eventExamples.length - 1 : current - 1));
+  };
+
+  const showNextEvent = () => {
+    setActiveEventIndex((current) => (current === eventExamples.length - 1 ? 0 : current + 1));
+  };
+
   useEffect(() => {
     document.title = 'Shaadi Nyota | Premium Wedding Websites';
     const previousBodyOverflow = document.body.style.overflow;
@@ -121,10 +328,10 @@ export default function MarketingHome() {
       <header className="marketing-header">
         <BrandMark />
         <nav aria-label="Homepage">
-          <a href="#templates">Templates</a>
-          <a href="#how-it-works">How It Works</a>
+          <a href="#openings">Openings</a>
+          <a href="#sections">Sections</a>
+          <a href="#dashboard-showcase">RSVP</a>
           <a href="#pricing">Pricing</a>
-          <a href="#faq">FAQ</a>
         </nav>
         <div className="marketing-header-actions">
           <a className="marketing-login" href="/login">Login</a>
@@ -134,55 +341,64 @@ export default function MarketingHome() {
 
       <section className="marketing-hero">
         <div className="marketing-hero-copy">
-          <p className="marketing-eyebrow">Premium royal digital invitations</p>
+          <p className="marketing-eyebrow">Premium Indian wedding websites</p>
           <h1>Your wedding invitation, reimagined as a royal digital experience.</h1>
           <p>
             Create a beautiful mobile-first wedding website with cinematic openings,
-            event details, RSVP management, and personalized guest invites.
+            custom event sections, personalized guest links, and RSVP management.
           </p>
           <div className="marketing-hero-actions">
             <a className="marketing-btn primary" href="/create-wedding">Create Your Wedding Website</a>
-            <a className="marketing-btn secondary" href="#templates">View Templates</a>
+            <a className="marketing-btn secondary" href="#openings">Explore Designs</a>
+          </div>
+          <div className="marketing-hero-chips" aria-label="Product highlights">
+            {trustValues.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
           </div>
         </div>
-        <div className="marketing-hero-visual" aria-hidden="true">
-          <PhonePreview
-            className="main"
-            image="/assets/our-story/images/story-holding-hands-02.png"
-            eyebrow="Mahesh & Neha"
-            title="are getting married"
-          />
-          <PhonePreview
-            className="side top"
-            image="/assets/opening-reveal/palace-door/posters/opening-reveal-palace-door-poster-01.png"
-            eyebrow="Tap to reveal"
-            title="Palace Door"
-          />
-          <PhonePreview
-            className="side bottom"
-            image="/assets/events/wedding/event-wedding-premium-16.png"
-            eyebrow="Wedding"
-            title="The celebrations"
-          />
+        <div className="marketing-hero-visual">
+          <HeroProductPreview />
         </div>
       </section>
 
-      <section className="marketing-section templates" id="templates">
+      <section className="marketing-trust-strip" aria-label="Shaadi Nyota highlights">
+        {[
+          'Preview before sharing',
+          'Built for Indian wedding functions',
+          'Guest-wise event visibility',
+          'Mobile-first for every guest',
+        ].map((item) => (
+          <span key={item}>{item}</span>
+        ))}
+      </section>
+
+      <section className="marketing-section openings-showcase" id="openings">
         <div className="marketing-section-heading">
-          <p className="marketing-eyebrow">Templates</p>
-          <h2>Choose a style that feels like your celebration.</h2>
+          <p className="marketing-eyebrow">Opening Reveals</p>
+          <h2>Choose your opening experience.</h2>
+          <p>Start your invite with a cinematic reveal that matches the mood of your celebration.</p>
         </div>
         <div className="template-grid">
           {templateCards.map((template) => (
             <article className="template-card" key={template.name}>
               <div className="template-preview">
-                <img src={template.image} alt="" loading="lazy" decoding="async" />
+                <div className="opening-concept-preview">
+                  <div className="opening-preview-panel">
+                    <span>Opening</span>
+                    <ShowcaseImage src={template.image} alt={`${template.name} opening preview`} />
+                  </div>
+                  <div className="reveal-preview-panel">
+                    <span>Revealed invite</span>
+                    <ShowcaseImage src={template.revealImage} alt={`${template.name} revealed invite preview`} />
+                  </div>
+                </div>
               </div>
               <div>
                 <h3>{template.name}</h3>
                 <p>{template.description}</p>
                 <div className="template-badges">
-                  {template.badges.map((badge) => <span key={badge}>{badge}</span>)}
+                  {['Cinematic Opening', 'Mobile First', 'RSVP Ready'].map((badge) => <span key={badge}>{badge}</span>)}
                 </div>
                 <div className="template-actions">
                   <a href={template.previewHref}>Preview</a>
@@ -194,18 +410,184 @@ export default function MarketingHome() {
         </div>
       </section>
 
-      <section className="marketing-section guest-flow">
+      <section className="marketing-section story-preview-section" id="sections">
         <div className="marketing-section-heading">
-          <p className="marketing-eyebrow">Guest Experience</p>
-          <h2>From the first tap to the final thank-you, every section feels like part of your wedding story.</h2>
+          <p className="marketing-eyebrow">Our Story</p>
+          <h2>Tell the story in your visual style.</h2>
+          <p>Choose romantic, royal, floral, or minimal story cards and pair them with your own words.</p>
         </div>
-        <div className="flow-line">
-          {guestFlow.map((item, index) => (
-            <div className="flow-step" key={item}>
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <strong>{item}</strong>
+        <div className="story-invite-showcase">
+          <button
+            className="showcase-carousel-arrow previous"
+            type="button"
+            onClick={showPreviousStory}
+            aria-label="Show previous story"
+          >
+            &lsaquo;
+          </button>
+          <article className="story-invite-preview-card" aria-label={`${activeStory.label} Our Story section preview`}>
+            <div className="story-invite-phone">
+              <Section2 couple={activeStoryCouple} />
             </div>
+          </article>
+          <button
+            className="showcase-carousel-arrow next"
+            type="button"
+            onClick={showNextStory}
+            aria-label="Show next story"
+          >
+            &rsaquo;
+          </button>
+        </div>
+        <div className="showcase-carousel-dots" aria-label="Our Story preview selector">
+          {storyExamples.map((story, index) => (
+            <button
+              key={story.label}
+              type="button"
+              className={index === activeStoryIndex ? 'active' : ''}
+              onClick={() => setActiveStoryIndex(index)}
+              aria-label={`Show ${story.label}`}
+              aria-current={index === activeStoryIndex ? 'true' : undefined}
+            />
           ))}
+        </div>
+      </section>
+
+      <section className="marketing-section event-preview-section">
+        <div className="marketing-section-heading">
+          <p className="marketing-eyebrow">Event Sections</p>
+          <h2>Every function can have its own mood.</h2>
+          <p>Use premium, sketch, or faceless visuals for each ceremony without locking the whole website to one style.</p>
+        </div>
+        <div className="event-invite-showcase">
+          <button
+            className="showcase-carousel-arrow previous"
+            type="button"
+            onClick={showPreviousEvent}
+            aria-label="Show previous event"
+          >
+            &lsaquo;
+          </button>
+          <article className="event-invite-preview-card" aria-label={`${activeEvent.label} invite section preview`}>
+            <div className="event-invite-phone">
+              <EventSection event={activeWeddingEvent} showParticles={false} />
+            </div>
+          </article>
+          <button
+            className="showcase-carousel-arrow next"
+            type="button"
+            onClick={showNextEvent}
+            aria-label="Show next event"
+          >
+            &rsaquo;
+          </button>
+        </div>
+        <div className="showcase-carousel-dots" aria-label="Event preview selector">
+          {eventExamples.map((event, index) => (
+            <button
+              key={event.label}
+              type="button"
+              className={index === activeEventIndex ? 'active' : ''}
+              onClick={() => setActiveEventIndex(index)}
+              aria-label={`Show ${event.label}`}
+              aria-current={index === activeEventIndex ? 'true' : undefined}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="marketing-section closing-preview-section">
+        <div className="marketing-section-heading">
+          <p className="marketing-eyebrow">Closing Gallery</p>
+          <h2>End with a beautiful closing gallery.</h2>
+          <p>Add your favourite memories, thank-you message, and final note for your guests.</p>
+        </div>
+        <div className="closing-gallery-preview">
+          <div className="closing-gallery-copy">
+            <span>Final thank-you section</span>
+            <h3>Looks like the real closing preview.</h3>
+            <p>
+              The final section keeps the same text-first structure from the builder,
+              with optional couple photos shown inside the section.
+            </p>
+          </div>
+          <div className="closing-gallery-phone" aria-label="Closing Gallery preview">
+            <div className="closing-gallery-phone-inner">
+              <p className="closing-script-line">With love</p>
+              <h3>Looking forward to celebrating our important days with you.</h3>
+              <div className="closing-circle-carousel">
+                <ShowcaseImage
+                  src="/assets/closing-gallery/preset-photos/closing-photo-preset-01.png"
+                  alt="Closing Gallery couple photo"
+                />
+              </div>
+              <div className="closing-dots" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+              <p className="closing-couple-name">Aarav & Meera</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="marketing-section function-showcase">
+        <div className="marketing-section-heading">
+          <p className="marketing-eyebrow">Wedding Functions</p>
+          <h2>Designed for every wedding function.</h2>
+          <p>
+            Whether it is one ceremony or a full wedding week, your invite can show the right events to the right guests.
+          </p>
+        </div>
+        <div className="function-chip-grid">
+          {functionNames.map((name) => <span key={name}>{name}</span>)}
+        </div>
+      </section>
+
+      <section className="marketing-section dashboard-showcase" id="dashboard-showcase">
+        <div className="marketing-section-heading">
+          <p className="marketing-eyebrow">Nyota Plus</p>
+          <h2>Manage guests, RSVPs, and follow-ups from one dashboard.</h2>
+          <p>Move beyond manual Excel sheets and endless WhatsApp follow-ups with polished guest tools.</p>
+        </div>
+        <div className="dashboard-preview-grid">
+          <article className="dashboard-mock-card guest-list-card">
+            <span>Guest List</span>
+            <h3>Family-wise invites</h3>
+            {[
+              ['Anaya Shah', '+91 98xx xxx 210', 'Haldi, Sangeet, Wedding'],
+              ['Rohan Mehta', '+91 99xx xxx 884', 'Wedding, Reception'],
+              ['Priya Iyer', '+91 97xx xxx 443', 'All events'],
+            ].map(([name, phone, events]) => (
+              <div className="mock-guest-row" key={name}>
+                <strong>{name}</strong>
+                <small>{phone}</small>
+                <em>{events}</em>
+              </div>
+            ))}
+          </article>
+          <article className="dashboard-mock-card analytics-card">
+            <span>RSVP Analytics</span>
+            <div className="analytics-number-row">
+              <div><strong>312</strong><small>Invited</small></div>
+              <div><strong>186</strong><small>Confirmed</small></div>
+              <div><strong>74</strong><small>Pending</small></div>
+            </div>
+            <div className="mock-progress"><span style={{ width: '64%' }} /></div>
+            <p>Event-wise summaries help you see who is coming where.</p>
+          </article>
+          <article className="dashboard-mock-card actions-card">
+            <span>WhatsApp Actions</span>
+            <button type="button">Send Invite</button>
+            <button type="button">Reminder</button>
+            <button type="button">Copy Guest Link</button>
+          </article>
+          <article className="dashboard-mock-card link-card">
+            <span>Personalized Guest Links</span>
+            <code>shaadi-nyota.app/riya-arjun/invite/a7k2pq</code>
+            <p>Preview each guest link and share only the events they should see.</p>
+          </article>
         </div>
       </section>
 
@@ -224,22 +606,6 @@ export default function MarketingHome() {
         </div>
       </section>
 
-      <section className="marketing-section rsvp-highlight">
-        <div>
-          <p className="marketing-eyebrow">Nyota Plus</p>
-          <h2>No more messy RSVP tracking.</h2>
-          <p>
-            Guests can RSVP event-wise, families can be managed together, meal preferences
-            can be captured, and the couple can review responses from the RSVP dashboard.
-          </p>
-        </div>
-        <div className="rsvp-mini-card">
-          <span>RSVP Dashboard</span>
-          <strong>124</strong>
-          <p>responses tracked across events</p>
-        </div>
-      </section>
-
       <section className="marketing-section how-it-works" id="how-it-works">
         <div className="marketing-section-heading">
           <p className="marketing-eyebrow">How It Works</p>
@@ -247,10 +613,10 @@ export default function MarketingHome() {
         </div>
         <div className="steps-grid">
           {[
-            ['Choose your invite style', 'Start with a cinematic template that matches your wedding mood.'],
-            ['Add your story and events', 'Edit the couple story, celebrations, timings, venues, and visuals.'],
-            ['Share personalized invite links', 'Send one public link or guest-wise links for RSVP plans.'],
-            ['Track RSVPs and responses', 'Review attendance, event visibility, and meal preferences.'],
+            ['Choose your opening style', 'Start with a cinematic template that matches your wedding mood.'],
+            ['Customize each section', 'Edit story visuals, functions, timings, venues, music, and closing content.'],
+            ['Share guest-wise links', 'Send one public link or personalized links for RSVP plans.'],
+            ['Track RSVPs and responses', 'Review attendance, event visibility, and response status.'],
           ].map(([title, copy], index) => (
             <article className="step-card" key={title}>
               <span>{index + 1}</span>
@@ -274,7 +640,7 @@ export default function MarketingHome() {
             <ul>
               <li>Cinematic wedding website</li>
               <li>Opening Reveal</li>
-              <li>Our Story</li>
+              <li>Our Story section</li>
               <li>Event details</li>
               <li>Closing Gallery</li>
               <li>Mobile-first guest experience</li>
@@ -292,7 +658,7 @@ export default function MarketingHome() {
               <li>Personalized invite links</li>
               <li>Event-wise guest visibility</li>
               <li>RSVP dashboard</li>
-              <li>Meal preferences</li>
+              <li>WhatsApp invite/reminder links</li>
               <li>RSVP response tracking</li>
             </ul>
             <a className="marketing-btn primary" href="/create-wedding?plan=rsvp">Start with Nyota Plus</a>
@@ -324,21 +690,21 @@ export default function MarketingHome() {
         <h2>Make your first wedding impression unforgettable.</h2>
         <div className="marketing-hero-actions">
           <a className="marketing-btn primary" href="/create-wedding">Create Your Wedding Website</a>
-          <a className="marketing-btn secondary" href="#templates">View Templates</a>
+          <a className="marketing-btn secondary" href="#openings">Explore Designs</a>
         </div>
       </section>
 
       <footer className="marketing-footer" id="contact">
         <BrandMark />
-        <p>Premium mobile-first wedding websites with cinematic openings, events, RSVP, and closing galleries.</p>
+        <p>Premium mobile-first wedding websites for Indian celebrations, cinematic openings, RSVP, and closing galleries.</p>
         <nav aria-label="Footer">
-          <a href="#templates">Templates</a>
+          <a href="#openings">Openings</a>
+          <a href="#sections">Sections</a>
           <a href="#pricing">Pricing</a>
-          <a href="#faq">FAQ</a>
           <a href="/login">Login</a>
           <a href={contactUrl} target="_blank" rel="noreferrer">WhatsApp</a>
         </nav>
-        <small>© {new Date().getFullYear()} Shaadi Nyota. All rights reserved.</small>
+        <small>&copy; {new Date().getFullYear()} Shaadi Nyota. All rights reserved.</small>
       </footer>
     </main>
   );

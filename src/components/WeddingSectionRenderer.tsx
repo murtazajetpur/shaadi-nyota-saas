@@ -28,8 +28,8 @@ const renderStorySection = (section: WeddingSectionConfig, { data }: RenderSecti
   return <Section2 key={section.id} couple={data.couple} />;
 };
 
-const renderEventsSection = (section: WeddingSectionConfig, { events }: RenderSectionContext) => {
-  return <Section3 key={section.id} events={events} />;
+const renderEventsSection = (section: WeddingSectionConfig, { data, events, guest }: RenderSectionContext) => {
+  return <Section3 key={section.id} events={events} coupleDisplayName={data.couple.displayName} guest={guest} />;
 };
 
 const renderRsvpSection = (

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import './Section3.css';
 import type { RefObject } from 'react';
-import type { SampleWeddingData, WeddingEvent } from '../data/sampleWeddingData';
+import type { SampleWeddingData, WeddingEvent, WeddingGuest } from '../data/sampleWeddingData';
 import { getEventVisualByKey } from '../data/eventVisuals';
 import { resolveAssetPath } from '../data/assetRegistry';
 import EventAnimationLayer from './EventAnimationLayer';
 
 interface Section3Props {
     events: SampleWeddingData['events'];
+    coupleDisplayName?: string;
+    guest?: WeddingGuest;
 }
 
 const monthLookup: Record<string, number> = {
@@ -62,12 +64,18 @@ const toCalendarDateTime = (date: string, startTime: string) => {
     return `${format(start)}/${format(end)}`;
 };
 
-const createGoogleCalendarUrl = (event: WeddingEvent) => {
+const createGoogleCalendarUrl = (event: WeddingEvent, coupleDisplayName?: string) => {
     const dates = toCalendarDateTime(event.date, event.startTime);
-    const details = [event.calendarDescription, event.mapsUrl].filter(Boolean).join('\n\n');
+    const resolvedTitle = coupleDisplayName
+        ? `${coupleDisplayName} ${event.eventName}`.trim()
+        : event.calendarTitle || event.eventName;
+    const resolvedDescription = coupleDisplayName
+        ? `${event.eventName} celebration for ${coupleDisplayName}.`
+        : event.calendarDescription;
+    const details = [resolvedDescription, event.mapsUrl].filter(Boolean).join('\n\n');
     const params = new URLSearchParams({
         action: 'TEMPLATE',
-        text: event.calendarTitle || event.eventName,
+        text: resolvedTitle,
         details,
         location: [event.venueName, event.city].filter(Boolean).join(', '),
     });
@@ -77,6 +85,21 @@ const createGoogleCalendarUrl = (event: WeddingEvent) => {
     }
 
     return `https://calendar.google.com/calendar/render?${params.toString()}`;
+};
+
+const getEventTextPosition = (position?: string): NonNullable<WeddingEvent['eventTextPosition']> => {
+    if (position === 'middle' || position?.startsWith('center')) {
+        return 'middle';
+    }
+
+    return 'top';
+};
+
+const normalizeInvitedCount = (value: unknown) => Math.max(1, Math.floor(Number(value) || 1));
+
+const getGuestEventInvitedCount = (event: WeddingEvent, guest?: WeddingGuest) => {
+    const count = event.guestInvitedCount ?? guest?.invitedEventCounts?.[event.id] ?? guest?.invitedCount;
+    return count === undefined ? null : normalizeInvitedCount(count);
 };
 
 const particlePositions = Array.from({ length: 15 }, (_, index) => ({
@@ -117,10 +140,14 @@ export function EventSection({
     event,
     sectionRef,
     showParticles,
+    coupleDisplayName,
+    guest,
 }: {
     event: WeddingEvent;
     sectionRef?: RefObject<HTMLElement | null>;
     showParticles: boolean;
+    coupleDisplayName?: string;
+    guest?: WeddingGuest;
 }) {
     const selectedVisual = getEventVisualByKey(event.eventVisualKey);
     const eventCategory = normalizeEventCategory(event);
@@ -130,11 +157,14 @@ export function EventSection({
     const resolvedTextStyle = event.eventTextStyle === 'light' || event.eventTextStyle === 'dark'
         ? event.eventTextStyle
         : selectedVisual?.defaultTextStyle ?? 'dark';
+    const textPosition = getEventTextPosition(event.eventTextPosition);
     const backgroundStyle = selectedImage
         ? { backgroundImage: `url('${selectedImage}')` }
         : { backgroundImage: `url('${foregroundImage}'), url('${backgroundImage}')` };
 
     const mapsUrl = event.mapsUrl.trim();
+    const showCalendar = event.eventShowCalendar !== false;
+    const invitedCount = event.eventShowInvitedCount === true ? getGuestEventInvitedCount(event, guest) : null;
 
     const handleMapClick = () => {
         if (mapsUrl) {
@@ -143,7 +173,7 @@ export function EventSection({
     };
 
     const handleCalendarClick = () => {
-        window.open(createGoogleCalendarUrl(event), '_blank');
+        window.open(createGoogleCalendarUrl(event, coupleDisplayName), '_blank');
     };
 
     return (
@@ -155,6 +185,7 @@ export function EventSection({
                 `${eventCategory}-bg`,
                 selectedImage ? 'event-section-selected-visual' : '',
                 `event-section-text-${resolvedTextStyle}`,
+                `event-section-text-position-${textPosition}`,
             ].filter(Boolean).join(' ')}
             style={backgroundStyle}
         >
@@ -162,6 +193,7 @@ export function EventSection({
             <EventAnimationLayer animationKey={event.eventAnimationKey} eventCategory={eventCategory} />
 
             <div className="event-content-overlay">
+                <div className="event-text-panel">
                 <h3 className={`event-title ${eventCategory === 'wedding' ? 'wedding-title' : ''}`}>
                     {event.eventName}
                 </h3>
@@ -170,12 +202,15 @@ export function EventSection({
                     <p>{event.startTime}</p>
                     <p>{event.venueName}</p>
                     <p>{event.city}</p>
+                    {invitedCount !== null && <p className="event-invited-count">Invitees: {invitedCount}</p>}
                 </div>
                 <div className="event-actions">
-                    <button className={`minimal-link-btn ${eventCategory === 'mehendi' || eventCategory === 'wedding' ? 'micro-interaction' : ''}`} onClick={handleCalendarClick}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                        Add to Calendar
-                    </button>
+                    {showCalendar && (
+                        <button className={`minimal-link-btn ${eventCategory === 'mehendi' || eventCategory === 'wedding' ? 'micro-interaction' : ''}`} onClick={handleCalendarClick}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            Add to Calendar
+                        </button>
+                    )}
                     {mapsUrl && (
                         <button className={`minimal-link-btn ${eventCategory === 'mehendi' || eventCategory === 'wedding' ? 'micro-interaction' : ''}`} onClick={handleMapClick}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
@@ -184,11 +219,12 @@ export function EventSection({
                     )}
                 </div>
             </div>
+            </div>
         </section>
     );
 }
 
-export default function Section3({ events }: Section3Props) {
+export default function Section3({ events, coupleDisplayName, guest }: Section3Props) {
     const haldiRef = useRef<HTMLElement>(null);
     const mehendiRef = useRef<HTMLElement>(null);
     const [showHaldiParticles, setShowHaldiParticles] = useState(false);
@@ -220,6 +256,8 @@ export default function Section3({ events }: Section3Props) {
                 <EventSection
                     key={event.id}
                     event={event}
+                    coupleDisplayName={coupleDisplayName}
+                    guest={guest}
                     sectionRef={normalizeEventCategory(event) === 'haldi' ? haldiRef : normalizeEventCategory(event) === 'mehendi' ? mehendiRef : undefined}
                     showParticles={
                         (normalizeEventCategory(event) === 'haldi' && showHaldiParticles) ||

@@ -198,7 +198,10 @@ create table if not exists public.events (
   event_key text,
   event_visual_key text,
   event_text_style text not null default 'auto' check (event_text_style in ('auto', 'light', 'dark')),
+  event_text_position text not null default 'top' check (event_text_position in ('top', 'middle')),
   event_animation_key text not null default 'none',
+  event_show_calendar boolean not null default true,
+  event_show_invited_count boolean not null default false,
   event_name text not null,
   date_label text,
   start_time_label text,
@@ -256,6 +259,7 @@ create table if not exists public.guest_event_invites (
   wedding_id uuid not null references public.weddings(id) on delete cascade,
   guest_id uuid not null references public.guests(id) on delete cascade,
   event_id uuid not null references public.events(id) on delete cascade,
+  invited_count integer not null default 1 check (invited_count >= 1),
   created_at timestamptz not null default now(),
   unique (guest_id, event_id)
 );
@@ -338,7 +342,7 @@ begin
     'settings', (select to_jsonb(settings) from public.wedding_settings as settings where settings.wedding_id = target_wedding.id),
     'guest', to_jsonb(target_guest),
     'events', coalesce((
-      select jsonb_agg(to_jsonb(event_row) order by event_row.sort_order)
+      select jsonb_agg((to_jsonb(event_row) || jsonb_build_object('guest_invited_count', coalesce(invite.invited_count, target_guest.invited_count, 1))) order by event_row.sort_order)
       from public.events as event_row
       join public.guest_event_invites as invite
         on invite.wedding_id = target_wedding.id

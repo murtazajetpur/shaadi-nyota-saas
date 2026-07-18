@@ -4,6 +4,9 @@ export type PaymentStatus = 'unpaid' | 'paid' | 'manual_pending' | 'ref_pending'
 export type RsvpStatus = 'yes' | 'no' | 'maybe' | '';
 export type MealPreference = 'veg' | 'nonVeg' | 'jain' | '';
 export type EventTextStyle = 'auto' | 'light' | 'dark';
+export type EventTextPosition =
+  | 'top'
+  | 'middle';
 export type EventAnimationKey =
   | 'none'
   | 'soft-petals'
@@ -47,7 +50,11 @@ export interface WeddingEvent {
   eventKey?: string;
   eventVisualKey?: string;
   eventTextStyle?: EventTextStyle;
+  eventTextPosition?: EventTextPosition;
   eventAnimationKey?: EventAnimationKey;
+  eventShowCalendar?: boolean;
+  eventShowInvitedCount?: boolean;
+  guestInvitedCount?: number;
   eventName: string;
   date: string;
   startTime: string;
@@ -69,6 +76,7 @@ export interface WeddingGuest {
   category: string;
   inviteCode: string;
   invitedEventIds: string[];
+  invitedEventCounts?: Record<string, number>;
   mealPreference?: MealPreference;
 }
 
@@ -571,8 +579,17 @@ export const getGuestByInviteCode = (wedding: SampleWeddingData, inviteCode: str
   return wedding.rsvp.guests.find((guest) => guest.inviteCode === inviteCode);
 };
 
+const normalizeGuestEventInvitedCount = (guest: WeddingGuest, eventId: string) => (
+  Math.max(1, Math.floor(Number(guest.invitedEventCounts?.[eventId] ?? guest.invitedCount) || 1))
+);
+
 export const getEventsForGuest = (wedding: SampleWeddingData, guest: WeddingGuest) => {
-  return wedding.events.filter((event) => guest.invitedEventIds.includes(event.id));
+  return wedding.events
+    .filter((event) => guest.invitedEventIds.includes(event.id))
+    .map((event) => ({
+      ...event,
+      guestInvitedCount: normalizeGuestEventInvitedCount(guest, event.id),
+    }));
 };
 
 export const isPersonalizedInvitePath = (pathname: string) => {

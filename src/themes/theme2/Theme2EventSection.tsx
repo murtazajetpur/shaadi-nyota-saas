@@ -1,18 +1,27 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
-import type { WeddingEvent } from '../../data/sampleWeddingData';
+import type { WeddingEvent, WeddingGuest } from '../../data/sampleWeddingData';
 import { resolveAssetPath } from '../../data/assetRegistry';
 import EventAnimationLayer from '../../components/EventAnimationLayer';
 import { getEventTheme2Image, getEventTheme2Tone, toGoogleCalendarUrl } from './theme2Utils';
+
+const normalizeInvitedCount = (value: unknown) => Math.max(1, Math.floor(Number(value) || 1));
+
+const getGuestEventInvitedCount = (event: WeddingEvent, guest?: WeddingGuest) => {
+  const count = event.guestInvitedCount ?? guest?.invitedEventCounts?.[event.id] ?? guest?.invitedCount;
+  return count === undefined ? null : normalizeInvitedCount(count);
+};
 
 interface Theme2EventSectionProps {
   event: WeddingEvent;
   coupleDisplayName: string;
   isHeroDone: boolean;
+  guest?: WeddingGuest;
 }
 
 interface Theme2EventFrameProps {
   event: WeddingEvent;
   coupleDisplayName: string;
+  guest?: WeddingGuest;
   isVisible?: boolean;
   showActions?: boolean;
   className?: string;
@@ -22,6 +31,7 @@ interface Theme2EventFrameProps {
 export function Theme2EventFrame({
   event,
   coupleDisplayName,
+  guest,
   isVisible = true,
   showActions = true,
   className = '',
@@ -29,9 +39,14 @@ export function Theme2EventFrame({
 }: Theme2EventFrameProps) {
   const tone = getEventTheme2Tone(event);
   const imageSrc = resolveAssetPath(getEventTheme2Image(event));
+  const textPosition = event.eventTextPosition === 'middle' || event.eventTextPosition?.startsWith('center') ? 'middle' : 'top';
+  const mapsUrl = event.mapsUrl.trim();
+  const showCalendar = event.eventShowCalendar !== false;
+  const invitedCount = event.eventShowInvitedCount === true ? getGuestEventInvitedCount(event, guest) : null;
+  const shouldShowActions = showActions && (showCalendar || Boolean(mapsUrl));
 
   return (
-    <div className={`theme2-section theme2-event-section theme2-event-${tone} ${className}`} ref={sectionRef}>
+    <div className={`theme2-section theme2-event-section theme2-event-${tone} theme2-event-text-position-${textPosition} ${className}`} ref={sectionRef}>
       <img src={imageSrc} className="theme2-section-bg" alt={event.eventName} loading="lazy" decoding="async" />
       <EventAnimationLayer animationKey={event.eventAnimationKey} eventCategory={event.eventKey ?? event.id} />
       <div className={`theme2-section-overlay theme2-event-overlay theme2-event-overlay-${tone}`} />
@@ -44,15 +59,18 @@ export function Theme2EventFrame({
         <div className="theme2-event-venue theme2-fade-up cascade-3">
           <h2 className="theme2-body-font">{event.venueName}</h2>
           <h2 className="theme2-body-font">{event.city}</h2>
+          {invitedCount !== null && <p className="theme2-event-invited-count">Invitees: {invitedCount}</p>}
         </div>
-        {showActions && (
+        {shouldShowActions && (
           <div className="theme2-event-actions theme2-fade-up cascade-4">
-            <a href={toGoogleCalendarUrl(event, coupleDisplayName)} target="_blank" rel="noopener noreferrer" className="theme2-event-btn">
-              Add to Calendar
-            </a>
-            {event.mapsUrl.trim() && (
-              <a href={event.mapsUrl.trim()} target="_blank" rel="noopener noreferrer" className="theme2-event-btn">
-                Google Maps
+            {showCalendar && (
+              <a href={toGoogleCalendarUrl(event, coupleDisplayName)} target="_blank" rel="noopener noreferrer" className="theme2-event-btn">
+                Add to Calendar
+              </a>
+            )}
+            {mapsUrl && (
+              <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="theme2-event-btn">
+                View Location
               </a>
             )}
           </div>
@@ -62,7 +80,7 @@ export function Theme2EventFrame({
   );
 }
 
-export default function Theme2EventSection({ event, coupleDisplayName, isHeroDone }: Theme2EventSectionProps) {
+export default function Theme2EventSection({ event, coupleDisplayName, isHeroDone, guest }: Theme2EventSectionProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [inView, setInView] = useState(false);
   const sectionRef = useRef<HTMLDivElement | null>(null);
@@ -85,6 +103,7 @@ export default function Theme2EventSection({ event, coupleDisplayName, isHeroDon
     <Theme2EventFrame
       event={event}
       coupleDisplayName={coupleDisplayName}
+      guest={guest}
       isVisible={isVisible}
       sectionRef={sectionRef}
     />
