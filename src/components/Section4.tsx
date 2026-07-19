@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import './Section4.css';
 import {
     mockRsvpResponsesStorageKey,
@@ -11,6 +11,7 @@ import {
     type WeddingGuest,
 } from '../data/sampleWeddingData';
 import { loadSupabasePersonalizedRsvpResponses, saveSupabaseRsvpSubmission } from '../lib/supabaseWeddingData';
+import { resolveAssetPath } from '../data/assetRegistry';
 
 interface Section4Props {
     rsvp: SampleWeddingData['rsvp'];
@@ -23,9 +24,15 @@ interface Section4Props {
 
 const normalizeInvitedCount = (value: unknown) => Math.max(1, Math.floor(Number(value) || 1));
 
-const getEventInvitedCount = (event: WeddingEvent, guest: WeddingGuest) => (
-    normalizeInvitedCount(event.guestInvitedCount ?? guest.invitedEventCounts?.[event.id] ?? guest.invitedCount)
+const getEventInvitedCountValue = (event: WeddingEvent, guest: WeddingGuest) => (
+    normalizeInvitedCount(guest.invitedEventCounts?.[event.id] ?? event.guestInvitedCount ?? guest.invitedCount)
 );
+
+const getEventInvitedCountLabel = (event: WeddingEvent, guest: WeddingGuest) => {
+    const eventCount = getEventInvitedCountValue(event, guest);
+    const familyCount = normalizeInvitedCount(guest.invitedCount);
+    return eventCount >= familyCount ? 'All' : String(eventCount);
+};
 
 const loadStoredRsvpResponses = () => {
     try {
@@ -36,6 +43,11 @@ const loadStoredRsvpResponses = () => {
 };
 
 export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, personalizedInviteMode = false }: Section4Props) {
+    const backgroundImageSrc = resolveAssetPath(rsvp.backgroundImageSrc);
+    const rsvpSectionStyle = backgroundImageSrc
+        ? ({ '--rsvp-background-image': 'url(' + JSON.stringify(backgroundImageSrc) + ')' } as CSSProperties)
+        : undefined;
+    const rsvpBackgroundClassName = backgroundImageSrc ? ' has-custom-background' : '';
     const [responses, setResponses] = useState<RsvpResponse[]>(() => (
         events.map((event) => {
             const stored = guest
@@ -51,6 +63,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                 eventId: event.id,
                 status: stored?.status ?? '',
                 mealPreference: stored?.mealPreference ?? '',
+                attendingCount: stored?.attendingCount,
                 updatedAt: stored?.updatedAt,
             };
         })
@@ -82,6 +95,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                     eventId: event.id,
                     status: stored?.status ?? '',
                     mealPreference: guest.mealPreference ?? stored?.mealPreference ?? '',
+                    attendingCount: stored?.attendingCount,
                     updatedAt: stored?.updatedAt,
                 };
             }));
@@ -104,7 +118,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
 
     if (!personalizedInviteMode || !guest) {
         return (
-            <section className="section-wrapper section-4 rsvp-section">
+            <section className={`section-wrapper section-4 rsvp-section${rsvpBackgroundClassName}`} style={rsvpSectionStyle}>
                 <div className="rsvp-container">
                     <div className="rsvp-header-area">
                         <h2 className="rsvp-title">{rsvp.title}</h2>
@@ -120,9 +134,32 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
     const updateStatus = (eventId: string, status: RsvpStatus) => {
         setSubmitted(false);
         setSubmitError('');
+        const event = events.find((item) => item.id === eventId);
+        const defaultAttendingCount = event && guest ? getEventInvitedCountValue(event, guest) : 1;
         setResponses((current) => current.map((response) => (
             response.eventId === eventId
-                ? { ...response, status, updatedAt: new Date().toISOString() }
+                ? {
+                    ...response,
+                    status,
+                    attendingCount: status === 'yes' ? Math.max(1, Math.min(normalizeInvitedCount(response.attendingCount || defaultAttendingCount), defaultAttendingCount)) : 0,
+                    updatedAt: new Date().toISOString(),
+                }
+                : response
+        )));
+    };
+
+    const updateAttendingCount = (eventId: string, value: number, maxCount: number) => {
+        setSubmitted(false);
+        setSubmitError('');
+        const attendingCount = Math.max(0, Math.min(Math.floor(Number(value) || 0), maxCount));
+        setResponses((current) => current.map((response) => (
+            response.eventId === eventId
+                ? {
+                    ...response,
+                    status: attendingCount > 0 ? 'yes' : 'no',
+                    attendingCount,
+                    updatedAt: new Date().toISOString(),
+                }
                 : response
         )));
     };
@@ -136,7 +173,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                 weddingId,
                 weddingSlug,
                 guest,
-                responses: responses.map((response) => ({ eventId: response.eventId, status: response.status })),
+                responses: responses.map((response) => ({ eventId: response.eventId, status: response.status, attendingCount: response.attendingCount })),
                 mealPreference: mealValue,
                 events,
             });
@@ -184,7 +221,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
     };
 
     return (
-        <section className="section-wrapper section-4 rsvp-section personalized-rsvp-section">
+        <section className={`section-wrapper section-4 rsvp-section personalized-rsvp-section${rsvpBackgroundClassName}`} style={rsvpSectionStyle}>
             <div className="rsvp-container personalized-rsvp-container">
                 <div className="rsvp-header-area compact-rsvp-header">
                     <div className="step-indicator">{guest.guestName}</div>
@@ -196,8 +233,11 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
 
                 <div className="rsvp-event-list compact-rsvp-list">
                     {events.map((event) => {
-                        const selectedStatus = responses.find((response) => response.eventId === event.id)?.status ?? '';
-                        const invitedCount = event.eventShowInvitedCount === true ? getEventInvitedCount(event, guest) : null;
+                        const response = responses.find((item) => item.eventId === event.id);
+                        const selectedStatus = response?.status ?? '';
+                        const maxAttendingCount = getEventInvitedCountValue(event, guest);
+                        const attendingCount = Math.max(0, Math.min(Math.floor(Number(response?.attendingCount ?? maxAttendingCount) || 0), maxAttendingCount));
+                        const invitedCount = event.eventShowInvitedCount === true ? getEventInvitedCountLabel(event, guest) : null;
                         return (
                             <div className="rsvp-event-row fade-in" key={event.id}>
                                 <div className="rsvp-event-copy">
@@ -219,6 +259,19 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                                         </button>
                                     ))}
                                 </div>
+                                {rsvp.attendingCountEnabled && selectedStatus === 'yes' && (
+                                    <label className="rsvp-attending-count-field">
+                                        <span>How many people will attend?</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max={maxAttendingCount}
+                                            value={attendingCount}
+                                            onChange={(inputEvent) => updateAttendingCount(event.id, Number(inputEvent.target.value), maxAttendingCount)}
+                                        />
+                                        <small>Maximum {maxAttendingCount}</small>
+                                    </label>
+                                )}
                             </div>
                         );
                     })}
@@ -265,3 +318,6 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
         </section>
     );
 }
+
+
+

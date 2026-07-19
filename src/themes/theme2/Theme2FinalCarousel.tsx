@@ -10,6 +10,7 @@ interface Theme2FinalCarouselProps {
 
 export default function Theme2FinalCarousel({ closing, couple }: Theme2FinalCarouselProps) {
   const images = closing.carouselImages.filter(Boolean).map(resolveAssetPath).slice(0, 3);
+  const backgroundImageSrc = resolveAssetPath(closing.backgroundImageSrc || theme2Assets.background);
   const showGallery = closing.includePhotos && images.length > 0;
   const [index, setIndex] = useState(0);
 
@@ -23,7 +24,7 @@ export default function Theme2FinalCarousel({ closing, couple }: Theme2FinalCaro
 
   return (
     <div className={`theme2-section theme2-final-section ${showGallery ? 'theme2-final-gallery' : 'theme2-final-simple'}`}>
-      <img src={resolveAssetPath(theme2Assets.background)} className="theme2-section-bg" alt="Final background" loading="lazy" decoding="async" />
+      <img src={backgroundImageSrc} className="theme2-section-bg" alt="Final background" loading="lazy" decoding="async" />
       <div className="theme2-section-overlay theme2-final-overlay" />
       <div className="theme2-section-content visible theme2-final-content">
         <h1 className="theme2-display-font theme2-final-heading">{closing.closingLine || 'With Love'}</h1>

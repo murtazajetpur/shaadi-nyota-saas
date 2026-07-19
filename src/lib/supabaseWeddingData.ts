@@ -63,6 +63,8 @@ interface SupabaseWeddingSettingsRow {
   rsvp_subtitle: string | null;
   rsvp_labels: Record<string, unknown> | null;
   rsvp_meal_preference_enabled: boolean | null;
+  rsvp_attending_count_enabled: boolean | null;
+  rsvp_background_image_src: string | null;
   rsvp_meal_options: Record<string, unknown> | null;
   rsvp_success_message: unknown;
   closing_enabled: boolean | null;
@@ -74,6 +76,7 @@ interface SupabaseWeddingSettingsRow {
   closing_carousel_images: unknown;
   closing_gallery_images?: unknown;
   closing_frame_image_src: string | null;
+  closing_background_image_src: string | null;
 }
 
 interface SupabaseEventRow {
@@ -123,6 +126,7 @@ interface SupabaseRsvpResponseRow {
   guest_id: string;
   event_id: string;
   status: Exclude<RsvpStatus, ''>;
+  attending_count?: number | null;
   updated_at: string | null;
 }
 
@@ -419,6 +423,8 @@ const mapWeddingBundle = (
       subtitle: valueOr(settings?.rsvp_subtitle, fallback.rsvp.subtitle),
       ...rsvpLabels,
       mealPreferenceEnabled: settings?.rsvp_meal_preference_enabled ?? fallback.rsvp.mealPreferenceEnabled,
+      attendingCountEnabled: settings?.rsvp_attending_count_enabled ?? fallback.rsvp.attendingCountEnabled,
+      backgroundImageSrc: valueOr(settings?.rsvp_background_image_src, fallback.rsvp.backgroundImageSrc),
       mealOptions: readMealOptions(settings?.rsvp_meal_options ?? null, fallback.rsvp.mealOptions),
       successMessage: readJsonStringArray(settings?.rsvp_success_message, fallback.rsvp.successMessage),
       guests: mapGuestRows(guests, invites),
@@ -431,6 +437,7 @@ const mapWeddingBundle = (
       message: valueOr(settings?.closing_message, fallback.closing.message),
       carouselImages: closingGalleryImages,
       frameImageSrc: valueOr(settings?.closing_frame_image_src, fallback.closing.frameImageSrc),
+      backgroundImageSrc: valueOr(settings?.closing_background_image_src, fallback.closing.backgroundImageSrc),
     },
   };
 };
@@ -682,6 +689,9 @@ const closingSettingsColumns = new Set([
   'closing_couple_display_name',
   'closing_message',
   'closing_frame_image_src',
+  'rsvp_background_image_src',
+  'rsvp_attending_count_enabled',
+  'closing_background_image_src',
   'closing_carousel_images',
   'closing_gallery_images',
 ]);
@@ -726,12 +736,14 @@ export async function saveSupabaseWeddingSettings(weddingId: string, wedding: Sa
     rsvp_meal_preference_enabled: wedding.rsvp.mealPreferenceEnabled,
     rsvp_meal_options: wedding.rsvp.mealOptions,
     rsvp_success_message: wedding.rsvp.successMessage,
+    rsvp_background_image_src: wedding.rsvp.backgroundImageSrc,
     closing_include_photos: wedding.closing.includePhotos,
     closing_layout: wedding.closing.includePhotos ? 'gallery' : 'simple',
     closing_line: wedding.closing.closingLine,
     closing_couple_display_name: wedding.closing.coupleDisplayName,
     closing_message: wedding.closing.message,
     closing_frame_image_src: wedding.closing.frameImageSrc,
+    closing_background_image_src: wedding.closing.backgroundImageSrc,
   };
 
   const payload: Record<string, unknown> = {
@@ -1066,8 +1078,30 @@ export async function loadSupabaseRsvpResponses(
 
   const { data, error } = await supabase
     .from('rsvp_responses')
-    .select('wedding_id,guest_id,event_id,status,updated_at')
+    .select('wedding_id,guest_id,event_id,status,attending_count,updated_at')
     .eq('wedding_id', weddingId);
+
+  if (error && error.message.toLowerCase().includes('attending_count')) {
+    const fallback = await supabase
+      .from('rsvp_responses')
+      .select('wedding_id,guest_id,event_id,status,updated_at')
+      .eq('wedding_id', weddingId);
+    if (fallback.error) return { responses: [], error: fallback.error.message };
+    const guestById = new Map(guests.map((guest) => [guest.id, guest]));
+    const responses = ((fallback.data ?? []) as SupabaseRsvpResponseRow[]).map((response): StoredRsvpResponse => {
+      const guest = guestById.get(response.guest_id);
+      return {
+        weddingSlug,
+        inviteCode: guest?.inviteCode ?? '',
+        guestId: response.guest_id,
+        eventId: response.event_id,
+        status: response.status,
+        mealPreference: guest?.mealPreference ?? '',
+        updatedAt: response.updated_at ?? '',
+      };
+    });
+    return { responses, error: '' };
+  }
 
   if (error) return { responses: [], error: error.message };
 
@@ -1081,6 +1115,7 @@ export async function loadSupabaseRsvpResponses(
       eventId: response.event_id,
       status: response.status,
       mealPreference: guest?.mealPreference ?? '',
+      attendingCount: response.attending_count ?? undefined,
       updatedAt: response.updated_at ?? '',
     };
   });
@@ -1097,20 +1132,21 @@ export async function saveSupabaseRsvpSubmission({
   weddingId: string;
   weddingSlug: string;
   guest: WeddingGuest;
-  responses: Array<{ eventId: string; status: RsvpStatus }>;
+  responses: Array<{ eventId: string; status: RsvpStatus; attendingCount?: number }>;
   mealPreference: MealPreference;
   events?: WeddingEvent[];
 }) {
   if (!supabase) return { error: 'Supabase is not configured.' };
 
   const activeResponses = responses
-    .filter((response): response is { eventId: string; status: Exclude<RsvpStatus, ''> } => Boolean(response.status));
+    .filter((response): response is { eventId: string; status: Exclude<RsvpStatus, ''>; attendingCount?: number } => Boolean(response.status));
   const { error } = await supabase.rpc('submit_guest_rsvp', {
     wedding_slug: weddingSlug,
     invite_code: guest.inviteCode,
     responses: activeResponses.map((response) => ({
       event_id: response.eventId,
       status: response.status,
+      attending_count: response.attendingCount ?? 0,
     })),
     meal_preference: mealPreference || '',
   });
@@ -1124,8 +1160,10 @@ export async function saveSupabaseRsvpSubmission({
     eventId: response.eventId,
     status: response.status,
     mealPreference,
+    attendingCount: response.attendingCount,
     updatedAt,
   }));
 
   return { error: '', storedResponses };
 }
+

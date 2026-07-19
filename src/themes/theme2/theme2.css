@@ -378,6 +378,9 @@
 }
 .theme2-event-text-position-top .theme2-event-content,
 .theme2-event-text-position-middle .theme2-event-content {
+  position: relative;
+  z-index: 2;
+  isolation: isolate;
   align-self: center;
   justify-self: auto;
   width: min(84%, 44vh);
@@ -406,7 +409,7 @@
 .theme2-event-text-position-middle .theme2-display-font {
   font-size: 3.4rem;
   line-height: 0.98;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.55rem;
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
@@ -750,3 +753,12 @@
   color: inherit;
 }
 
+
+.theme2-rsvp-section .rsvp-section.has-custom-background {
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.58), rgba(255, 248, 241, 0.48)),
+    var(--rsvp-background-image),
+    #fffff0;
+  background-size: cover;
+  background-position: center center;
+}

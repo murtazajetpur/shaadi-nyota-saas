@@ -85,6 +85,7 @@ export interface RsvpResponse {
   eventId: string;
   status: RsvpStatus;
   mealPreference: MealPreference;
+  attendingCount?: number;
   updatedAt?: string;
 }
 
@@ -148,6 +149,8 @@ export interface SampleWeddingData {
       maybe: string;
     };
     mealPreferenceEnabled: boolean;
+    attendingCountEnabled: boolean;
+    backgroundImageSrc: string;
     mealOptions: {
       veg: string;
       nonVeg: string;
@@ -164,6 +167,7 @@ export interface SampleWeddingData {
     message: string;
     carouselImages: string[];
     frameImageSrc: string;
+    backgroundImageSrc: string;
   };
 }
 
@@ -215,6 +219,7 @@ const sharedThemeMedia = {
     message: 'Looking forward to celebrating our important days with you.',
     carouselImages: [],
     frameImageSrc: '/assets/heart-frame.png',
+    backgroundImageSrc: '',
   },
 };
 
@@ -389,6 +394,8 @@ export const sampleWeddings: SampleWeddingData[] = [
         maybe: 'Maybe',
       },
       mealPreferenceEnabled: true,
+      attendingCountEnabled: true,
+      backgroundImageSrc: '',
       mealOptions: {
         veg: 'Veg',
         nonVeg: 'Non-Veg',
@@ -522,6 +529,8 @@ export const sampleWeddings: SampleWeddingData[] = [
         maybe: 'Maybe',
       },
       mealPreferenceEnabled: true,
+      attendingCountEnabled: true,
+      backgroundImageSrc: '',
       mealOptions: {
         veg: 'Veg',
         nonVeg: 'Non-Veg',
@@ -602,3 +611,6 @@ export const isPersonalizedInvitePath = (pathname: string) => {
 };
 
 export const sampleWeddingData = getWeddingBySlug(defaultWeddingSlug) ?? sampleWeddings[0];
+
+
+

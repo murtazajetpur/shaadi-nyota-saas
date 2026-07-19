@@ -169,6 +169,8 @@ create table if not exists public.wedding_settings (
   rsvp_subtitle text,
   rsvp_labels jsonb,
   rsvp_meal_preference_enabled boolean not null default true,
+  rsvp_attending_count_enabled boolean not null default true,
+  rsvp_background_image_src text,
   rsvp_meal_options jsonb,
   rsvp_success_message jsonb,
   closing_enabled boolean not null default true,
@@ -180,6 +182,7 @@ create table if not exists public.wedding_settings (
   closing_carousel_images jsonb,
   closing_gallery_images jsonb,
   closing_frame_image_src text,
+  closing_background_image_src text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -276,6 +279,7 @@ create table if not exists public.rsvp_responses (
   guest_id uuid not null references public.guests(id) on delete cascade,
   event_id uuid not null references public.events(id) on delete cascade,
   status text not null check (status in ('yes', 'no', 'maybe')),
+  attending_count integer not null default 0 check (attending_count >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (guest_id, event_id)
@@ -372,6 +376,8 @@ declare
   response_item jsonb;
   response_event_id uuid;
   response_status text;
+  response_attending_count integer;
+  response_invited_count integer;
   saved_count integer := 0;
 begin
   if jsonb_typeof(coalesce($3, '[]'::jsonb)) <> 'array' then
@@ -405,19 +411,26 @@ begin
     if response_status is null or response_status not in ('yes', 'no', 'maybe') then
       raise exception 'Invalid RSVP status.' using errcode = '22023';
     end if;
-    if not exists (
-      select 1 from public.guest_event_invites as invite
-      where invite.wedding_id = target_wedding.id
-        and invite.guest_id = target_guest.id
-        and invite.event_id = response_event_id
-    ) then
+    select coalesce(invite.invited_count, target_guest.invited_count, 1)
+    into response_invited_count
+    from public.guest_event_invites as invite
+    where invite.wedding_id = target_wedding.id
+      and invite.guest_id = target_guest.id
+      and invite.event_id = response_event_id;
+
+    if response_invited_count is null then
       raise exception 'This invitation does not include one or more submitted events.' using errcode = '42501';
     end if;
 
-    insert into public.rsvp_responses (wedding_id, guest_id, event_id, status)
-    values (target_wedding.id, target_guest.id, response_event_id, response_status)
+    response_attending_count := case
+      when response_status = 'yes' then greatest(0, least(coalesce((response_item ->> 'attending_count')::integer, response_invited_count), response_invited_count))
+      else 0
+    end;
+
+    insert into public.rsvp_responses (wedding_id, guest_id, event_id, status, attending_count)
+    values (target_wedding.id, target_guest.id, response_event_id, response_status, response_attending_count)
     on conflict (guest_id, event_id)
-    do update set status = excluded.status, updated_at = now();
+    do update set status = excluded.status, attending_count = excluded.attending_count, updated_at = now();
     saved_count := saved_count + 1;
   end loop;
 
@@ -465,3 +478,4 @@ create index if not exists music_options_is_active_idx on public.music_options(i
 -- alter table public.events add column event_start_at timestamptz;
 -- alter table public.events add column event_end_at timestamptz;
 -- alter table public.events add column timezone text;
+

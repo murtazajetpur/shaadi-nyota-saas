@@ -6,9 +6,14 @@ import { getEventTheme2Image, getEventTheme2Tone, toGoogleCalendarUrl } from './
 
 const normalizeInvitedCount = (value: unknown) => Math.max(1, Math.floor(Number(value) || 1));
 
-const getGuestEventInvitedCount = (event: WeddingEvent, guest?: WeddingGuest) => {
-  const count = event.guestInvitedCount ?? guest?.invitedEventCounts?.[event.id] ?? guest?.invitedCount;
-  return count === undefined ? null : normalizeInvitedCount(count);
+const getGuestEventInvitedCountLabel = (event: WeddingEvent, guest?: WeddingGuest) => {
+  const count = guest
+    ? guest.invitedEventCounts?.[event.id] ?? guest.invitedCount
+    : event.guestInvitedCount;
+  if (count === undefined) return null;
+  const eventCount = normalizeInvitedCount(count);
+  const familyCount = guest ? normalizeInvitedCount(guest.invitedCount) : null;
+  return familyCount && eventCount >= familyCount ? 'All' : String(eventCount);
 };
 
 interface Theme2EventSectionProps {
@@ -42,7 +47,7 @@ export function Theme2EventFrame({
   const textPosition = event.eventTextPosition === 'middle' || event.eventTextPosition?.startsWith('center') ? 'middle' : 'top';
   const mapsUrl = event.mapsUrl.trim();
   const showCalendar = event.eventShowCalendar !== false;
-  const invitedCount = event.eventShowInvitedCount === true ? getGuestEventInvitedCount(event, guest) : null;
+  const invitedCount = event.eventShowInvitedCount === true ? getGuestEventInvitedCountLabel(event, guest) : null;
   const shouldShowActions = showActions && (showCalendar || Boolean(mapsUrl));
 
   return (
@@ -109,3 +114,4 @@ export default function Theme2EventSection({ event, coupleDisplayName, isHeroDon
     />
   );
 }
+

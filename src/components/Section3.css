@@ -83,6 +83,7 @@
     align-items: center;
     padding-top: 12vh;
     z-index: 4;
+    isolation: isolate;
     pointer-events: none;
     /* Let clicks pass to background if needed, but not buttons */
 }
@@ -114,6 +115,8 @@
 }
 
 .event-text-panel {
+    position: relative;
+    z-index: 1;
     width: min(84%, 44vh);
     max-height: 100%;
     display: flex;
@@ -137,7 +140,7 @@
 .event-section-text-position-middle .event-title {
     font-size: 3.5rem;
     line-height: 0.95;
-    margin-bottom: 0.35rem;
+    margin-bottom: 0.55rem;
     text-wrap: balance;
     overflow-wrap: anywhere;
 }
@@ -335,4 +338,5 @@
     font-size: 0.78rem;
     letter-spacing: 0.08em;
 }
+
 

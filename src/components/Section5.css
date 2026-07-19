@@ -11,6 +11,15 @@
     padding: 2rem 1.25rem;
 }
 
+.closing-section.has-custom-background {
+    background:
+        radial-gradient(circle at 50% 54%, rgba(255, 255, 255, 0.56), rgba(255, 250, 242, 0.28) 48%, transparent 72%),
+        linear-gradient(180deg, rgba(255, 253, 248, 0.42), rgba(246, 236, 223, 0.34)),
+        var(--closing-background-image),
+        #fffaf2;
+    background-size: cover;
+    background-position: center center;
+}
 .closing-section-content {
     width: min(100%, 340px);
     display: flex;
@@ -103,3 +112,4 @@
 .simple-closing .closing-bottom {
     margin-top: 1rem;
 }
+

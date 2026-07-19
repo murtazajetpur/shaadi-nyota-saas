@@ -97,9 +97,14 @@ const getEventTextPosition = (position?: string): NonNullable<WeddingEvent['even
 
 const normalizeInvitedCount = (value: unknown) => Math.max(1, Math.floor(Number(value) || 1));
 
-const getGuestEventInvitedCount = (event: WeddingEvent, guest?: WeddingGuest) => {
-    const count = event.guestInvitedCount ?? guest?.invitedEventCounts?.[event.id] ?? guest?.invitedCount;
-    return count === undefined ? null : normalizeInvitedCount(count);
+const getGuestEventInvitedCountLabel = (event: WeddingEvent, guest?: WeddingGuest) => {
+    const count = guest
+        ? guest.invitedEventCounts?.[event.id] ?? guest.invitedCount
+        : event.guestInvitedCount;
+    if (count === undefined) return null;
+    const eventCount = normalizeInvitedCount(count);
+    const familyCount = guest ? normalizeInvitedCount(guest.invitedCount) : null;
+    return familyCount && eventCount >= familyCount ? 'All' : String(eventCount);
 };
 
 const particlePositions = Array.from({ length: 15 }, (_, index) => ({
@@ -164,7 +169,7 @@ export function EventSection({
 
     const mapsUrl = event.mapsUrl.trim();
     const showCalendar = event.eventShowCalendar !== false;
-    const invitedCount = event.eventShowInvitedCount === true ? getGuestEventInvitedCount(event, guest) : null;
+    const invitedCount = event.eventShowInvitedCount === true ? getGuestEventInvitedCountLabel(event, guest) : null;
 
     const handleMapClick = () => {
         if (mapsUrl) {
@@ -268,3 +273,4 @@ export default function Section3({ events, coupleDisplayName, guest }: Section3P
         </div>
     );
 }
+

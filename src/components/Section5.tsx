@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type CSSProperties } from 'react';
 import './Section5.css';
 import type { SampleWeddingData } from '../data/sampleWeddingData';
 import { resolveAssetPath } from '../data/assetRegistry';
@@ -10,6 +10,11 @@ interface Section5Props {
 export default function Section5({ closing }: Section5Props) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const galleryImages = closing.carouselImages.filter(Boolean).map(resolveAssetPath).slice(0, 3);
+    const backgroundImageSrc = resolveAssetPath(closing.backgroundImageSrc);
+    const sectionStyle = backgroundImageSrc
+        ? ({ '--closing-background-image': 'url(' + JSON.stringify(backgroundImageSrc) + ')' } as CSSProperties)
+        : undefined;
+    const backgroundClassName = backgroundImageSrc ? ' has-custom-background' : '';
     const showGallery = closing.includePhotos && galleryImages.length > 0;
     const primaryImage = galleryImages[currentIndex] ?? '';
 
@@ -22,7 +27,7 @@ export default function Section5({ closing }: Section5Props) {
     }, [galleryImages.length, showGallery]);
 
     return (
-        <section className={`section-wrapper section-5 closing-section ${showGallery ? 'with-gallery' : 'simple-closing'}`}>
+        <section className={`section-wrapper section-5 closing-section${backgroundClassName} ${showGallery ? 'with-gallery' : 'simple-closing'}`} style={sectionStyle}>
             <div className="closing-section-content">
                 <h2 className="closing-text closing-top">{closing.closingLine}</h2>
                 {closing.message && <p className="closing-message">{closing.message}</p>}
@@ -55,3 +60,4 @@ export default function Section5({ closing }: Section5Props) {
         </section>
     );
 }
+

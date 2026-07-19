@@ -74,6 +74,8 @@ function ClassicInviteExperience({
         ...eventsToShow.flatMap((event) => [event.foregroundImageSrc, event.backgroundImageSrc]),
         ...data.closing.carouselImages,
         data.closing.frameImageSrc,
+        data.rsvp.backgroundImageSrc,
+        data.closing.backgroundImageSrc,
       ];
       await Promise.all(tier3.map(preloadImage));
     };

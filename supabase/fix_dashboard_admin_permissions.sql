@@ -59,6 +59,8 @@ alter table public.wedding_settings
   add column if not exists rsvp_subtitle text,
   add column if not exists rsvp_labels jsonb,
   add column if not exists rsvp_meal_preference_enabled boolean not null default true,
+  add column if not exists rsvp_attending_count_enabled boolean not null default true,
+  add column if not exists rsvp_background_image_src text,
   add column if not exists rsvp_meal_options jsonb,
   add column if not exists rsvp_success_message jsonb,
   add column if not exists closing_enabled boolean not null default true,
@@ -69,7 +71,8 @@ alter table public.wedding_settings
   add column if not exists closing_message text,
   add column if not exists closing_carousel_images jsonb,
   add column if not exists closing_gallery_images jsonb,
-  add column if not exists closing_frame_image_src text;
+  add column if not exists closing_frame_image_src text,
+  add column if not exists closing_background_image_src text;
 
 alter table public.events
   add column if not exists event_key text,
@@ -197,3 +200,4 @@ on public.rsvp_responses
 for select
 to authenticated
 using (public.is_admin());
+
