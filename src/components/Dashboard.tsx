@@ -164,6 +164,7 @@ const storyImageOptions = getAllStoryImages().map((option) => ({
     thumbnailSrc: resolveAssetPath(option.thumbnailSrc ?? option.previewSrc ?? option.src),
     altText: option.altText,
     themeLabel: 'Our Story Library',
+    visibility: option.visibility,
 }));
 const closingImagePresets = getAllClosingGalleryPresetPhotos().map((option) => ({
     key: option.id,
@@ -576,6 +577,7 @@ export default function Dashboard({
     const hasUnsavedChangesRef = useRef(Boolean(restoredDashboardDraft));
     const activeDraftStorageKeyRef = useRef(dashboardDraftStorageKey);
     const isAdminMode = mode === 'admin';
+    const visibleStoryImageOptions = storyImageOptions.filter((option) => isAdminMode || option.visibility !== 'admin');
     const hasDashboardGuestAccess = isAdminMode || canManageGuests(weddingData);
     const hasDashboardRsvpAccess = isAdminMode || canViewRsvpDashboard(weddingData);
     const showPlanUpgrade = !isAdminMode && canUpgradePlan(weddingData);
@@ -1997,7 +1999,7 @@ export default function Dashboard({
                                         ))}
                                     </div>
                                     <div className="form-grid opening-reveal-fields">
-                                        <TextField label="Tap to Reveal Text" value={weddingData.hero.revealCtaText} onChange={(value) => updateHero('revealCtaText', value)} />
+                                        <TextField label="Tap to Reveal Text" value={weddingData.hero.revealCtaText} multiline rows={2} onChange={(value) => updateHero('revealCtaText', value)} />
                                         <SelectField
                                             label="Music / Audio"
                                             value={resolveAssetPath(weddingData.music.audioSrc)}
@@ -2074,9 +2076,9 @@ export default function Dashboard({
                                         Show Our Story
                                     </label>
                                     <div className="form-grid">
-                                        <TextField label="Couple Display Name" value={weddingData.couple.displayName} onChange={(value) => updateCouple('displayName', value)} />
-                                        <TextField label="Subtitle" value={weddingData.couple.introLine} onChange={(value) => updateCouple('introLine', value)} />
-                                        <TextField label="Story Title" value={weddingData.couple.storyTitle} onChange={(value) => updateCouple('storyTitle', value)} />
+                                        <TextField label="Couple Display Name" value={weddingData.couple.displayName} multiline rows={2} onChange={(value) => updateCouple('displayName', value)} />
+                                        <TextField label="Subtitle" value={weddingData.couple.introLine} multiline rows={2} onChange={(value) => updateCouple('introLine', value)} />
+                                        <TextField label="Story Title" value={weddingData.couple.storyTitle} multiline rows={2} onChange={(value) => updateCouple('storyTitle', value)} />
                                     </div>
                                     <label className="dashboard-field">
                                         <span>Story Text</span>
@@ -2094,7 +2096,7 @@ export default function Dashboard({
                                         <p>Choose the visual that appears in your story section.</p>
                                     </div>
                                     <div className="our-story-image-grid">
-                                        {storyImageOptions.map((option) => (
+                                        {visibleStoryImageOptions.map((option) => (
                                             <button
                                                 key={option.key}
                                                 className={`story-image-card ${resolveAssetPath(weddingData.couple.backgroundImageSrc) === option.imageSrc ? 'selected' : ''}`}
@@ -2137,9 +2139,9 @@ export default function Dashboard({
                         <div className="form-grid">
                             <TextField label="Bride name" value={weddingData.couple.brideName} error={validation.brideName} onChange={(value) => updateCouple('brideName', value)} />
                             <TextField label="Groom name" value={weddingData.couple.groomName} error={validation.groomName} onChange={(value) => updateCouple('groomName', value)} />
-                            <TextField label="Display name" value={weddingData.couple.displayName} onChange={(value) => updateCouple('displayName', value)} />
-                            <TextField label="Intro line" value={weddingData.couple.introLine} onChange={(value) => updateCouple('introLine', value)} />
-                            <TextField label="Blessing line" value={weddingData.couple.blessingLine} onChange={(value) => updateCouple('blessingLine', value)} />
+                            <TextField label="Display name" value={weddingData.couple.displayName} multiline rows={2} onChange={(value) => updateCouple('displayName', value)} />
+                            <TextField label="Intro line" value={weddingData.couple.introLine} multiline rows={2} onChange={(value) => updateCouple('introLine', value)} />
+                            <TextField label="Blessing line" value={weddingData.couple.blessingLine} multiline rows={2} onChange={(value) => updateCouple('blessingLine', value)} />
                         </div>
                     </div>
                 )}
@@ -2177,7 +2179,7 @@ export default function Dashboard({
                                                     <p>Name the function and choose the event category.</p>
                                                 </div>
                                                 <div className="event-editor-fields form-grid">
-                                                    <TextField label="Event name" value={event.eventName} error={validation.events[index]?.eventName} onChange={(value) => updateEvent(index, 'eventName', value)} />
+                                                    <TextField label="Event name" value={event.eventName} error={validation.events[index]?.eventName} multiline rows={2} onChange={(value) => updateEvent(index, 'eventName', value)} />
                                                     <SelectField
                                                         label="Event type"
                                                         value={event.eventKey ?? ''}
@@ -2196,8 +2198,8 @@ export default function Dashboard({
                                                     <p>Add venue details and an optional Google Maps link.</p>
                                                 </div>
                                                 <div className="event-editor-fields form-grid">
-                                                    <TextField label="Venue name" value={event.venueName} error={validation.events[index]?.venueName} onChange={(value) => updateEvent(index, 'venueName', value)} />
-                                                    <TextField label="City" value={event.city} onChange={(value) => updateEvent(index, 'city', value)} />
+                                                    <TextField label="Venue name" value={event.venueName} error={validation.events[index]?.venueName} multiline rows={2} onChange={(value) => updateEvent(index, 'venueName', value)} />
+                                                    <TextField label="City" value={event.city} multiline rows={2} onChange={(value) => updateEvent(index, 'city', value)} />
                                                     <TextField label="Google Maps link (optional)" value={event.mapsUrl} onChange={(value) => updateEvent(index, 'mapsUrl', value)} />
                                                 </div>
                                             </section>
@@ -2250,6 +2252,7 @@ export default function Dashboard({
                                             event={event}
                                             themeKey={weddingData.wedding.themeKey}
                                             onSelect={(visualKey) => updateEvent(index, 'eventVisualKey', visualKey)}
+                                            isAdminMode={isAdminMode}
                                         />
                                     </div>
                                 </div>
@@ -2692,8 +2695,8 @@ export default function Dashboard({
                                         Include Couple Photos
                                     </label>
                                     <div className="form-grid">
-                                        <TextField label="Closing Line" value={weddingData.closing.closingLine} onChange={(value) => updateClosing('closingLine', value)} />
-                                        <TextField label="Couple Display Name" value={weddingData.closing.coupleDisplayName} onChange={(value) => updateClosing('coupleDisplayName', value)} />
+                                        <TextField label="Closing Line" value={weddingData.closing.closingLine} multiline rows={2} onChange={(value) => updateClosing('closingLine', value)} />
+                                        <TextField label="Couple Display Name" value={weddingData.closing.coupleDisplayName} multiline rows={2} onChange={(value) => updateClosing('coupleDisplayName', value)} />
                                     </div>
                                     <label className="dashboard-field">
                                         <span>Thank You Message</span>
@@ -3367,10 +3370,12 @@ function EventVisualPicker({
     event,
     themeKey,
     onSelect,
+    isAdminMode = false,
 }: {
     event: WeddingEvent;
     themeKey: string;
     onSelect: (visualKey: string) => void;
+    isAdminMode?: boolean;
 }) {
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState('all');
@@ -3379,6 +3384,8 @@ function EventVisualPicker({
     const selectedVisual = getEventVisualByKey(event.eventVisualKey) ?? recommendedVisual;
     const selectedKey = event.eventVisualKey ?? '';
     const selectedVisualKey = selectedVisual?.key ?? selectedKey;
+    const visibleEventVisuals = eventVisuals.filter((visual) => isAdminMode || visual.visibility !== 'admin');
+
     const categoryFilterOptions = [
         { key: 'all', label: 'All' },
         { key: 'haldi', label: 'Haldi' },
@@ -3387,9 +3394,10 @@ function EventVisualPicker({
         { key: 'wedding', label: 'Wedding / Nikaah' },
         { key: 'reception', label: 'Reception / Walima' },
         { key: 'generic', label: 'Generic' },
+        ...(isAdminMode ? [{ key: 'custom', label: 'Custom' }] : []),
     ];
     const availableStyles = Array.from(new Set(
-        eventVisuals
+        visibleEventVisuals
             .map((visual) => visual.style)
             .filter((style): style is string => Boolean(style))
     )).sort((a, b) => (
@@ -3403,8 +3411,8 @@ function EventVisualPicker({
         })),
     ];
     const filteredVisuals = categoryFilter === 'all'
-        ? eventVisuals
-        : eventVisuals.filter((visual) => visual.eventType === categoryFilter);
+        ? visibleEventVisuals
+        : visibleEventVisuals.filter((visual) => visual.eventType === categoryFilter);
     const styleFilteredVisuals = styleFilter === 'all'
         ? filteredVisuals
         : filteredVisuals.filter((visual) => visual.style === styleFilter);
@@ -3446,7 +3454,7 @@ function EventVisualPicker({
                         {isEventAnimationRecommended(event.eventAnimationKey, event.eventKey, event.eventName) ? ' (recommended)' : ''}
                     </p>
                 </div>
-                {eventVisuals.length > 0 && (
+                {visibleEventVisuals.length > 0 && (
                     <button
                         className="dashboard-primary-btn secondary"
                         type="button"
@@ -3457,13 +3465,13 @@ function EventVisualPicker({
                 )}
             </div>
 
-            {eventVisuals.length === 0 && (
+            {visibleEventVisuals.length === 0 && (
                 <p className="dashboard-note compact">
                     Event visual cards will appear here when assets are available.
                 </p>
             )}
 
-            {isPickerOpen && eventVisuals.length > 0 && (
+            {isPickerOpen && visibleEventVisuals.length > 0 && (
                 <div className="event-visual-modal-backdrop" role="presentation" onClick={() => setIsPickerOpen(false)}>
                     <div
                         className="event-visual-modal"
@@ -3607,11 +3615,29 @@ function ReadOnlyBadgeCard({
     );
 }
 
-function TextField({ label, value, error, onChange }: { label: string; value: string; error?: string; onChange: (value: string) => void }) {
+function TextField({
+    label,
+    value,
+    error,
+    multiline = false,
+    rows = 2,
+    onChange,
+}: {
+    label: string;
+    value: string;
+    error?: string;
+    multiline?: boolean;
+    rows?: number;
+    onChange: (value: string) => void;
+}) {
     return (
         <label className={`dashboard-field ${error ? 'has-error' : ''}`}>
             <span>{label}</span>
-            <input value={value} onChange={(event) => onChange(event.target.value)} />
+            {multiline ? (
+                <textarea value={value} rows={rows} onChange={(event) => onChange(event.target.value)} />
+            ) : (
+                <input value={value} onChange={(event) => onChange(event.target.value)} />
+            )}
             {error && <em>{error}</em>}
         </label>
     );
@@ -3699,6 +3725,7 @@ function RsvpTable({
         </section>
     );
 }
+
 
 
 

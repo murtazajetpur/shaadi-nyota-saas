@@ -5,6 +5,8 @@ import DemoWatermarkOverlay from './DemoWatermarkOverlay';
 import { type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
 import { getWeddingSectionConfig, type WeddingSectionConfig } from '../data/sectionConfig';
 import WeddingSectionRenderer from './WeddingSectionRenderer';
+import { resolveAssetPath } from '../data/assetRegistry';
+import { getEventVisualByKey } from '../data/eventVisuals';
 
 interface InviteExperienceProps {
   data: SampleWeddingData;
@@ -44,6 +46,7 @@ function ClassicInviteExperience({
   const [heroStarted, setHeroStarted] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const contentReady = previewMode || forceSectionsVisible || heroDone;
+  const sectionsMounted = previewMode || forceSectionsVisible || heroStarted || heroDone;
 
   const handleHeroComplete = useCallback(() => {
     setHeroDone(true);
@@ -52,35 +55,30 @@ function ClassicInviteExperience({
   useEffect(() => {
     if (!heroStarted) return;
 
-    const preloadImage = (src: string) => {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = resolve;
-        img.onerror = resolve;
-        img.src = src;
-      });
+    const preloadImage = (src?: string) => {
+      const resolvedSrc = resolveAssetPath(src ?? '');
+      if (!resolvedSrc) return;
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = resolvedSrc;
     };
 
-    const runPreload = async () => {
-      if (!data.hero.skipRevealImage) {
-        await preloadImage(data.hero.revealImageSrc);
-      }
+    const imageSources = new Set<string>();
+    if (!data.hero.skipRevealImage) imageSources.add(data.hero.revealImageSrc);
+    imageSources.add(data.hero.posterSrc);
+    imageSources.add(data.couple.backgroundImageSrc);
+    eventsToShow.forEach((event) => {
+      imageSources.add(event.foregroundImageSrc);
+      imageSources.add(event.backgroundImageSrc);
+      const visual = getEventVisualByKey(event.eventVisualKey);
+      if (visual?.imageSrc) imageSources.add(visual.imageSrc);
+    });
+    data.closing.carouselImages.forEach((src) => imageSources.add(src));
+    imageSources.add(data.closing.frameImageSrc);
+    imageSources.add(data.rsvp.backgroundImageSrc);
+    imageSources.add(data.closing.backgroundImageSrc);
 
-      if (data.couple.enabled) {
-        await preloadImage(data.couple.backgroundImageSrc);
-      }
-
-      const tier3 = [
-        ...eventsToShow.flatMap((event) => [event.foregroundImageSrc, event.backgroundImageSrc]),
-        ...data.closing.carouselImages,
-        data.closing.frameImageSrc,
-        data.rsvp.backgroundImageSrc,
-        data.closing.backgroundImageSrc,
-      ];
-      await Promise.all(tier3.map(preloadImage));
-    };
-
-    runPreload();
+    imageSources.forEach(preloadImage);
   }, [heroStarted, data, eventsToShow]);
 
   const inviteCanvas = (
@@ -106,15 +104,16 @@ function ClassicInviteExperience({
         />
       )}
 
-      {contentReady && (
+      {sectionsMounted && (
         <WeddingSectionRenderer
           data={data}
           sections={sectionConfig}
           events={eventsToShow}
-        weddingId={weddingId}
-        guest={guest}
-        personalizedInviteMode={personalizedInviteMode}
-      />
+          weddingId={weddingId}
+          guest={guest}
+          personalizedInviteMode={personalizedInviteMode}
+          showStoryScrollPrompt={heroDone && data.hero.skipRevealImage}
+        />
       )}
     </div>
   );

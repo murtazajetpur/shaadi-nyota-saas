@@ -110,6 +110,7 @@
     border-radius: 999px;
     transition: all 0.2s ease;
     animation: pulse-soft 2s infinite;
+    white-space: pre-line;
 }
 
 .hero-btn:hover,

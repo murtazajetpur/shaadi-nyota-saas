@@ -152,7 +152,7 @@ export default function Theme2InviteExperience({
           />
         );
       case 'story':
-        return <Theme2Couple key={section.id} couple={data.couple} isHeroDone={heroDone} />;
+        return <Theme2Couple key={section.id} couple={data.couple} isHeroDone={heroDone} showScrollPrompt={heroDone && data.hero.skipRevealImage} />;
       case 'events':
         return eventsToShow.map((event) => (
           <Theme2EventSection key={event.id} event={event} coupleDisplayName={data.couple.displayName} isHeroDone={heroDone} guest={guest} />
@@ -217,3 +217,4 @@ export default function Theme2InviteExperience({
 
   return <div className="theme2-app-container">{inviteCanvas}</div>;
 }
+

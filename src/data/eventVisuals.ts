@@ -13,6 +13,7 @@ export interface EventVisual {
   defaultTextStyle: 'light' | 'dark';
   previewObjectPosition?: string;
   publicObjectPosition?: string;
+  visibility?: RegistryAsset['visibility'];
 }
 
 const themeLabelByKey: Record<string, string> = {
@@ -22,6 +23,7 @@ const themeLabelByKey: Record<string, string> = {
   'theme-2': 'Scroll Opening',
   'newly-created': 'New Event Library',
   'asset-library': 'Event Library',
+  'custom-private': 'Custom Private',
 };
 
 const styleTextStyleDefaults: Record<string, 'light' | 'dark'> = {
@@ -53,6 +55,7 @@ const toRegistryEventVisual = (asset: RegistryAsset): EventVisual => {
     style: asset.style,
     defaultTextStyle,
     previewObjectPosition: asset.id === 'event-haldi-premium-05' ? '50% 72%' : 'center center',
+    visibility: asset.visibility,
   };
 };
 

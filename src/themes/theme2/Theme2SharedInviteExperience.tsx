@@ -171,6 +171,7 @@ function Theme2SharedInviteExperienceContent({
             weddingId={weddingId}
             guest={guest}
             personalizedInviteMode={personalizedInviteMode}
+            showStoryScrollPrompt={heroDone && data.hero.skipRevealImage}
           />
         )}
       </div>
@@ -183,3 +184,4 @@ function Theme2SharedInviteExperienceContent({
 
   return <div className="theme2-app-container">{inviteCanvas}</div>;
 }
+

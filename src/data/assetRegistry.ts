@@ -17,6 +17,7 @@ export type AssetCategory =
   | 'reception'
   | 'walima'
   | 'generic'
+  | 'custom'
   | 'preset-photo'
   | 'frame'
   | 'music';
@@ -42,6 +43,7 @@ export interface RegistryAsset {
   intrinsicHeight?: number;
   aspectRatio?: string;
   notes?: string;
+  visibility?: 'public' | 'admin';
 }
 
 export interface OpeningRevealAnimationAsset extends RegistryAsset {
@@ -120,6 +122,7 @@ const baseAsset = <T extends RegistryAsset>(asset: T): T => ({
 });
 
 const eventCategoryLabels: Partial<Record<AssetCategory, string>> = {
+  custom: 'Custom',
   generic: 'Generic',
   haldi: 'Haldi',
   mehendi: 'Mehendi',
@@ -485,10 +488,45 @@ export const assetRegistry: SectionFirstAssetRegistry = {
         baseAsset({ id: 'story-holding-hands-02', label: 'Joined Hands II', src: '/assets/our-story/images/story-holding-hands-02.png', type: 'image', section: 'ourStory', category: 'image', style: 'portrait', altText: 'Bride and groom holding hands together', tags: ['couple', 'hands', 'romantic'] }),
         baseAsset({ id: 'story-veil-walk-02', label: 'Bridal Veil Walk II', src: '/assets/our-story/images/story-veil-walk-02.png', type: 'image', section: 'ourStory', category: 'image', style: 'portrait', altText: 'Bride and groom walking with a bridal veil', tags: ['couple', 'walk', 'veil'] }),
         baseAsset({ id: 'story-wedding-walk-02', label: 'Floral Wedding Walk II', src: '/assets/our-story/images/story-wedding-walk-02.png', type: 'image', section: 'ourStory', category: 'image', style: 'portrait', altText: 'Bride and groom walking through floral wedding decor', tags: ['couple', 'walk', 'floral'] }),
+        baseAsset({
+          id: 'story-custom-only-background-01',
+          label: 'Custom Story Background 1',
+          src: '/assets/events/custom/event-custom-only-background-01.png',
+          thumbnailSrc: '/assets/thumbnails/events/custom/event-custom-only-background-01.webp',
+          type: 'image',
+          section: 'ourStory',
+          category: 'image',
+          style: 'custom',
+          sourceTheme: 'custom-private',
+          recommendedForThemes: [],
+          compatibleThemes: allThemeKeys,
+          altText: 'Custom wedding story image',
+          tags: ['custom', 'private', 'story'],
+          visibility: 'admin',
+          notes: 'Admin-only custom story image for specific weddings.',
+        }),
       ],
       backgrounds: [],
     },
     events: {
+      custom: [
+        baseAsset({
+          id: 'event-custom-only-background-01',
+          label: 'Custom Background 1',
+          src: '/assets/events/custom/event-custom-only-background-01.png',
+          thumbnailSrc: '/assets/thumbnails/events/custom/event-custom-only-background-01.webp',
+          type: 'background',
+          section: 'events',
+          category: 'custom',
+          style: 'custom',
+          sourceTheme: 'custom-private',
+          recommendedForThemes: [],
+          compatibleThemes: allThemeKeys,
+          tags: ['custom', 'background', 'private'],
+          visibility: 'admin',
+          notes: 'Admin-only custom background asset for specific weddings.',
+        }),
+      ],
       haldi: makeEventAssets('haldi', [
         'event-haldi-premium-01',
         'event-haldi-premium-02',

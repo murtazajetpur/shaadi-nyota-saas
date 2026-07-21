@@ -338,7 +338,7 @@
   cursor: pointer;
   border-radius: 50px;
   box-shadow: 0 10px 25px rgba(198, 155, 79, 0.3);
-  white-space: nowrap;
+  white-space: pre-line;
   animation: theme2PulseGlow 2s infinite;
 }
 
@@ -608,6 +608,10 @@
 
 .theme2-final-section {
   justify-content: center;
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+  box-sizing: border-box;
 }
 
 .theme2-final-content {
@@ -761,4 +765,16 @@
     #fffff0;
   background-size: cover;
   background-position: center center;
+}
+
+.theme2-our-story-names,
+.theme2-our-story-intro,
+.theme2-script-font,
+.theme2-our-story-copy,
+.theme2-display-font,
+.theme2-body-font,
+.theme2-final-heading,
+.theme2-final-message,
+.theme2-final-names .theme2-display-font {
+  white-space: pre-line;
 }

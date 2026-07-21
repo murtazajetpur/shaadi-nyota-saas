@@ -1,12 +1,14 @@
 import "./Section2.css";
 import type { SampleWeddingData } from "../data/sampleWeddingData";
 import { resolveAssetPath } from "../data/assetRegistry";
+import OpeningRevealScrollPrompt from './OpeningRevealScrollPrompt';
 
 interface Section2Props {
     couple: SampleWeddingData['couple'];
+    showScrollPrompt?: boolean;
 }
 
-export default function Section2({ couple }: Section2Props) {
+export default function Section2({ couple, showScrollPrompt = false }: Section2Props) {
     return (
         <section className="section-wrapper section-2">
             <div className="petals-container">
@@ -23,7 +25,9 @@ export default function Section2({ couple }: Section2Props) {
                     {couple.storyTitle.trim() && <h3 className="s2-story-title">{couple.storyTitle}</h3>}
                     {couple.storyText.trim() && <p className="s2-story-text">{couple.storyText}</p>}
                 </div>
+                {showScrollPrompt && <OpeningRevealScrollPrompt />}
             </div>
         </section>
     );
 }
+

@@ -14,6 +14,7 @@ interface ClassicWeddingSectionRendererProps {
   weddingId?: string;
   guest?: WeddingGuest;
   personalizedInviteMode?: boolean;
+  showStoryScrollPrompt?: boolean;
 }
 
 interface RenderSectionContext {
@@ -22,10 +23,11 @@ interface RenderSectionContext {
   weddingId?: string;
   guest?: WeddingGuest;
   personalizedInviteMode: boolean;
+  showStoryScrollPrompt: boolean;
 }
 
-const renderStorySection = (section: WeddingSectionConfig, { data }: RenderSectionContext) => {
-  return <Section2 key={section.id} couple={data.couple} />;
+const renderStorySection = (section: WeddingSectionConfig, { data, showStoryScrollPrompt }: RenderSectionContext) => {
+  return <Section2 key={section.id} couple={data.couple} showScrollPrompt={showStoryScrollPrompt} />;
 };
 
 const renderEventsSection = (section: WeddingSectionConfig, { data, events, guest }: RenderSectionContext) => {
@@ -60,6 +62,7 @@ export default function WeddingSectionRenderer({
   weddingId,
   guest,
   personalizedInviteMode = false,
+  showStoryScrollPrompt = false,
 }: ClassicWeddingSectionRendererProps) {
   const enabledSections = sections
     .filter((section) => section.enabled && section.type !== 'opening' && section.type !== 'reveal')
@@ -70,6 +73,7 @@ export default function WeddingSectionRenderer({
     weddingId,
     guest,
     personalizedInviteMode,
+    showStoryScrollPrompt,
   };
 
   return (

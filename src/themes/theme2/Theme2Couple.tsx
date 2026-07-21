@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import type { SampleWeddingData } from '../../data/sampleWeddingData';
 import { theme2Assets } from './theme2Assets';
 import { getTheme2CoupleImage } from './theme2Utils';
+import OpeningRevealScrollPrompt from '../../components/OpeningRevealScrollPrompt';
 
 interface Theme2CoupleProps {
   couple: SampleWeddingData['couple'];
   isHeroDone: boolean;
+  showScrollPrompt?: boolean;
 }
 
-export default function Theme2Couple({ couple, isHeroDone }: Theme2CoupleProps) {
+export default function Theme2Couple({ couple, isHeroDone, showScrollPrompt = false }: Theme2CoupleProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [inView, setInView] = useState(false);
   const sectionRef = useRef<HTMLDivElement | null>(null);
@@ -48,6 +50,7 @@ export default function Theme2Couple({ couple, isHeroDone }: Theme2CoupleProps) 
         {couple.storyTitle.trim() && <h1 className="theme2-script-font theme2-fade-up cascade-3">{couple.storyTitle}</h1>}
         {couple.storyText.trim() && <p className="theme2-our-story-copy theme2-fade-up cascade-4">{couple.storyText}</p>}
       </div>
+      {showScrollPrompt && <OpeningRevealScrollPrompt />}
     </div>
   );
 }

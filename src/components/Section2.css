@@ -104,3 +104,14 @@
         transform: translate3d(20px, 110vh, 0) rotate(360deg) scale(1);
     }
 }
+
+.s2-top-names,
+.s2-heading,
+.s2-story-title,
+.s2-story-text {
+    white-space: pre-line;
+}
+
+.section-2 .opening-reveal-scroll-prompt {
+    bottom: max(28px, 5%);
+}

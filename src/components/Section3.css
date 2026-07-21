@@ -340,3 +340,8 @@
 }
 
 
+
+.event-title,
+.event-details p {
+    white-space: pre-line;
+}
