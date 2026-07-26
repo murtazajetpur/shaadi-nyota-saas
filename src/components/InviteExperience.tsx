@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import Hero from './Hero';
+import Section2 from './Section2';
 import AudioPlayer from './AudioPlayer';
 import DemoWatermarkOverlay from './DemoWatermarkOverlay';
 import { type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
@@ -44,13 +45,27 @@ function ClassicInviteExperience({
 }: ClassicInviteExperienceProps) {
   const [heroDone, setHeroDone] = useState(false);
   const [heroStarted, setHeroStarted] = useState(false);
+  const [skipRevealProgress, setSkipRevealProgress] = useState(0);
+  const [skipRevealBridgeVisible, setSkipRevealBridgeVisible] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const contentReady = previewMode || forceSectionsVisible || heroDone;
-  const sectionsMounted = previewMode || forceSectionsVisible || heroStarted || heroDone;
+  const sectionsMounted = previewMode || forceSectionsVisible || (!data.hero.skipRevealImage && heroStarted) || heroDone;
+
+  const handleSkipRevealProgress = useCallback((progress: number) => {
+    setSkipRevealProgress(progress);
+    if (progress > 0) setSkipRevealBridgeVisible(true);
+  }, []);
 
   const handleHeroComplete = useCallback(() => {
+    setSkipRevealProgress(1);
+    if (data.hero.skipRevealImage) {
+      setSkipRevealBridgeVisible(true);
+      window.setTimeout(() => {
+        setSkipRevealBridgeVisible(false);
+      }, 520);
+    }
     setHeroDone(true);
-  }, []);
+  }, [data.hero.skipRevealImage]);
 
   useEffect(() => {
     if (!heroStarted) return;
@@ -98,10 +113,17 @@ function ClassicInviteExperience({
           onHeroStart={() => setHeroStarted(true)}
           onGaneshaReveal={() => undefined}
           onHeroComplete={handleHeroComplete}
+          onSkipRevealProgress={handleSkipRevealProgress}
           enableResponsiveVideo={enableResponsiveOpeningVideo}
           showScrollPrompt={heroDone && !data.hero.skipRevealImage}
           previewMode={previewMode}
         />
+      )}
+
+      {heroStarted && data.hero.skipRevealImage && skipRevealBridgeVisible && (
+        <div className={`skip-reveal-story-fade ${heroDone ? 'is-settling' : ''}`} style={{ opacity: heroDone ? 1 : skipRevealProgress }} aria-hidden="true">
+          <Section2 couple={data.couple} />
+        </div>
       )}
 
       {sectionsMounted && (

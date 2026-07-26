@@ -3,6 +3,7 @@ import { type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '..
 import { getWeddingSectionConfig } from '../../data/sectionConfig';
 import WeddingSectionRenderer from '../../components/WeddingSectionRenderer';
 import Theme2HeroReveal from './Theme2HeroReveal';
+import Theme2Couple from './Theme2Couple';
 import { getEventTheme2Image, getTheme2CoupleImage } from './theme2Utils';
 import { theme2Assets } from './theme2Assets';
 import './theme2.css';
@@ -49,6 +50,8 @@ function Theme2SharedInviteExperienceContent({
   const shouldShowOurStory = enabledSections.some((section) => section.type === 'story');
   const [heroStarted, setHeroStarted] = useState(false);
   const [heroDone, setHeroDone] = useState(false);
+  const [skipRevealProgress, setSkipRevealProgress] = useState(0);
+  const [skipRevealBridgeVisible, setSkipRevealBridgeVisible] = useState(false);
   const theme2CoupleBackground = getTheme2CoupleImage(data.couple.backgroundImageSrc || data.hero.revealImageSrc);
   const openingRevealImage = data.hero.skipRevealImage ? theme2CoupleBackground : (data.hero.revealImageSrc || theme2CoupleBackground);
   const [activeBg, setActiveBg] = useState(openingRevealImage);
@@ -91,7 +94,19 @@ function Theme2SharedInviteExperienceContent({
   }, [openingRevealImage, theme2CoupleBackground, eventsToShow, heroStarted, shouldShowOurStory]);
 
 
+  const handleSkipRevealProgress = (progress: number) => {
+    setSkipRevealProgress(progress);
+    if (progress > 0) setSkipRevealBridgeVisible(true);
+  };
+
   const completeHeroReveal = () => {
+    setSkipRevealProgress(1);
+    if (data.hero.skipRevealImage) {
+      setSkipRevealBridgeVisible(true);
+      window.setTimeout(() => {
+        setSkipRevealBridgeVisible(false);
+      }, 520);
+    }
     setHeroDone(true);
   };
   const toggleAudio = () => {
@@ -150,6 +165,12 @@ function Theme2SharedInviteExperienceContent({
         ref={canvasRef}
         onScroll={handleScroll}
       >
+        {heroStarted && data.hero.skipRevealImage && skipRevealBridgeVisible && (
+          <div className={`theme2-skip-reveal-story-fade ${heroDone ? 'is-settling' : ''}`} style={{ opacity: heroDone ? 1 : skipRevealProgress }} aria-hidden="true">
+            <Theme2Couple couple={data.couple} isHeroDone={true} />
+          </div>
+        )}
+
         {!(data.hero.skipRevealImage && heroDone) && (
           <Theme2HeroReveal
             hero={data.hero}
@@ -157,6 +178,7 @@ function Theme2SharedInviteExperienceContent({
             onStarted={() => setHeroStarted(true)}
             onDone={completeHeroReveal}
             onPlayAudio={playAudioWithFade}
+            onSkipRevealProgress={handleSkipRevealProgress}
             enableResponsiveVideo={enableResponsiveOpeningVideo}
             className="theme2-hero-reveal-section"
             showScrollPrompt={heroDone && !data.hero.skipRevealImage}

@@ -1,6 +1,6 @@
 import { type MouseEvent, useEffect, useRef, useState } from 'react';
 import type { SampleWeddingData } from '../../data/sampleWeddingData';
-import { openingRevealCrossfadeSeconds } from '../../data/openingReveal';
+import { getOpeningRevealCrossfadeProgress } from '../../data/openingReveal';
 import { theme2Assets } from './theme2Assets';
 import { getTheme2CoupleImage } from './theme2Utils';
 import { useOpeningRevealVideoSrc } from '../../hooks/useOpeningRevealVideoSrc';
@@ -12,6 +12,7 @@ interface Theme2HeroRevealProps {
   onStarted: () => void;
   onDone: () => void;
   onPlayAudio: () => void;
+  onSkipRevealProgress?: (progress: number) => void;
   enableResponsiveVideo?: boolean;
   className?: string;
   showScrollPrompt?: boolean;
@@ -23,6 +24,7 @@ export default function Theme2HeroReveal({
   onStarted,
   onDone,
   onPlayAudio,
+  onSkipRevealProgress,
   enableResponsiveVideo = true,
   className = '',
   showScrollPrompt = false,
@@ -46,22 +48,7 @@ export default function Theme2HeroReveal({
   const skipRevealImage = hero.skipRevealImage === true;
   const revealImage = hero.revealImageSrc || mandapImage;
 
-  const getRevealProgress = (currentTime: number, duration: number) => {
-    const configuredStart = Number.isFinite(hero.revealImageShowAtSeconds)
-      ? hero.revealImageShowAtSeconds
-      : Number.NaN;
-    const fallbackStart = Number.isFinite(duration) && duration > 0
-      ? Math.max(0, duration - openingRevealCrossfadeSeconds)
-      : 0;
-    const revealStart = Number.isFinite(configuredStart) && configuredStart >= 0
-      ? configuredStart
-      : fallbackStart;
-
-    return Math.min(
-      1,
-      Math.max(0, (currentTime - revealStart) / openingRevealCrossfadeSeconds),
-    );
-  };
+  const getRevealProgress = getOpeningRevealCrossfadeProgress;
 
   const handleTap = async (event?: MouseEvent<HTMLElement>) => {
     event?.stopPropagation();
@@ -122,7 +109,9 @@ export default function Theme2HeroReveal({
     if (doneCalledRef.current) return;
     doneCalledRef.current = true;
     if (skipRevealImage) {
-      onDone();
+      videoRef.current?.pause();
+      onSkipRevealProgress?.(1);
+      doneTimeoutRef.current = window.setTimeout(() => onDone(), 80);
       return;
     }
     setIsRevealComplete(true);
@@ -142,7 +131,9 @@ export default function Theme2HeroReveal({
 
       if (skipRevealImage) {
         const { currentTime, duration } = videoRef.current;
-        if (Number.isFinite(duration) && duration > 0 && duration - currentTime <= 0.12) {
+        const progress = getRevealProgress(currentTime, duration);
+        onSkipRevealProgress?.(progress);
+        if (progress >= 1 || (Number.isFinite(duration) && duration > 0 && duration - currentTime <= 0.02)) {
           completeReveal();
           return;
         }
@@ -168,7 +159,7 @@ export default function Theme2HeroReveal({
         animationFrameRef.current = null;
       }
     };
-  }, [isRevealed, hero.revealImageShowAtSeconds, skipRevealImage]);
+  }, [isRevealed, onSkipRevealProgress, skipRevealImage]);
 
   return (
     <div

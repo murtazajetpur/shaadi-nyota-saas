@@ -11,12 +11,13 @@ interface HeroProps {
     onHeroStart: () => void;
     onGaneshaReveal: () => void;
     onHeroComplete: () => void;
+    onSkipRevealProgress?: (progress: number) => void;
     enableResponsiveVideo?: boolean;
     showScrollPrompt?: boolean;
     previewMode?: boolean;
 }
 
-export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onHeroComplete, enableResponsiveVideo = true, showScrollPrompt = false, previewMode = false }: HeroProps) {
+export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onHeroComplete, onSkipRevealProgress, enableResponsiveVideo = true, showScrollPrompt = false, previewMode = false }: HeroProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const responsiveVideoSrc = useOpeningRevealVideoSrc(hero.videoSrc);
     const videoSrc = enableResponsiveVideo ? responsiveVideoSrc : hero.videoSrc;
@@ -28,6 +29,7 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
     const [isCompleting, setIsCompleting] = useState(false);
     const revealedRef = useRef(false);
     const completeTimeoutRef = useRef<number | null>(null);
+    const skipRevealTransitionStartedRef = useRef(false);
 
     const handleVideoReady = () => {
         setIsVideoReady(true);
@@ -105,12 +107,20 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
         }
     };
 
+    function completeSkipRevealAfterFade() {
+        if (skipRevealTransitionStartedRef.current) return;
+        skipRevealTransitionStartedRef.current = true;
+        videoRef.current?.pause();
+        onSkipRevealProgress?.(1);
+        completeTimeoutRef.current = window.setTimeout(() => {
+            onHeroComplete();
+        }, 80);
+    }
+
     function completeHeroAfterRevealSettles() {
-        if (completeTimeoutRef.current !== null) return;
+        if (completeTimeoutRef.current !== null || skipRevealTransitionStartedRef.current) return;
         if (skipRevealImage) {
-            completeTimeoutRef.current = window.setTimeout(() => {
-                onHeroComplete();
-            }, 0);
+            completeSkipRevealAfterFade();
             return;
         }
         setRevealImageOpacity(1);
@@ -125,7 +135,9 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
             const duration = videoRef.current.duration;
 
             if (skipRevealImage) {
-                if (Number.isFinite(duration) && duration > 0 && duration - time <= 0.12) {
+                const progress = getOpeningRevealCrossfadeProgress(time, duration);
+                onSkipRevealProgress?.(progress);
+                if (progress >= 1 || (Number.isFinite(duration) && duration > 0 && duration - time <= 0.02)) {
                     completeHeroAfterRevealSettles();
                 }
                 return;
@@ -152,7 +164,7 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
             animationFrame = requestAnimationFrame(loop);
         }
         return () => cancelAnimationFrame(animationFrame);
-    }, [isPlaying, onGaneshaReveal, skipRevealImage]);
+    }, [isPlaying, onGaneshaReveal, onSkipRevealProgress, skipRevealImage]);
 
 
     return (

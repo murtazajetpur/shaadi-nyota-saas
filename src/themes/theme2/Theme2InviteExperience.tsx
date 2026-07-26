@@ -38,6 +38,8 @@ export default function Theme2InviteExperience({
   const shouldShowOurStory = enabledSections.some((section) => section.type === 'story');
   const [heroStarted, setHeroStarted] = useState(false);
   const [heroDone, setHeroDone] = useState(false);
+  const [skipRevealProgress, setSkipRevealProgress] = useState(0);
+  const [skipRevealBridgeVisible, setSkipRevealBridgeVisible] = useState(false);
   const theme2CoupleBackground = getTheme2CoupleImage(data.couple.backgroundImageSrc || data.hero.revealImageSrc);
   const openingRevealImage = data.hero.skipRevealImage ? theme2CoupleBackground : (data.hero.revealImageSrc || theme2CoupleBackground);
   const experienceResetKey = [
@@ -99,7 +101,19 @@ export default function Theme2InviteExperience({
   }, [openingRevealImage, theme2CoupleBackground, eventsToShow, heroStarted, shouldShowOurStory]);
 
 
+  const handleSkipRevealProgress = (progress: number) => {
+    setSkipRevealProgress(progress);
+    if (progress > 0) setSkipRevealBridgeVisible(true);
+  };
+
   const completeHeroReveal = () => {
+    setSkipRevealProgress(1);
+    if (data.hero.skipRevealImage) {
+      setSkipRevealBridgeVisible(true);
+      window.setTimeout(() => {
+        setSkipRevealBridgeVisible(false);
+      }, 520);
+    }
     setHeroDone(true);
   };
   const toggleAudio = () => {
@@ -146,6 +160,7 @@ export default function Theme2InviteExperience({
             onStarted={() => setHeroStarted(true)}
             onDone={completeHeroReveal}
             onPlayAudio={playAudioWithFade}
+            onSkipRevealProgress={handleSkipRevealProgress}
             enableResponsiveVideo={enableResponsiveOpeningVideo}
             className="theme2-hero-reveal-section"
             showScrollPrompt={heroDone && !data.hero.skipRevealImage}
@@ -203,8 +218,14 @@ export default function Theme2InviteExperience({
         ref={canvasRef}
         onScroll={handleScroll}
       >
+        {heroStarted && data.hero.skipRevealImage && skipRevealBridgeVisible && (
+          <div className={`theme2-skip-reveal-story-fade ${heroDone ? 'is-settling' : ''}`} style={{ opacity: heroDone ? 1 : skipRevealProgress }} aria-hidden="true">
+            <Theme2Couple couple={data.couple} isHeroDone={true} />
+          </div>
+        )}
+
         {enabledSections.map((section) => {
-          if (section.type !== 'reveal' && !heroStarted) return null;
+          if (section.type !== 'reveal' && (!heroStarted || (data.hero.skipRevealImage && !heroDone))) return null;
           return renderTheme2Section(section);
         })}
       </div>
