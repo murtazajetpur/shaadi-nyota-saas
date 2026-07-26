@@ -58,6 +58,7 @@ function Theme2SharedInviteExperienceContent({
   const [audioPlaying, setAudioPlaying] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioFadeFrameRef = useRef<number | null>(null);
   const audioSrc = data.music.audioSrc && !data.music.audioSrc.includes('/assets/din-shangda-audio.mp3')
     ? data.music.audioSrc
     : theme2Assets.audio;
@@ -109,30 +110,74 @@ function Theme2SharedInviteExperienceContent({
     }
     setHeroDone(true);
   };
-  const toggleAudio = () => {
-    if (!audioRef.current) return;
-    if (audioPlaying) {
-      audioRef.current.pause();
-      setAudioPlaying(false);
-      return;
+  const fadeAudioIn = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audioFadeFrameRef.current !== null) {
+      window.cancelAnimationFrame(audioFadeFrameRef.current);
     }
-    audioRef.current.play().then(() => setAudioPlaying(true)).catch(() => undefined);
+
+    const fadeDurationMs = 2000;
+    const startTime = performance.now();
+    const startVolume = Number.isFinite(audio.volume) ? audio.volume : 0;
+
+    const fade = (currentTime: number) => {
+      const progress = Math.min((currentTime - startTime) / fadeDurationMs, 1);
+      if (audioRef.current) {
+        audioRef.current.volume = Math.min(1, startVolume + ((1 - startVolume) * progress));
+      }
+      if (progress < 1) {
+        audioFadeFrameRef.current = window.requestAnimationFrame(fade);
+      } else {
+        audioFadeFrameRef.current = null;
+      }
+    };
+
+    audioFadeFrameRef.current = window.requestAnimationFrame(fade);
   };
 
   const playAudioWithFade = () => {
     if (!audioRef.current) return;
     audioRef.current.volume = 0;
+    audioRef.current.muted = false;
     audioRef.current.play().then(() => {
       setAudioPlaying(true);
-      let volume = 0;
-      const fadeInterval = window.setInterval(() => {
-        volume += 0.05;
-        if (audioRef.current) audioRef.current.volume = Math.min(volume, 1);
-        if (volume >= 1) window.clearInterval(fadeInterval);
-      }, 150);
-    }).catch(() => undefined);
+      fadeAudioIn();
+    }).catch(() => setAudioPlaying(false));
   };
 
+  const toggleAudio = () => {
+    if (!audioRef.current) return;
+    if (audioPlaying && !audioRef.current.paused) {
+      audioRef.current.pause();
+      setAudioPlaying(false);
+      return;
+    }
+    audioRef.current.muted = false;
+    audioRef.current.play().then(() => setAudioPlaying(true)).catch(() => setAudioPlaying(false));
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return undefined;
+
+    const handlePlay = () => setAudioPlaying(true);
+    const handlePause = () => setAudioPlaying(false);
+    const handleEnded = () => setAudioPlaying(false);
+
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('ended', handleEnded);
+      if (audioFadeFrameRef.current !== null) {
+        window.cancelAnimationFrame(audioFadeFrameRef.current);
+      }
+    };
+  }, []);
   const handleScroll = () => {
     if (!canvasRef.current) return;
     const scrollPos = canvasRef.current.scrollTop;

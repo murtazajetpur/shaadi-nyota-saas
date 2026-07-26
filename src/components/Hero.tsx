@@ -12,12 +12,13 @@ interface HeroProps {
     onGaneshaReveal: () => void;
     onHeroComplete: () => void;
     onSkipRevealProgress?: (progress: number) => void;
+    audioElementId?: string;
     enableResponsiveVideo?: boolean;
     showScrollPrompt?: boolean;
     previewMode?: boolean;
 }
 
-export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onHeroComplete, onSkipRevealProgress, enableResponsiveVideo = true, showScrollPrompt = false, previewMode = false }: HeroProps) {
+export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onHeroComplete, onSkipRevealProgress, audioElementId, enableResponsiveVideo = true, showScrollPrompt = false, previewMode = false }: HeroProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const responsiveVideoSrc = useOpeningRevealVideoSrc(hero.videoSrc);
     const videoSrc = enableResponsiveVideo ? responsiveVideoSrc : hero.videoSrc;
@@ -31,6 +32,13 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
     const completeTimeoutRef = useRef<number | null>(null);
     const skipRevealTransitionStartedRef = useRef(false);
 
+
+    const getAudioElement = () => {
+        if (audioElementId) {
+            return document.getElementById(audioElementId) as HTMLAudioElement | null;
+        }
+        return document.querySelector('audio') as HTMLAudioElement | null;
+    };
     const handleVideoReady = () => {
         setIsVideoReady(true);
     };
@@ -55,7 +63,7 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
 
             // 1. Play audio synchronously right here in the click handler
             // to prevent iOS Safari from blocking it. Do this irrespective of video state.
-            const audioEl = document.querySelector('audio');
+            const audioEl = getAudioElement();
             if (audioEl && audioEl.paused) {
                 if (!audioEl.getAttribute('src')) {
                     audioEl.setAttribute('src', audioSrc);
@@ -98,7 +106,7 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
             onHeroStart();
         }
 
-        const audioEl = document.querySelector('audio');
+        const audioEl = getAudioElement();
         if (audioEl && audioEl.paused && !audioEl.muted) {
             if (!audioEl.getAttribute('src')) {
                 audioEl.setAttribute('src', audioSrc);

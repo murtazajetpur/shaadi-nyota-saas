@@ -13,6 +13,14 @@
     overflow: visible;
 }
 
+
+.audio-player-container.is-hidden {
+    visibility: hidden;
+}
+
+.audio-player-container.is-hidden .mute-btn {
+    pointer-events: none;
+}
 .mute-btn {
     pointer-events: auto;
     /* Re-enable clicks for the button */

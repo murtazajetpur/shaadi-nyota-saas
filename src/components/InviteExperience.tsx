@@ -48,6 +48,7 @@ function ClassicInviteExperience({
   const [skipRevealProgress, setSkipRevealProgress] = useState(0);
   const [skipRevealBridgeVisible, setSkipRevealBridgeVisible] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const audioElementId = 'invite-audio-' + data.wedding.slug.replace(/[^a-zA-Z0-9_-]/g, '-');
   const contentReady = previewMode || forceSectionsVisible || heroDone;
   const sectionsMounted = previewMode || forceSectionsVisible || (!data.hero.skipRevealImage && heroStarted) || heroDone;
 
@@ -97,12 +98,13 @@ function ClassicInviteExperience({
   }, [heroStarted, data, eventsToShow]);
 
   const inviteCanvas = (
-    <div ref={canvasRef} className={`phone-canvas ${!contentReady ? 'no-scroll' : 'ready-to-snap'} ${previewMode || previewScrollFrame ? 'preview-mode' : ''}`}>
-      {(heroStarted || heroDone) && (
+    <div ref={canvasRef} className={`phone-canvas ${!contentReady ? 'no-scroll' : 'ready-to-snap'} ${previewMode || previewScrollFrame ? 'preview-mode' : ''}`}>      {data.music.audioSrc && (
         <AudioPlayer
           triggerPlay={heroStarted || heroDone}
           audioSrc={data.music.audioSrc}
           title={data.music.title}
+          audioElementId={audioElementId}
+          showControl={heroStarted || heroDone}
         />
       )}
 
@@ -114,6 +116,7 @@ function ClassicInviteExperience({
           onGaneshaReveal={() => undefined}
           onHeroComplete={handleHeroComplete}
           onSkipRevealProgress={handleSkipRevealProgress}
+          audioElementId={audioElementId}
           enableResponsiveVideo={enableResponsiveOpeningVideo}
           showScrollPrompt={heroDone && !data.hero.skipRevealImage}
           previewMode={previewMode}

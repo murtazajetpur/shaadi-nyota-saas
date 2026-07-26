@@ -5,89 +5,142 @@ interface AudioPlayerProps {
     triggerPlay: boolean;
     audioSrc: string;
     title: string;
+    audioElementId?: string;
+    showControl?: boolean;
 }
 
-export default function AudioPlayer({ triggerPlay, audioSrc, title }: AudioPlayerProps) {
+export default function AudioPlayer({ triggerPlay, audioSrc, title, audioElementId, showControl = true }: AudioPlayerProps) {
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    const [isMuted, setIsMuted] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
     const [hasAttemptedPlay, setHasAttemptedPlay] = useState(false);
+    const fadeFrameRef = useRef<number | null>(null);
 
-    const toggleMute = useCallback(() => {
-        setIsMuted((prev) => {
-            const newState = !prev;
+    const fadeInAudio = useCallback(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        if (fadeFrameRef.current !== null) {
+            cancelAnimationFrame(fadeFrameRef.current);
+        }
+
+        const fadeDurationMs = 2000;
+        const startTime = performance.now();
+        const startVolume = Number.isFinite(audio.volume) ? audio.volume : 0;
+
+        const fadeAudio = (currentTime: number) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / fadeDurationMs, 1);
+
             if (audioRef.current) {
-                audioRef.current.muted = newState;
-                // If unmuting and we haven't played yet, play it!
-                if (!newState && audioRef.current.paused) {
-                    audioRef.current.play().catch(e => console.error("Audio playback failed on unmute:", e));
-                }
+                audioRef.current.volume = Math.min(1, startVolume + ((1 - startVolume) * progress));
             }
-            return newState;
-        });
+
+            if (progress < 1) {
+                fadeFrameRef.current = requestAnimationFrame(fadeAudio);
+            } else {
+                fadeFrameRef.current = null;
+            }
+        };
+
+        fadeFrameRef.current = requestAnimationFrame(fadeAudio);
     }, []);
 
-    // Handle initial trigger
-    useEffect(() => {
-        if (!triggerPlay || hasAttemptedPlay || !audioRef.current) return;
-        setHasAttemptedPlay(true);
-
-        // Standard setup
+    const playAudio = useCallback(async (fade = true) => {
         const audio = audioRef.current;
+        if (!audio || !audioSrc) return;
+
         if (!audio.getAttribute('src')) {
             audio.setAttribute('src', audioSrc);
         }
         audio.loop = true;
+        audio.muted = false;
+        if (fade) audio.volume = 0;
 
-        if (isMuted) {
-            audio.muted = true;
-            // The user refined "If muted once, audio must NOT auto-play again during session"
-            // We'll respect that by skipping play entirely if they are starting the session muted.
-            // But if they decide to unmute, the toggle handler will call play()
+        try {
+            await audio.play();
+            setIsPlaying(true);
+            if (fade) fadeInAudio();
+        } catch (err) {
+            setIsPlaying(false);
+            console.warn('Audio playback was blocked by browser:', err);
+        }
+    }, [audioSrc, fadeInAudio]);
+
+    const toggleAudio = useCallback(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        if (!audio.paused && isPlaying) {
+            audio.pause();
+            setIsPlaying(false);
             return;
         }
 
-        audio.volume = 0; // Set strictly 0 BEFORE playing
-        audio.play().then(() => {
-            // Fade in over ~2.0 seconds via requestAnimationFrame
-            const fadeDurationMs = 2000;
-            const startTime = performance.now();
+        void playAudio(false);
+    }, [isPlaying, playAudio]);
 
-            const fadeAudio = (currentTime: number) => {
-                const elapsed = currentTime - startTime;
-                const progress = Math.min(elapsed / fadeDurationMs, 1);
+    useEffect(() => {
+        setHasAttemptedPlay(false);
+        setIsPlaying(false);
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            audioRef.current.setAttribute('src', audioSrc);
+            audioRef.current.load();
+        }
+    }, [audioSrc]);
 
-                if (audioRef.current) {
-                    audioRef.current.volume = progress;
-                }
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return undefined;
 
-                if (progress < 1) {
-                    requestAnimationFrame(fadeAudio);
-                }
-            };
-            requestAnimationFrame(fadeAudio);
-        }).catch((err) => {
-            console.warn("Autoplay was blocked by browser:", err);
-            // Fallback: If autoplay blocked without interaction, we show unmuted but rely on user tapping it to actually start
-        });
-    }, [triggerPlay, hasAttemptedPlay, isMuted, audioSrc]);
+        const handlePlay = () => setIsPlaying(true);
+        const handlePause = () => setIsPlaying(false);
+        const handleEnded = () => setIsPlaying(false);
+
+        audio.addEventListener('play', handlePlay);
+        audio.addEventListener('pause', handlePause);
+        audio.addEventListener('ended', handleEnded);
+
+        return () => {
+            audio.removeEventListener('play', handlePlay);
+            audio.removeEventListener('pause', handlePause);
+            audio.removeEventListener('ended', handleEnded);
+        };
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (fadeFrameRef.current !== null) {
+                cancelAnimationFrame(fadeFrameRef.current);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!triggerPlay || hasAttemptedPlay || !audioRef.current) return;
+        setHasAttemptedPlay(true);
+        void playAudio(true);
+    }, [triggerPlay, hasAttemptedPlay, playAudio]);
 
     return (
-        <div className="audio-player-container">
-            <audio ref={audioRef} preload="none" />
+        <div className={`audio-player-container ${showControl ? '' : 'is-hidden'}`}>
+            <audio id={audioElementId} ref={audioRef} preload="auto" src={audioSrc} loop />
             <button
                 className="mute-btn micro-interaction"
-                onClick={toggleMute}
+                onClick={toggleAudio}
                 title={title}
-                aria-label={isMuted ? 'Play Audio' : 'Pause Audio'}
+                aria-label={isPlaying ? 'Pause Audio' : 'Play Audio'}
+                type="button"
             >
-                {isMuted ? (
-                    <svg viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="currentColor" strokeLinecap="round" strokeLinejoin="round">
-                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                    </svg>
-                ) : (
+                {isPlaying ? (
                     <svg viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="currentColor" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="6" y="4" width="4" height="16"></rect>
                         <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg>
+                ) : (
+                    <svg viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="currentColor" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
                     </svg>
                 )}
             </button>
