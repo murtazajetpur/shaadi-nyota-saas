@@ -32,3 +32,12 @@
 - Generate optimized WebP/AVIF variants for large public assets and set `optimizedSrc` where renderers can safely consume them.
 - Keep old public asset paths available until saved Supabase rows have been migrated or compatibility mapping is no longer needed.
 - Avoid long immutable cache headers for non-hashed public assets. Uploaded assets should continue using unique filenames/paths when content changes.
+
+## Public Invite Image Optimization
+
+- Generated WebP optimized copies for public invite images under `public/assets/optimized/`, preserving the original `public/assets/` files as the source assets.
+- Optimized images are derived at roughly 1080px width, WebP quality 78, with aspect ratio preserved and no intentional crop.
+- Public invite renderers now resolve invite image paths through `getOptimizedAssetPath()` where safe, including opening reveal posters/reveal images, Our Story, Events, RSVP backgrounds, and Closing Gallery media.
+- `assetRegistry` still stores original `src` paths for compatibility, while `optimizedSrc` points at the WebP copy for image assets. External URLs and Supabase Storage URLs are left unchanged.
+- Dashboard picker thumbnails remain separate from public invite optimized images; do not replace thumbnails with full-size optimized invite images.
+- Future image asset additions should keep the original in `public/assets/...` and add a matching WebP under `public/assets/optimized/...` before wiring it into public invite rendering.

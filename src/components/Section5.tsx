@@ -1,7 +1,7 @@
 import { useState, useEffect, type CSSProperties } from 'react';
 import './Section5.css';
 import type { SampleWeddingData } from '../data/sampleWeddingData';
-import { resolveAssetPath } from '../data/assetRegistry';
+import { getOptimizedAssetPath } from '../data/assetRegistry';
 
 interface Section5Props {
     closing: SampleWeddingData['closing'];
@@ -9,8 +9,8 @@ interface Section5Props {
 
 export default function Section5({ closing }: Section5Props) {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const galleryImages = closing.carouselImages.filter(Boolean).map(resolveAssetPath).slice(0, 3);
-    const backgroundImageSrc = resolveAssetPath(closing.backgroundImageSrc);
+    const galleryImages = closing.carouselImages.filter(Boolean).map(getOptimizedAssetPath).slice(0, 3);
+    const backgroundImageSrc = getOptimizedAssetPath(closing.backgroundImageSrc);
     const sectionStyle = backgroundImageSrc
         ? ({ '--closing-background-image': 'url(' + JSON.stringify(backgroundImageSrc) + ')' } as CSSProperties)
         : undefined;

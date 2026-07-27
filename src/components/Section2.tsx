@@ -1,6 +1,6 @@
 import "./Section2.css";
 import type { SampleWeddingData } from "../data/sampleWeddingData";
-import { resolveAssetPath } from "../data/assetRegistry";
+import { getOptimizedAssetPath } from "../data/assetRegistry";
 import OpeningRevealScrollPrompt from './OpeningRevealScrollPrompt';
 
 interface Section2Props {
@@ -17,7 +17,7 @@ export default function Section2({ couple, showScrollPrompt = false }: Section2P
 
             <div
                 className="s2-image-wrapper"
-                style={{ backgroundImage: `url('${resolveAssetPath(couple.backgroundImageSrc)}')` }}
+                style={{ backgroundImage: `url('${getOptimizedAssetPath(couple.backgroundImageSrc)}')` }}
             >
                 {couple.displayName.trim() && <div className="s2-top-names">{couple.displayName}</div>}
                 <div className="s2-heading-container">

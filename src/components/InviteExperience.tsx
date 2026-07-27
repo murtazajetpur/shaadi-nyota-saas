@@ -6,8 +6,7 @@ import DemoWatermarkOverlay from './DemoWatermarkOverlay';
 import { type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
 import { getWeddingSectionConfig, type WeddingSectionConfig } from '../data/sectionConfig';
 import WeddingSectionRenderer from './WeddingSectionRenderer';
-import { resolveAssetPath } from '../data/assetRegistry';
-import { getEventVisualByKey } from '../data/eventVisuals';
+import { getOptimizedAssetPath, resolveAssetPath } from '../data/assetRegistry';
 
 interface InviteExperienceProps {
   data: SampleWeddingData;
@@ -49,6 +48,7 @@ function ClassicInviteExperience({
   const [skipRevealBridgeVisible, setSkipRevealBridgeVisible] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const audioElementId = 'invite-audio-' + data.wedding.slug.replace(/[^a-zA-Z0-9_-]/g, '-');
+  const resolvedAudioSrc = resolveAssetPath(data.music.audioSrc);
   const contentReady = previewMode || forceSectionsVisible || heroDone;
   const sectionsMounted = previewMode || forceSectionsVisible || (!data.hero.skipRevealImage && heroStarted) || heroDone;
 
@@ -72,7 +72,7 @@ function ClassicInviteExperience({
     if (!heroStarted) return;
 
     const preloadImage = (src?: string) => {
-      const resolvedSrc = resolveAssetPath(src ?? '');
+      const resolvedSrc = getOptimizedAssetPath(src ?? '');
       if (!resolvedSrc) return;
       const img = new Image();
       img.decoding = 'async';
@@ -83,25 +83,15 @@ function ClassicInviteExperience({
     if (!data.hero.skipRevealImage) imageSources.add(data.hero.revealImageSrc);
     imageSources.add(data.hero.posterSrc);
     imageSources.add(data.couple.backgroundImageSrc);
-    eventsToShow.forEach((event) => {
-      imageSources.add(event.foregroundImageSrc);
-      imageSources.add(event.backgroundImageSrc);
-      const visual = getEventVisualByKey(event.eventVisualKey);
-      if (visual?.imageSrc) imageSources.add(visual.imageSrc);
-    });
-    data.closing.carouselImages.forEach((src) => imageSources.add(src));
-    imageSources.add(data.closing.frameImageSrc);
-    imageSources.add(data.rsvp.backgroundImageSrc);
-    imageSources.add(data.closing.backgroundImageSrc);
 
     imageSources.forEach(preloadImage);
-  }, [heroStarted, data, eventsToShow]);
+  }, [heroStarted, data.hero.skipRevealImage, data.hero.revealImageSrc, data.hero.posterSrc, data.couple.backgroundImageSrc]);
 
   const inviteCanvas = (
-    <div ref={canvasRef} className={`phone-canvas ${!contentReady ? 'no-scroll' : 'ready-to-snap'} ${previewMode || previewScrollFrame ? 'preview-mode' : ''}`}>      {data.music.audioSrc && (
+    <div ref={canvasRef} className={`phone-canvas ${!contentReady ? 'no-scroll' : 'ready-to-snap'} ${previewMode || previewScrollFrame ? 'preview-mode' : ''}`}>      {resolvedAudioSrc && (
         <AudioPlayer
           triggerPlay={heroStarted || heroDone}
-          audioSrc={data.music.audioSrc}
+          audioSrc={resolvedAudioSrc}
           title={data.music.title}
           audioElementId={audioElementId}
           showControl={heroStarted || heroDone}
@@ -111,7 +101,7 @@ function ClassicInviteExperience({
       {!(data.hero.skipRevealImage && heroDone) && (
         <Hero
           hero={data.hero}
-          audioSrc={data.music.audioSrc}
+          audioSrc={resolvedAudioSrc}
           onHeroStart={() => setHeroStarted(true)}
           onGaneshaReveal={() => undefined}
           onHeroComplete={handleHeroComplete}

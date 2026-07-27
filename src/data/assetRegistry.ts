@@ -1,5 +1,6 @@
 import type { RevealImageType, RevealStyle } from './sampleWeddingData';
 import { assetAspectMetadataBySrc } from './assetAspectRatios';
+import { optimizedAssetPathSet } from './optimizedAssetManifest';
 
 export type AssetType = 'image' | 'video' | 'audio' | 'poster' | 'frame' | 'background';
 export type AssetSection = 'openingReveal' | 'ourStory' | 'events' | 'closingGallery' | 'audio' | 'shared';
@@ -110,6 +111,20 @@ export const normalizeTemplateAssetKey = (templateKey = 'envelope-opening') => (
   templateKeyAliases[templateKey] ?? templateKey
 );
 
+const toOptimizedImagePath = (path?: string | null) => {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  if (!/\.(png|jpe?g)$/i.test(path)) return path;
+  if (path.includes('/assets/thumbnails/')) return path;
+  if (path.includes('/assets/optimized/')) {
+    return optimizedAssetPathSet.has(path) ? path : '';
+  }
+  if (!path.startsWith('/assets/')) return path;
+
+  const optimizedPath = path.replace('/assets/', '/assets/optimized/').replace(/\.(png|jpe?g)$/i, '.webp');
+  return optimizedAssetPathSet.has(optimizedPath) ? optimizedPath : path;
+};
+
 const baseAsset = <T extends RegistryAsset>(asset: T): T => ({
   compatibleThemes: allThemeKeys,
   recommendedForThemes: asset.sourceTheme
@@ -117,7 +132,7 @@ const baseAsset = <T extends RegistryAsset>(asset: T): T => ({
     : undefined,
   ...assetAspectMetadataBySrc[asset.src],
   thumbnailSrc: asset.thumbnailSrc ?? asset.src,
-  optimizedSrc: asset.optimizedSrc ?? asset.src,
+  optimizedSrc: asset.optimizedSrc ?? toOptimizedImagePath(asset.src),
   ...asset,
 });
 
@@ -216,14 +231,14 @@ export const assetRegistry: SectionFirstAssetRegistry = {
         baseAsset({
           id: 'opening-envelope-classic-01',
           label: 'Envelope Opening',
-          src: '/assets/opening-reveal/envelope/videos/opening-envelope-video.mp4',
+          src: '/assets/opening-reveal/envelope/videos/opening-envelope-video-optimized.mp4',
           type: 'video',
           section: 'openingReveal',
           category: 'animation',
           style: 'classic',
           sourceTheme: 'palace-door-opening',
           revealStyle: 'envelope',
-          videoSrc: '/assets/opening-reveal/envelope/videos/opening-envelope-video.mp4',
+          videoSrc: '/assets/opening-reveal/envelope/videos/opening-envelope-video-optimized.mp4',
           tallVideoSrc: '/assets/opening-reveal/envelope/videos/opening-envelope-video-1x2.mp4',
           posterSrc: '/assets/opening-reveal/envelope/posters/opening-envelope-poster.jpeg',
           previewSrc: '/assets/opening-reveal/envelope/posters/opening-envelope-poster.jpeg',
@@ -235,14 +250,14 @@ export const assetRegistry: SectionFirstAssetRegistry = {
         baseAsset({
           id: 'opening-scroll-floral-01',
           label: 'Scroll Opening',
-          src: '/assets/opening-reveal/scroll/videos/opening-scroll-video.mp4',
+          src: '/assets/opening-reveal/scroll/videos/opening-scroll-video-optimized.mp4',
           type: 'video',
           section: 'openingReveal',
           category: 'animation',
           style: 'scroll',
           sourceTheme: 'theme-2',
           revealStyle: 'scroll',
-          videoSrc: '/assets/opening-reveal/scroll/videos/opening-scroll-video.mp4',
+          videoSrc: '/assets/opening-reveal/scroll/videos/opening-scroll-video-optimized.mp4',
           tallVideoSrc: '/assets/opening-reveal/scroll/videos/opening-scroll-video-1x2.mp4',
           posterSrc: '/assets/opening-reveal/scroll/posters/opening-scroll-poster.png',
           previewSrc: '/assets/opening-reveal/scroll/posters/opening-scroll-poster.png',
@@ -254,13 +269,13 @@ export const assetRegistry: SectionFirstAssetRegistry = {
         baseAsset({
           id: 'opening-palace-door-01',
           label: 'Palace Door Opening',
-          src: '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01.mp4',
+          src: '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01-optimized.mp4',
           type: 'video',
           section: 'openingReveal',
           category: 'animation',
           style: 'palace-door',
           revealStyle: 'palace-door',
-          videoSrc: '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01.mp4',
+          videoSrc: '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01-optimized.mp4',
           tallVideoSrc: '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-1x2.mp4',
           posterSrc: '/assets/opening-reveal/palace-door/posters/opening-reveal-palace-door-poster-01.png',
           previewSrc: '/assets/opening-reveal/palace-door/posters/opening-reveal-palace-door-poster-01.png',
@@ -683,15 +698,15 @@ export const assetRegistry: SectionFirstAssetRegistry = {
       ],
     },
     audio: [
-      baseAsset({ id: 'music-din-shagna-da-classic', label: 'Din Shagna Da', src: '/assets/audio/wedding-songs/music-din-shagna-da.mp3', type: 'audio', section: 'audio', category: 'music', style: 'classic', sourceTheme: 'palace-door-opening' }),
-      baseAsset({ id: 'music-din-shagna-da-scroll', label: 'Din Shagna Da', src: '/assets/audio/wedding-songs/music-din-shagna-da.mp3', type: 'audio', section: 'audio', category: 'music', style: 'scroll', sourceTheme: 'theme-2' }),
-      baseAsset({ id: 'music-jashn-e-bahaaraa', label: 'Jashn E Bahaaraa', src: '/assets/audio/wedding-songs/Jashn E Bahaaraa.mp3', type: 'audio', section: 'audio', category: 'music', style: 'romantic' }),
-      baseAsset({ id: 'music-aaja-sajeya-instrumental', label: 'Aaja Sajeya Instrumental', src: '/assets/audio/wedding-songs/Aaja Sajeya Instrumental.mp3', type: 'audio', section: 'audio', category: 'music', style: 'instrumental' }),
-      baseAsset({ id: 'music-classic-wedding-melody', label: 'Classic Wedding Melody', src: '/assets/audio/instrumental/Classic Wedding Melody.mp3', type: 'audio', section: 'audio', category: 'music', style: 'classic' }),
-      baseAsset({ id: 'music-elegant-invitation', label: 'Elegant Invitation', src: '/assets/audio/instrumental/Elegant Invitation.mp3', type: 'audio', section: 'audio', category: 'music', style: 'elegant' }),
-      baseAsset({ id: 'music-punjabi-bhangra-beat', label: 'Punjabi Bhangra Beat', src: '/assets/audio/instrumental/Punjabi Bhangra Beat.mp3', type: 'audio', section: 'audio', category: 'music', style: 'festive' }),
-      baseAsset({ id: 'music-romantic-wedding-background', label: 'Romantic Wedding Background Music', src: '/assets/audio/instrumental/Romantic Wedding Background Music.mp3', type: 'audio', section: 'audio', category: 'music', style: 'romantic' }),
-      baseAsset({ id: 'music-royal-wedding-theme', label: 'Royal Wedding Theme', src: '/assets/audio/instrumental/Royal Wedding Theme.mp3', type: 'audio', section: 'audio', category: 'music', style: 'royal' }),
+      baseAsset({ id: 'music-din-shagna-da-classic', label: 'Din Shagna Da', src: '/assets/audio/wedding-songs/music-din-shagna-da-optimized.mp3', type: 'audio', section: 'audio', category: 'music', style: 'classic', sourceTheme: 'palace-door-opening' }),
+      baseAsset({ id: 'music-din-shagna-da-scroll', label: 'Din Shagna Da', src: '/assets/audio/wedding-songs/music-din-shagna-da-optimized.mp3', type: 'audio', section: 'audio', category: 'music', style: 'scroll', sourceTheme: 'theme-2' }),
+      baseAsset({ id: 'music-jashn-e-bahaaraa', label: 'Jashn E Bahaaraa', src: '/assets/audio/wedding-songs/Jashn E Bahaaraa-optimized.mp3', type: 'audio', section: 'audio', category: 'music', style: 'romantic' }),
+      baseAsset({ id: 'music-aaja-sajeya-instrumental', label: 'Aaja Sajeya Instrumental', src: '/assets/audio/wedding-songs/Aaja Sajeya Instrumental-optimized.mp3', type: 'audio', section: 'audio', category: 'music', style: 'instrumental' }),
+      baseAsset({ id: 'music-classic-wedding-melody', label: 'Classic Wedding Melody', src: '/assets/audio/instrumental/Classic Wedding Melody-optimized.mp3', type: 'audio', section: 'audio', category: 'music', style: 'classic' }),
+      baseAsset({ id: 'music-elegant-invitation', label: 'Elegant Invitation', src: '/assets/audio/instrumental/Elegant Invitation-optimized.mp3', type: 'audio', section: 'audio', category: 'music', style: 'elegant' }),
+      baseAsset({ id: 'music-punjabi-bhangra-beat', label: 'Punjabi Bhangra Beat', src: '/assets/audio/instrumental/Punjabi Bhangra Beat-optimized.mp3', type: 'audio', section: 'audio', category: 'music', style: 'festive' }),
+      baseAsset({ id: 'music-romantic-wedding-background', label: 'Romantic Wedding Background Music', src: '/assets/audio/instrumental/Romantic Wedding Background Music-optimized.mp3', type: 'audio', section: 'audio', category: 'music', style: 'romantic' }),
+      baseAsset({ id: 'music-royal-wedding-theme', label: 'Royal Wedding Theme', src: '/assets/audio/instrumental/Royal Wedding Theme-optimized.mp3', type: 'audio', section: 'audio', category: 'music', style: 'royal' }),
     ],
   },
   themeDefaults: {
@@ -887,13 +902,24 @@ const legacyEventAssetPathMap = Object.fromEntries(
 
 export const legacyAssetPathMap: Record<string, string> = {
   ...legacyEventAssetPathMap,
-  '/assets/hero-v1.mp4': '/assets/opening-reveal/envelope/videos/opening-envelope-video.mp4',
+  '/assets/hero-v1.mp4': '/assets/opening-reveal/envelope/videos/opening-envelope-video-optimized.mp4',
+  '/assets/opening-reveal/envelope/videos/opening-envelope-video.mp4': '/assets/opening-reveal/envelope/videos/opening-envelope-video-optimized.mp4',
+  '/assets/opening-reveal/scroll/videos/opening-scroll-video.mp4': '/assets/opening-reveal/scroll/videos/opening-scroll-video-optimized.mp4',
+  '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01.mp4': '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01-optimized.mp4',
   '/assets/hero-poster-v1.jpeg': '/assets/opening-reveal/envelope/posters/opening-envelope-poster.jpeg',
   '/assets/Ganesha Image.png': '/assets/opening-reveal/envelope/revealed-images/revealed-hindu-classic-01.png',
   '/assets/opening-reveal/envelope/revealed-images/revealed-ganesha-classic-01.png': '/assets/opening-reveal/envelope/revealed-images/revealed-hindu-classic-01.png',
-  '/assets/din-shangda-audio.mp3': '/assets/audio/wedding-songs/music-din-shagna-da.mp3',
+  '/assets/din-shangda-audio.mp3': '/assets/audio/wedding-songs/music-din-shagna-da-optimized.mp3',
+  '/assets/audio/wedding-songs/music-din-shagna-da.mp3': '/assets/audio/wedding-songs/music-din-shagna-da-optimized.mp3',
+  '/assets/audio/wedding-songs/Jashn E Bahaaraa.mp3': '/assets/audio/wedding-songs/Jashn E Bahaaraa-optimized.mp3',
+  '/assets/audio/wedding-songs/Aaja Sajeya Instrumental.mp3': '/assets/audio/wedding-songs/Aaja Sajeya Instrumental-optimized.mp3',
+  '/assets/audio/instrumental/Classic Wedding Melody.mp3': '/assets/audio/instrumental/Classic Wedding Melody-optimized.mp3',
+  '/assets/audio/instrumental/Elegant Invitation.mp3': '/assets/audio/instrumental/Elegant Invitation-optimized.mp3',
+  '/assets/audio/instrumental/Punjabi Bhangra Beat.mp3': '/assets/audio/instrumental/Punjabi Bhangra Beat-optimized.mp3',
+  '/assets/audio/instrumental/Romantic Wedding Background Music.mp3': '/assets/audio/instrumental/Romantic Wedding Background Music-optimized.mp3',
+  '/assets/audio/instrumental/Royal Wedding Theme.mp3': '/assets/audio/instrumental/Royal Wedding Theme-optimized.mp3',
   '/assets/second section old.png': '/assets/our-story/images/story-pheras-01.png',
-  '/assets/theme-2/main-hero-video.mp4': '/assets/opening-reveal/scroll/videos/opening-scroll-video.mp4',
+  '/assets/theme-2/main-hero-video.mp4': '/assets/opening-reveal/scroll/videos/opening-scroll-video-optimized.mp4',
   '/assets/theme-2/hero-poster.png': '/assets/opening-reveal/scroll/posters/opening-scroll-poster.png',
   '/assets/theme-2/first-section.png': '/assets/opening-reveal/scroll/revealed-images/revealed-couple-scroll-01.png',
   '/assets/theme-2/background.png': '/assets/theme-2/background.png',
@@ -926,13 +952,18 @@ export const legacyAssetPathMap: Record<string, string> = {
   '/assets/theme-2/carousel1.png': '/assets/closing-gallery/preset-photos/closing-photo-preset-01.png',
   '/assets/theme-2/carousel2.png': '/assets/closing-gallery/preset-photos/closing-photo-preset-02.png',
   '/assets/theme-2/carousel3.png': '/assets/closing-gallery/preset-photos/closing-photo-preset-03.png',
-  '/assets/theme-2/din-shangda-audio.mp3': '/assets/audio/wedding-songs/music-din-shagna-da.mp3',
+  '/assets/theme-2/din-shangda-audio.mp3': '/assets/audio/wedding-songs/music-din-shagna-da-optimized.mp3',
 };
 
 export const resolveAssetPath = (path?: string | null) => {
   if (!path) return '';
   if (/^https?:\/\//i.test(path)) return path;
   return legacyAssetPathMap[path] ?? path;
+};
+
+export const getOptimizedAssetPath = (path?: string | null) => {
+  const resolvedPath = resolveAssetPath(path);
+  return toOptimizedImagePath(resolvedPath);
 };
 
 export const getThemeDefaults = (themeKey = 'envelope-opening') => (

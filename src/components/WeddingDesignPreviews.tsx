@@ -7,7 +7,7 @@ import {
   type WeddingEvent,
 } from '../data/sampleWeddingData';
 import { getEventVisualByKey, getRecommendedVisualForEvent } from '../data/eventVisuals';
-import { resolveAssetPath } from '../data/assetRegistry';
+import { getOptimizedAssetPath, resolveAssetPath } from '../data/assetRegistry';
 import { loadSupabaseWeddingBySlug } from '../lib/supabaseWeddingData';
 import InviteExperience from './InviteExperience';
 import './WeddingDesignPreviews.css';
@@ -173,7 +173,7 @@ function PreviewRevealHero({ data }: { data: SampleWeddingData }) {
   const [complete, setComplete] = useState(false);
   const [revealOpacity, setRevealOpacity] = useState(0);
   const revealSrc = resolveAssetPath(data.hero.revealImageSrc);
-  const posterSrc = resolveAssetPath(data.hero.posterSrc);
+  const posterSrc = getOptimizedAssetPath(data.hero.posterSrc);
   const fadeWindowSeconds = 1.35;
 
   useEffect(() => {

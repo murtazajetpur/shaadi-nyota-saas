@@ -186,7 +186,7 @@ const sharedThemeMedia = {
     heroFadeAtSeconds: 7.95,
   },
   music: {
-    audioSrc: '/assets/din-shangda-audio.mp3',
+    audioSrc: '/assets/audio/wedding-songs/music-din-shagna-da-optimized.mp3',
     title: 'Din Shagna Da',
   },
   coupleBackgroundImageSrc: '/assets/second section old.png',
@@ -223,13 +223,13 @@ const sharedThemeMedia = {
   },
 };
 
-const theme2OpeningReveal = {
+const scrollOpeningReveal = {
   hero: {
     revealStyle: 'scroll' as RevealStyle,
     revealCtaText: 'Tap to Reveal',
     scrollHintText: '',
-    videoSrc: '/assets/theme-2/main-hero-video.mp4',
-    posterSrc: '/assets/theme-2/hero-poster.png',
+    videoSrc: '/assets/opening-reveal/scroll/videos/opening-scroll-video-optimized.mp4',
+    posterSrc: '/assets/opening-reveal/scroll/posters/opening-scroll-poster.png',
     skipRevealImage: false,
     revealImageSrc: '/assets/opening-reveal/envelope/revealed-images/revealed-generic-classic-01.png',
     revealImageType: 'floral' as RevealImageType,
@@ -238,7 +238,7 @@ const theme2OpeningReveal = {
     heroFadeAtSeconds: 5.5,
   },
   music: {
-    audioSrc: '/assets/theme-2/din-shangda-audio.mp3',
+    audioSrc: '/assets/audio/wedding-songs/music-din-shagna-da-optimized.mp3',
     title: 'Din Shagna Da',
   },
 };
@@ -248,7 +248,7 @@ const palaceDoorOpeningReveal = {
     revealStyle: 'palace-door' as RevealStyle,
     revealCtaText: 'Tap to Reveal',
     scrollHintText: '',
-    videoSrc: '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01.mp4',
+    videoSrc: '/assets/opening-reveal/palace-door/videos/opening-palace-door-video-01-optimized.mp4',
     posterSrc: '/assets/opening-reveal/palace-door/posters/opening-reveal-palace-door-poster-01.png',
     skipRevealImage: false,
     revealImageSrc: '/assets/opening-reveal/envelope/revealed-images/revealed-hindu-classic-01.png',
@@ -272,8 +272,8 @@ export const openingRevealDefaultsByTheme: Record<string, {
     hero: palaceDoorOpeningReveal.hero,
     music: palaceDoorOpeningReveal.music,
   },
-  'scroll-opening': theme2OpeningReveal,
-  'theme-2': theme2OpeningReveal,
+  'scroll-opening': scrollOpeningReveal,
+  'theme-2': scrollOpeningReveal,
 };
 
 export const getOpeningRevealDefaults = (themeKey: string) => {

@@ -11,7 +11,7 @@ import {
     type WeddingGuest,
 } from '../data/sampleWeddingData';
 import { loadSupabasePersonalizedRsvpResponses, saveSupabaseRsvpSubmission } from '../lib/supabaseWeddingData';
-import { resolveAssetPath } from '../data/assetRegistry';
+import { getOptimizedAssetPath } from '../data/assetRegistry';
 
 interface Section4Props {
     rsvp: SampleWeddingData['rsvp'];
@@ -43,7 +43,7 @@ const loadStoredRsvpResponses = () => {
 };
 
 export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, personalizedInviteMode = false }: Section4Props) {
-    const backgroundImageSrc = resolveAssetPath(rsvp.backgroundImageSrc);
+    const backgroundImageSrc = getOptimizedAssetPath(rsvp.backgroundImageSrc);
     const rsvpSectionStyle = backgroundImageSrc
         ? ({ '--rsvp-background-image': 'url(' + JSON.stringify(backgroundImageSrc) + ')' } as CSSProperties)
         : undefined;

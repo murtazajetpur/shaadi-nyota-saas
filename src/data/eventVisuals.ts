@@ -9,6 +9,7 @@ export interface EventVisual {
   themeLabel: string;
   imageSrc: string;
   thumbnailSrc?: string;
+  optimizedSrc?: string;
   style?: string;
   defaultTextStyle: 'light' | 'dark';
   previewObjectPosition?: string;
@@ -52,6 +53,7 @@ const toRegistryEventVisual = (asset: RegistryAsset): EventVisual => {
     themeLabel: themeLabelByKey[sourceTheme] ?? asset.style,
     imageSrc: resolveAssetPath(asset.src),
     thumbnailSrc: resolveAssetPath(asset.thumbnailSrc ?? asset.previewSrc ?? asset.src),
+    optimizedSrc: resolveAssetPath(asset.src),
     style: asset.style,
     defaultTextStyle,
     previewObjectPosition: asset.id === 'event-haldi-premium-05' ? '50% 72%' : 'center center',

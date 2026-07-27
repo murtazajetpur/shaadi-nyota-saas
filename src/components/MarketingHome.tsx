@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './MarketingHome.css';
+import { getOptimizedAssetPath } from '../data/assetRegistry';
 import { buildPaymentWhatsAppUrl, packageDetails } from '../data/paymentConfig';
 import Section2 from './Section2';
 import { EventSection } from './Section3';
@@ -211,7 +212,7 @@ function ShowcaseImage({
   return (
     <img
       className={className}
-      src={src}
+      src={getOptimizedAssetPath(src)}
       alt={alt}
       loading={eager ? 'eager' : 'lazy'}
       decoding="async"

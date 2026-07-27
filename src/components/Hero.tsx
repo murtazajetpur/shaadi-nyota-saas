@@ -4,6 +4,7 @@ import type { SampleWeddingData } from '../data/sampleWeddingData';
 import { getOpeningRevealCrossfadeProgress } from '../data/openingReveal';
 import { useOpeningRevealVideoSrc } from '../hooks/useOpeningRevealVideoSrc';
 import OpeningRevealScrollPrompt from './OpeningRevealScrollPrompt';
+import { getOptimizedAssetPath } from '../data/assetRegistry';
 
 interface HeroProps {
     hero: SampleWeddingData['hero'];
@@ -46,7 +47,7 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
     useEffect(() => {
         if (skipRevealImage || !hero.revealImageSrc) return;
         const revealImage = new Image();
-        revealImage.src = hero.revealImageSrc;
+        revealImage.src = getOptimizedAssetPath(hero.revealImageSrc);
     }, [hero.revealImageSrc, skipRevealImage]);
 
     useEffect(() => {
@@ -184,7 +185,7 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
                     webkit-playsinline="true"
                     className="hero-video"
                     preload="auto"
-                    poster={hero.posterSrc}
+                    poster={getOptimizedAssetPath(hero.posterSrc)}
                     src={videoSrc}
                     onPlay={handleVideoPlay}
                     onTimeUpdate={checkTime}
@@ -203,14 +204,14 @@ export default function Hero({ hero, audioSrc, onHeroStart, onGaneshaReveal, onH
             {skipRevealImage && previewMode ? (
                 <img
                     className="hero-reveal-image"
-                    src={hero.posterSrc}
+                    src={getOptimizedAssetPath(hero.posterSrc)}
                     alt="Opening reveal poster"
                     style={{ opacity: 1 }}
                 />
             ) : !skipRevealImage && (
                 <img
                     className="hero-reveal-image"
-                    src={hero.revealImageSrc}
+                    src={getOptimizedAssetPath(hero.revealImageSrc)}
                     alt={hero.revealImageAlt}
                     style={{ opacity: revealImageOpacity }}
                 />

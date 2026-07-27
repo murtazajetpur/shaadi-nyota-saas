@@ -3,7 +3,7 @@ import './Section3.css';
 import type { RefObject } from 'react';
 import type { SampleWeddingData, WeddingEvent, WeddingGuest } from '../data/sampleWeddingData';
 import { getEventVisualByKey } from '../data/eventVisuals';
-import { resolveAssetPath } from '../data/assetRegistry';
+import { getOptimizedAssetPath } from '../data/assetRegistry';
 import EventAnimationLayer from './EventAnimationLayer';
 
 interface Section3Props {
@@ -156,9 +156,9 @@ export function EventSection({
 }) {
     const selectedVisual = getEventVisualByKey(event.eventVisualKey);
     const eventCategory = normalizeEventCategory(event);
-    const foregroundImage = resolveAssetPath(event.foregroundImageSrc);
-    const backgroundImage = resolveAssetPath(event.backgroundImageSrc);
-    const selectedImage = resolveAssetPath(selectedVisual?.imageSrc);
+    const selectedImage = getOptimizedAssetPath(selectedVisual?.imageSrc);
+    const foregroundImage = selectedImage ? '' : getOptimizedAssetPath(event.foregroundImageSrc);
+    const backgroundImage = selectedImage ? '' : getOptimizedAssetPath(event.backgroundImageSrc);
     const resolvedTextStyle = event.eventTextStyle === 'light' || event.eventTextStyle === 'dark'
         ? event.eventTextStyle
         : selectedVisual?.defaultTextStyle ?? 'dark';
@@ -187,7 +187,7 @@ export function EventSection({
             className={[
                 'section-wrapper',
                 'event-section',
-                `${eventCategory}-bg`,
+                selectedImage ? '' : `${eventCategory}-bg`,
                 selectedImage ? 'event-section-selected-visual' : '',
                 `event-section-text-${resolvedTextStyle}`,
                 `event-section-text-position-${textPosition}`,
