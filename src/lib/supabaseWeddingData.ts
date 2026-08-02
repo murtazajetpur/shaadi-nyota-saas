@@ -845,6 +845,17 @@ const guestToTransactionalRow = (guest: WeddingGuest) => ({
   invited_event_counts: guest.invitedEventCounts ?? {},
 });
 
+async function loadCurrentGuestIdSet(weddingId: string) {
+  if (!supabase) return { ids: new Set<string>(), error: 'Supabase is not configured.' };
+  const { data, error } = await supabase.from('guests').select('id').eq('wedding_id', weddingId);
+  if (error) return { ids: new Set<string>(), error: error.message };
+  return { ids: new Set((data ?? []).map((row) => String(row.id))), error: '' };
+}
+
+function removeStaleGuestIds(guests: WeddingGuest[], currentGuestIds: Set<string>) {
+  return guests.filter((guest) => !isUuid(guest.id) || currentGuestIds.has(guest.id));
+}
+
 const transactionalSaveError = (message?: string | null) => {
   const normalized = message?.toLowerCase() ?? '';
   if (normalized.includes('schema cache') && normalized.includes('save_wedding_')) {
@@ -886,11 +897,13 @@ export async function saveSupabaseRelationalData(
 ) {
   if (!supabase) return { error: 'Supabase is not configured.', detail: '', events: [], guests: [] };
   const supabaseClient = supabase;
+  const currentGuestLookup = await loadCurrentGuestIdSet(weddingId);
+  const guestsToSave = currentGuestLookup.error ? guests : removeStaleGuestIds(guests, currentGuestLookup.ids);
 
   const saveRelationalData = (useLegacyTextPosition = false) => supabaseClient.rpc('save_wedding_relational_data', {
     target_wedding_id: weddingId,
     event_rows: events.map((event, index) => eventToTransactionalRow(event, index, useLegacyTextPosition)),
-    guest_rows: guests.map(guestToTransactionalRow),
+    guest_rows: guestsToSave.map(guestToTransactionalRow),
     guest_mode: guestMode,
   });
 
@@ -1012,9 +1025,19 @@ export async function deleteSupabaseGuest(weddingId: string, guestId: string) {
 
 export async function deleteSupabaseGuests(weddingId: string, guestIds: string[]) {
   if (!supabase) return { error: 'Supabase is not configured.', detail: '', result: null };
+  const candidateGuestIds = Array.from(new Set(guestIds.filter(isUuid)));
+  const currentGuestLookup = await loadCurrentGuestIdSet(weddingId);
+  const guestIdsToDelete = currentGuestLookup.error
+    ? candidateGuestIds
+    : candidateGuestIds.filter((guestId) => currentGuestLookup.ids.has(guestId));
+
+  if (!guestIdsToDelete.length) {
+    return { error: '', detail: '', result: { success: true, deleted_guests: 0, removed_guest_invites: 0, removed_rsvp_responses: 0 } };
+  }
+
   const { data, error } = await supabase.rpc('delete_wedding_guests_transactional', {
     target_wedding_id: weddingId,
-    guest_ids: guestIds,
+    guest_ids: guestIdsToDelete,
   });
   return {
     error: error ? transactionalSaveError(error.message) : '',

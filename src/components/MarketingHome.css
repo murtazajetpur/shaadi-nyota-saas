@@ -1434,3 +1434,226 @@
     background: linear-gradient(180deg, transparent, rgba(181, 138, 60, 0.68), transparent);
   }
 }
+
+/* Premium marketing refinement layer */
+.marketing-home {
+  background:
+    radial-gradient(circle at 14% 10%, rgba(120, 37, 50, 0.1), transparent 28%),
+    radial-gradient(circle at 86% 4%, rgba(195, 160, 94, 0.18), transparent 30%),
+    linear-gradient(180deg, #fffbf4 0%, #f7eadb 48%, #fff8ed 100%);
+}
+
+.marketing-home::before {
+  opacity: 0.78;
+  background:
+    linear-gradient(90deg, rgba(111, 29, 41, 0.035) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(111, 29, 41, 0.028) 1px, transparent 1px),
+    radial-gradient(circle at 52% 28%, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.42), transparent 46%, rgba(126, 36, 42, 0.05));
+  background-size: 72px 72px, 72px 72px, auto, auto;
+}
+
+.marketing-header::after {
+  background: rgba(255, 252, 245, 0.9);
+  box-shadow: 0 16px 44px rgba(68, 28, 20, 0.07);
+}
+
+.marketing-hero {
+  grid-template-columns: minmax(0, 0.92fr) minmax(380px, 1.08fr);
+  gap: clamp(2.5rem, 6vw, 6.5rem);
+  min-height: min(920px, calc(100dvh - 74px));
+  padding-top: clamp(3.5rem, 6vw, 5.5rem);
+}
+
+.marketing-hero h1 {
+  max-width: 720px;
+  font-size: clamp(3.25rem, 6vw, 6.1rem);
+  line-height: 0.94;
+}
+
+.marketing-hero-copy > p:not(.marketing-eyebrow) {
+  max-width: 590px;
+}
+
+.marketing-hero-visual::before {
+  inset: 5% 0 9% 14%;
+  border-color: rgba(184, 138, 62, 0.34);
+  border-radius: 46% 46% 7% 7%;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(255, 255, 255, 0.62), transparent 32%),
+    linear-gradient(180deg, rgba(255, 247, 230, 0.58), rgba(126, 29, 42, 0.045));
+}
+
+.hero-preview-phone {
+  width: min(370px, 67vw);
+  padding: 10px;
+  border-radius: 34px;
+  box-shadow: 0 38px 90px rgba(69, 31, 25, 0.24), inset 0 0 0 1px rgba(255, 255, 255, 0.68);
+}
+
+.hero-preview-screen {
+  border-radius: 25px;
+}
+
+.hero-preview-overlay {
+  padding: 4.5rem 1.1rem 1.25rem;
+  background: linear-gradient(180deg, transparent, rgba(59, 20, 22, 0.76));
+}
+
+.hero-floating-card {
+  width: 142px;
+  border-radius: 20px;
+}
+
+.hero-floating-card.story-card {
+  right: 2%;
+  top: 5%;
+}
+
+.hero-floating-card.event-card {
+  left: 1%;
+  bottom: 7%;
+}
+
+.hero-dashboard-mini {
+  right: 5%;
+  bottom: 4%;
+  min-width: 146px;
+  border-radius: 20px;
+}
+
+.marketing-trust-strip {
+  max-width: 1040px;
+  border-radius: 28px;
+}
+
+.marketing-section {
+  position: relative;
+  padding: clamp(3.6rem, 7vw, 5.8rem) 0;
+}
+
+.marketing-section + .marketing-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(520px, 72vw);
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgba(181, 138, 60, 0.54), transparent);
+}
+
+.marketing-section-heading {
+  max-width: 700px;
+}
+
+.marketing-section h2,
+.marketing-final-cta h2 {
+  font-size: clamp(2.15rem, 4.4vw, 4.25rem);
+  line-height: 0.98;
+}
+
+.template-grid {
+  gap: 1.15rem;
+}
+
+.template-card {
+  border-radius: 24px;
+  background: rgba(255, 252, 245, 0.82);
+}
+
+.template-preview {
+  min-height: 400px;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(255, 255, 255, 0.72), transparent 30%),
+    linear-gradient(135deg, rgba(255, 252, 246, 0.82), rgba(238, 219, 198, 0.8));
+}
+
+.opening-concept-preview {
+  width: min(360px, 86%);
+  min-height: 350px;
+}
+
+.opening-preview-panel,
+.reveal-preview-panel {
+  box-shadow: 0 28px 58px rgba(72, 31, 25, 0.18);
+}
+
+.feature-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.feature-card,
+.step-card,
+.faq-grid article,
+.dashboard-mock-card,
+.pricing-card {
+  background: rgba(255, 252, 245, 0.84);
+}
+
+.dashboard-preview-grid {
+  gap: 1.15rem;
+}
+
+.dashboard-mock-card {
+  border-radius: 24px;
+}
+
+.analytics-number-row div,
+.link-card code {
+  background: rgba(126, 29, 42, 0.055);
+}
+
+.actions-card button {
+  background: rgba(255, 252, 245, 0.9);
+}
+
+.pricing-card {
+  border-radius: 26px;
+  padding: 1.4rem;
+}
+
+.pricing-card.featured {
+  border-color: rgba(117, 29, 43, 0.58);
+  background:
+    radial-gradient(circle at 80% 6%, rgba(255, 231, 179, 0.16), transparent 32%),
+    linear-gradient(180deg, rgba(117, 29, 43, 0.96), rgba(76, 21, 28, 0.96));
+}
+
+.marketing-final-cta {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(194, 153, 76, 0.18), transparent 34%),
+    rgba(255, 252, 245, 0.86);
+}
+
+@media (max-width: 780px) {
+  .marketing-hero {
+    grid-template-columns: 1fr;
+    gap: 1.8rem;
+    padding-top: 2.4rem;
+  }
+
+  .marketing-hero h1 {
+    font-size: clamp(2.55rem, 12vw, 3.55rem);
+  }
+
+  .marketing-hero-visual {
+    min-height: 470px;
+  }
+
+  .hero-preview-phone {
+    width: min(270px, 70vw);
+  }
+
+  .hero-floating-card {
+    width: 108px;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .template-preview {
+    min-height: 350px;
+  }
+}

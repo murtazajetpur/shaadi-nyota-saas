@@ -1793,6 +1793,7 @@ export default function Dashboard({
             }
 
             const nextWedding = normalizeWedding(refreshed.wedding);
+            clearDashboardDraft(dashboardDraftStorageKey);
             setWeddingData(nextWedding);
             weddingDataRef.current = nextWedding;
             setSelectedGuestIds([]);

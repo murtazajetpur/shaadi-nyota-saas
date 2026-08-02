@@ -6,6 +6,7 @@ import CreateWeddingPage from './components/CreateWeddingPage';
 import Dashboard from './components/Dashboard';
 import InviteExperience from './components/InviteExperience';
 import MarketingHome from './components/MarketingHome';
+import MarketingEnvelopePreview from './components/MarketingEnvelopePreview';
 import WeddingDesignPreviews from './components/WeddingDesignPreviews';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import {
@@ -558,6 +559,7 @@ function AppRoutes() {
   const isSignup = firstSegment === 'signup';
   const isCreateWedding = firstSegment === 'create-wedding';
   const isTemplateDemo = firstSegment === 'templates';
+  const isMarketingEnvelopePreview = firstSegment === 'marketing-envelope-preview';
   const isMarketingHome = !firstSegment;
   const isPersonalizedInvite = isPersonalizedInvitePath(window.location.pathname);
   const slug = firstSegment ?? defaultWeddingSlug;
@@ -565,6 +567,10 @@ function AppRoutes() {
 
   if (isMarketingHome) {
     return <MarketingHome />;
+  }
+
+  if (isMarketingEnvelopePreview) {
+    return <MarketingEnvelopePreview />;
   }
 
   if (isLogin) {

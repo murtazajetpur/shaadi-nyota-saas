@@ -34,10 +34,10 @@ const templateCards = [
 ];
 
 const trustValues = [
-  'Opening Reveals',
-  'Event Sections',
-  'RSVP Dashboard',
-  'Guest Links',
+  'Cinematic first tap',
+  'Section-wise styling',
+  'Guest-wise links',
+  'RSVP ready',
 ];
 
 const storyExamples = [
@@ -152,27 +152,25 @@ const functionNames = [
 ];
 
 const features = [
-  ['Cinematic Opening Reveals', 'Envelope, scroll, and palace-door openings that make the first tap feel special.'],
-  ['Section-by-section Customization', 'Choose story visuals, event artwork, closing gallery photos, music, and invite details.'],
-  ['Event-wise Details', 'Haldi, Mehendi, Sangeet, wedding, reception, and custom celebrations can each feel unique.'],
-  ['Guest-wise Invite Links', 'Create personalized invite links for each family or guest group.'],
-  ['RSVP Management', 'Track attendance, event-wise invites, and response status in one dashboard.'],
-  ['WhatsApp Actions', 'Use invite and reminder links to follow up with guests faster.'],
-  ['Mobile-first Design', 'Built for the phone screen where your guests will actually open it.'],
-  ['Manual Payment Support', 'Simple WhatsApp/UPI payment flow with verification before publishing.'],
+  ['Cinematic Opening Reveals', 'Envelope, scroll, and palace-door openings that make the first tap feel ceremonial.'],
+  ['Section-wise Customization', 'Choose story visuals, event artwork, closing gallery photos, music, and invite details.'],
+  ['Event-wise Guest Visibility', 'Show each family only the functions they are invited to, with personalized invite links.'],
+  ['RSVP Management', 'Track attendance, invitees, meal preference, and event-wise responses in one dashboard.'],
+  ['Mobile-first Design', 'Built around the phone screen where guests will actually open the invitation.'],
+  ['Private Preview Flow', 'Review the invite, payment status, and live link before sharing with guests.'],
 ];
 
 const faqs = [
   ['Can I customize sections?', 'Yes. You can edit opening reveal, story, events, music, closing content, and visuals from the dashboard.'],
   ['Can I choose different opening styles?', 'Yes. Start with Classic Envelope, Scroll Opening, or Palace Door Opening, then customize the rest of the invite.'],
-  ['Can guests RSVP online?', 'Yes. RSVP is included in Nyota Plus with event-wise responses, guest list management, and dashboard tracking.'],
-  ['Can I invite different guests to different events?', 'Yes. With Nyota Plus, each guest or family can be invited to the exact events you choose.'],
-  ['Can I manage guests from the dashboard?', 'Yes. Nyota Plus includes guest list management, personalized links, RSVP summaries, and export-ready data.'],
+  ['Can guests RSVP online?', 'Yes. RSVP is included in the RSVP Management plan with event-wise responses, guest list management, and dashboard tracking.'],
+  ['Can I invite different guests to different events?', 'Yes. With the RSVP Management plan, each guest or family can be invited to the exact events you choose.'],
+  ['Can I manage guests from the dashboard?', 'Yes. The RSVP Management plan includes guest list management, personalized links, RSVP summaries, and export-ready data.'],
   ['Can I see a preview before paying?', 'Yes. You can build and review your wedding website before requesting payment verification.'],
   ['Can I use my own photos or visuals?', 'Yes. You can choose from presets and use supported upload flows where available in the builder.'],
   ['Can I update details later?', 'Yes. You can update event details and content from the dashboard, then save the latest version.'],
   ['Is this suitable for Indian wedding functions?', 'Yes. Shaadi Nyota is designed around Haldi, Mehendi, Sangeet, wedding, reception, and custom celebrations.'],
-  ['How does payment work?', 'Payment is handled manually via WhatsApp/UPI. After payment, request verification from your dashboard.'],
+  ['How does payment work?', 'Payment is handled manually. After payment, request verification from your dashboard.'],
 ];
 
 const contactUrl = buildPaymentWhatsAppUrl(
@@ -232,8 +230,8 @@ function HeroProductPreview() {
             eager
           />
           <div className="hero-preview-overlay">
-            <span>Opening Reveal</span>
-            <strong>Royal first tap</strong>
+            <span>Palace Door Opening</span>
+            <strong>Tap to begin</strong>
           </div>
         </div>
       </div>
@@ -246,9 +244,9 @@ function HeroProductPreview() {
         <span>Event Sections</span>
       </div>
       <div className="hero-dashboard-mini">
-        <span>RSVP Dashboard</span>
+        <span>Guest RSVP</span>
         <strong>124</strong>
-        <p>responses tracked</p>
+        <p>responses organized</p>
       </div>
     </div>
   );
@@ -343,14 +341,14 @@ export default function MarketingHome() {
       <section className="marketing-hero">
         <div className="marketing-hero-copy">
           <p className="marketing-eyebrow">Premium Indian wedding websites</p>
-          <h1>Your wedding invitation, reimagined as a royal digital experience.</h1>
+          <h1>A wedding website that feels like your first invitation ceremony.</h1>
           <p>
-            Create a beautiful mobile-first wedding website with cinematic openings,
-            custom event sections, personalized guest links, and RSVP management.
+            Create a mobile-first wedding invite with cinematic openings, event-wise guest links,
+            RSVP tracking, and a closing note that feels personal.
           </p>
           <div className="marketing-hero-actions">
             <a className="marketing-btn primary" href="/create-wedding">Create Your Wedding Website</a>
-            <a className="marketing-btn secondary" href="#openings">Explore Designs</a>
+            <a className="marketing-btn secondary" href="#openings">Preview Starting Styles</a>
           </div>
           <div className="marketing-hero-chips" aria-label="Product highlights">
             {trustValues.map((item) => (
@@ -365,7 +363,7 @@ export default function MarketingHome() {
 
       <section className="marketing-trust-strip" aria-label="Shaadi Nyota highlights">
         {[
-          'Preview before sharing',
+          'Review before sharing',
           'Built for Indian wedding functions',
           'Guest-wise event visibility',
           'Mobile-first for every guest',
@@ -376,9 +374,9 @@ export default function MarketingHome() {
 
       <section className="marketing-section openings-showcase" id="openings">
         <div className="marketing-section-heading">
-          <p className="marketing-eyebrow">Opening Reveals</p>
-          <h2>Choose your opening experience.</h2>
-          <p>Start your invite with a cinematic reveal that matches the mood of your celebration.</p>
+          <p className="marketing-eyebrow">Starting Styles</p>
+          <h2>Begin with a style, then make every section your own.</h2>
+          <p>Use Envelope, Scroll, or Palace Door as a starting point without locking the rest of the website.</p>
         </div>
         <div className="template-grid">
           {templateCards.map((template) => (
@@ -390,7 +388,7 @@ export default function MarketingHome() {
                     <ShowcaseImage src={template.image} alt={`${template.name} opening preview`} />
                   </div>
                   <div className="reveal-preview-panel">
-                    <span>Revealed invite</span>
+                    <span>Reveal</span>
                     <ShowcaseImage src={template.revealImage} alt={`${template.name} revealed invite preview`} />
                   </div>
                 </div>
@@ -399,10 +397,10 @@ export default function MarketingHome() {
                 <h3>{template.name}</h3>
                 <p>{template.description}</p>
                 <div className="template-badges">
-                  {['Cinematic Opening', 'Mobile First', 'RSVP Ready'].map((badge) => <span key={badge}>{badge}</span>)}
+                  {['Watermarked Demo', 'Mobile First', 'Customizable'].map((badge) => <span key={badge}>{badge}</span>)}
                 </div>
                 <div className="template-actions">
-                  <a href={template.previewHref}>Preview</a>
+                  <a href={template.previewHref}>Preview Demo</a>
                   <a href={`/create-wedding?theme=${template.theme}`}>Use This Style</a>
                 </div>
               </div>
@@ -414,8 +412,8 @@ export default function MarketingHome() {
       <section className="marketing-section story-preview-section" id="sections">
         <div className="marketing-section-heading">
           <p className="marketing-eyebrow">Our Story</p>
-          <h2>Tell the story in your visual style.</h2>
-          <p>Choose romantic, royal, floral, or minimal story cards and pair them with your own words.</p>
+          <h2>Tell the story in the same visual language as the invite.</h2>
+          <p>Pick a story visual, adjust the words, and keep the final section preview true to the guest website.</p>
         </div>
         <div className="story-invite-showcase">
           <button
@@ -457,8 +455,8 @@ export default function MarketingHome() {
       <section className="marketing-section event-preview-section">
         <div className="marketing-section-heading">
           <p className="marketing-eyebrow">Event Sections</p>
-          <h2>Every function can have its own mood.</h2>
-          <p>Use premium, sketch, or faceless visuals for each ceremony without locking the whole website to one style.</p>
+          <h2>Every function can carry its own mood.</h2>
+          <p>Use premium, sketch, or faceless visuals for each ceremony while keeping the invite connected.</p>
         </div>
         <div className="event-invite-showcase">
           <button
@@ -500,16 +498,15 @@ export default function MarketingHome() {
       <section className="marketing-section closing-preview-section">
         <div className="marketing-section-heading">
           <p className="marketing-eyebrow">Closing Gallery</p>
-          <h2>End with a beautiful closing gallery.</h2>
-          <p>Add your favourite memories, thank-you message, and final note for your guests.</p>
+          <h2>End with a graceful thank-you moment.</h2>
+          <p>Keep the final note text-first, with optional couple photos inside the closing section.</p>
         </div>
         <div className="closing-gallery-preview">
           <div className="closing-gallery-copy">
             <span>Final thank-you section</span>
-            <h3>Looks like the real closing preview.</h3>
+            <h3>Designed as the final screen guests remember.</h3>
             <p>
-              The final section keeps the same text-first structure from the builder,
-              with optional couple photos shown inside the section.
+              The final section keeps the same builder structure, with optional couple photos shown inside the section.
             </p>
           </div>
           <div className="closing-gallery-phone" aria-label="Closing Gallery preview">
@@ -548,9 +545,9 @@ export default function MarketingHome() {
 
       <section className="marketing-section dashboard-showcase" id="dashboard-showcase">
         <div className="marketing-section-heading">
-          <p className="marketing-eyebrow">Nyota Plus</p>
-          <h2>Manage guests, RSVPs, and follow-ups from one dashboard.</h2>
-          <p>Move beyond manual Excel sheets and endless WhatsApp follow-ups with polished guest tools.</p>
+          <p className="marketing-eyebrow">RSVP Management</p>
+          <h2>Replace scattered guest tracking with one organized dashboard.</h2>
+          <p>Manage families, invited events, personal links, and RSVP responses without losing the elegance of the invite.</p>
         </div>
         <div className="dashboard-preview-grid">
           <article className="dashboard-mock-card guest-list-card">
@@ -579,9 +576,9 @@ export default function MarketingHome() {
             <p>Event-wise summaries help you see who is coming where.</p>
           </article>
           <article className="dashboard-mock-card actions-card">
-            <span>WhatsApp Actions</span>
-            <button type="button">Send Invite</button>
-            <button type="button">Reminder</button>
+            <span>Guest Link Actions</span>
+            <button type="button">Copy Invite Link</button>
+            <button type="button">Preview Guest View</button>
             <button type="button">Copy Guest Link</button>
           </article>
           <article className="dashboard-mock-card link-card">
@@ -595,7 +592,7 @@ export default function MarketingHome() {
       <section className="marketing-section features" id="features">
         <div className="marketing-section-heading">
           <p className="marketing-eyebrow">Features</p>
-          <h2>Everything your wedding invite needs, beautifully managed.</h2>
+          <h2>The essentials, designed around real Indian wedding workflows.</h2>
         </div>
         <div className="feature-grid">
           {features.map(([title, copy]) => (
@@ -614,7 +611,7 @@ export default function MarketingHome() {
         </div>
         <div className="steps-grid">
           {[
-            ['Choose your opening style', 'Start with a cinematic template that matches your wedding mood.'],
+            ['Choose your starting style', 'Start with a cinematic opening that matches the mood of your celebration.'],
             ['Customize each section', 'Edit story visuals, functions, timings, venues, music, and closing content.'],
             ['Share guest-wise links', 'Send one public link or personalized links for RSVP plans.'],
             ['Track RSVPs and responses', 'Review attendance, event visibility, and response status.'],
@@ -631,12 +628,12 @@ export default function MarketingHome() {
       <section className="marketing-section pricing" id="pricing">
         <div className="marketing-section-heading">
           <p className="marketing-eyebrow">Pricing</p>
-          <h2>Choose the plan that fits your celebration.</h2>
+          <h2>Simple pricing for a polished wedding invite.</h2>
         </div>
         <div className="pricing-grid">
           <article className="pricing-card">
-            <p>Basic Wedding Website</p>
-            <h3>Nyota Classic</h3>
+            <p>Basic Website</p>
+            <h3>Basic Website</h3>
             <strong>{packageDetails.basic.priceLabel}</strong>
             <ul>
               <li>Cinematic wedding website</li>
@@ -647,27 +644,26 @@ export default function MarketingHome() {
               <li>Mobile-first guest experience</li>
               <li>Manual payment verification</li>
             </ul>
-            <a className="marketing-btn secondary" href="/create-wedding?plan=basic">Start with Nyota Classic</a>
+            <a className="marketing-btn secondary" href="/create-wedding?plan=basic">Start with Basic Website</a>
           </article>
           <article className="pricing-card featured">
             <p>Website + RSVP Management</p>
-            <h3>Nyota Plus</h3>
+            <h3>Basic Website + RSVP Management</h3>
             <strong>{packageDetails.rsvp.priceLabel}</strong>
             <ul>
-              <li>Everything in Nyota Classic</li>
+              <li>Everything in Basic Website</li>
               <li>Guest list management</li>
               <li>Personalized invite links</li>
               <li>Event-wise guest visibility</li>
               <li>RSVP dashboard</li>
-              <li>WhatsApp invite/reminder links</li>
               <li>RSVP response tracking</li>
             </ul>
-            <a className="marketing-btn primary" href="/create-wedding?plan=rsvp">Start with Nyota Plus</a>
+            <a className="marketing-btn primary" href="/create-wedding?plan=rsvp">Start with RSVP Management</a>
           </article>
         </div>
         <p className="pricing-note">
-          Manual payment via WhatsApp/UPI. After payment, request verification and your website will be
-          reviewed and made live within 24-48 hours.
+          Manual payment and verification keep publishing controlled. After payment, request verification and your
+          website will be reviewed and made live within 24-48 hours.
         </p>
       </section>
 
@@ -691,7 +687,7 @@ export default function MarketingHome() {
         <h2>Make your first wedding impression unforgettable.</h2>
         <div className="marketing-hero-actions">
           <a className="marketing-btn primary" href="/create-wedding">Create Your Wedding Website</a>
-          <a className="marketing-btn secondary" href="#openings">Explore Designs</a>
+          <a className="marketing-btn secondary" href="#openings">Preview Starting Styles</a>
         </div>
       </section>
 
@@ -703,7 +699,7 @@ export default function MarketingHome() {
           <a href="#sections">Sections</a>
           <a href="#pricing">Pricing</a>
           <a href="/login">Login</a>
-          <a href={contactUrl} target="_blank" rel="noreferrer">WhatsApp</a>
+          <a href={contactUrl} target="_blank" rel="noreferrer">Contact</a>
         </nav>
         <small>&copy; {new Date().getFullYear()} Shaadi Nyota. All rights reserved.</small>
       </footer>
