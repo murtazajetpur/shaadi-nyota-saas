@@ -879,8 +879,51 @@ async function loadCurrentGuestIdSet(weddingId: string) {
   return { ids: new Set((data ?? []).map((row) => String(row.id))), error: '' };
 }
 
+async function loadCurrentEventIdSet(weddingId: string) {
+  if (!supabase) return { ids: new Set<string>(), error: 'Supabase is not configured.' };
+  const { data, error } = await supabase.from('events').select('id').eq('wedding_id', weddingId);
+  if (error) return { ids: new Set<string>(), error: error.message };
+  return { ids: new Set((data ?? []).map((row) => String(row.id))), error: '' };
+}
+
 function removeStaleGuestIds(guests: WeddingGuest[], currentGuestIds: Set<string>) {
   return guests.filter((guest) => !isUuid(guest.id) || currentGuestIds.has(guest.id));
+}
+
+function sanitizeRelationalSavePayload(
+  events: WeddingEvent[],
+  guests: WeddingGuest[],
+  currentEventIds: Set<string>
+) {
+  const eventIdRemap = new Map<string, string>();
+  const sanitizedEvents = events.map((event, index) => {
+    if (!isUuid(event.id) || currentEventIds.has(event.id)) return event;
+    const fallbackId = slugifyEventKey(event.eventName || event.eventKey) || `event-${index + 1}`;
+    const nextId = `event-${fallbackId}-${index + 1}`;
+    eventIdRemap.set(event.id, nextId);
+    return { ...event, id: nextId };
+  });
+  const submittedEventIds = new Set(sanitizedEvents.map((event) => event.id));
+  const resolveSubmittedEventId = createEventIdResolver(sanitizedEvents);
+
+  const sanitizedGuests = guests.map((guest) => {
+    const remappedIds = guest.invitedEventIds
+      .map((eventId) => eventIdRemap.get(eventId) ?? eventId)
+      .map((eventId) => submittedEventIds.has(eventId) ? eventId : resolveSubmittedEventId(eventId))
+      .filter((eventId) => Boolean(eventId) && submittedEventIds.has(eventId));
+    const invitedEventIds = Array.from(new Set(remappedIds));
+    const invitedEventCounts = Object.fromEntries(invitedEventIds.map((eventId) => {
+      const originalId = Array.from(eventIdRemap.entries()).find(([, mappedId]) => mappedId === eventId)?.[0] ?? eventId;
+      return [
+        eventId,
+        normalizeInvitedCount(guest.invitedEventCounts?.[eventId] ?? guest.invitedEventCounts?.[originalId] ?? guest.invitedCount),
+      ];
+    }));
+
+    return { ...guest, invitedEventIds, invitedEventCounts };
+  });
+
+  return { events: sanitizedEvents, guests: sanitizedGuests };
 }
 
 const transactionalSaveError = (message?: string | null) => {
@@ -925,12 +968,16 @@ export async function saveSupabaseRelationalData(
   if (!supabase) return { error: 'Supabase is not configured.', detail: '', events: [], guests: [] };
   const supabaseClient = supabase;
   const currentGuestLookup = await loadCurrentGuestIdSet(weddingId);
+  const currentEventLookup = await loadCurrentEventIdSet(weddingId);
   const guestsToSave = currentGuestLookup.error ? guests : removeStaleGuestIds(guests, currentGuestLookup.ids);
+  const relationalPayload = currentEventLookup.error
+    ? { events, guests: guestsToSave }
+    : sanitizeRelationalSavePayload(events, guestsToSave, currentEventLookup.ids);
 
   const saveRelationalData = (useLegacyTextPosition = false) => supabaseClient.rpc('save_wedding_relational_data', {
     target_wedding_id: weddingId,
-    event_rows: events.map((event, index) => eventToTransactionalRow(event, index, useLegacyTextPosition)),
-    guest_rows: guestsToSave.map(guestToTransactionalRow),
+    event_rows: relationalPayload.events.map((event, index) => eventToTransactionalRow(event, index, useLegacyTextPosition)),
+    guest_rows: relationalPayload.guests.map(guestToTransactionalRow),
     guest_mode: guestMode,
   });
 
