@@ -247,6 +247,24 @@ const getLegacyEventTextPosition = (value?: string | null) => (
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const isUuid = (value: string) => uuidPattern.test(value);
+const eventCategoryKeys = ['haldi', 'mehendi', 'sangeet', 'wedding', 'reception', 'generic', 'custom'];
+
+const slugifyEventKey = (value?: string | null) => (
+  value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') ?? ''
+);
+
+const getEventCategoryFromStorageKey = (value?: string | null) => {
+  const normalized = slugifyEventKey(value);
+  if (!normalized) return '';
+
+  return eventCategoryKeys.find((category) => (
+    normalized === category || normalized.startsWith(`${category}-`)
+  )) ?? normalized;
+};
 
 const normalizeEventLookupKey = (value?: string | null) => (
   value?.trim().toLowerCase().replace(/\s+/g, '-') ?? ''
@@ -313,7 +331,7 @@ const resolveSupabaseEventIdsForWedding = async (
 
 const mapEventRow = (row: SupabaseEventRow): WeddingEvent => ({
   id: row.id,
-  eventKey: row.event_key ?? '',
+  eventKey: getEventCategoryFromStorageKey(row.event_key),
   eventVisualKey: row.event_visual_key ?? '',
   eventTextStyle: normalizeEventTextStyle(row.event_text_style),
   eventTextPosition: normalizeEventTextPosition(row.event_text_position),
@@ -577,9 +595,18 @@ const isMissingEventShowInvitedCountColumnError = (message?: string | null) => (
 );
 
 
-const getEventKeyForStorage = (event: WeddingEvent) => (
-  event.eventKey?.trim() || (!isUuid(event.id) ? event.id : null)
-);
+const getEventKeyForStorage = (event: WeddingEvent, sortOrder = 0) => {
+  const category = slugifyEventKey(event.eventKey);
+  const fallbackKey = !isUuid(event.id) ? slugifyEventKey(event.id) : '';
+  const baseKey = category || fallbackKey;
+  if (!baseKey) return null;
+
+  const suffix = isUuid(event.id)
+    ? event.id.slice(0, 8)
+    : slugifyEventKey(event.id || event.eventName) || `event-${sortOrder + 1}`;
+
+  return `${baseKey}-${suffix}`;
+};
 
 const eventToRow = (
   weddingId: string,
@@ -594,7 +621,7 @@ const eventToRow = (
 ) => ({
   id: isUuid(event.id) ? event.id : undefined,
   wedding_id: weddingId,
-  event_key: eventKeyOverride !== undefined ? eventKeyOverride : getEventKeyForStorage(event),
+  event_key: eventKeyOverride !== undefined ? eventKeyOverride : getEventKeyForStorage(event, sortOrder),
   event_visual_key: event.eventVisualKey?.trim() || null,
   event_text_style: normalizeEventTextStyle(event.eventTextStyle),
   ...(includeTextPosition ? { event_text_position: useLegacyTextPosition ? getLegacyEventTextPosition(event.eventTextPosition) : normalizeEventTextPosition(event.eventTextPosition) } : {}),
@@ -812,7 +839,7 @@ const guestToRow = (weddingId: string, guest: WeddingGuest) => ({
 
 const eventToTransactionalRow = (event: WeddingEvent, sortOrder: number, useLegacyTextPosition = false) => ({
   id: event.id,
-  event_key: getEventKeyForStorage(event),
+  event_key: getEventKeyForStorage(event, sortOrder),
   event_visual_key: event.eventVisualKey,
   event_text_style: event.eventTextStyle,
   event_text_position: useLegacyTextPosition ? getLegacyEventTextPosition(event.eventTextPosition) : normalizeEventTextPosition(event.eventTextPosition),
