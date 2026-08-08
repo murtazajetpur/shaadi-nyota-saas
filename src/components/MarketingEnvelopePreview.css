@@ -14,6 +14,7 @@
 
 .marketing-invite-app-container {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .marketing-invite-canvas {
@@ -408,6 +409,24 @@
   max-width: 28rem;
 }
 
+@media (max-width: 600px), (max-height: 700px) {
+  .marketing-invite-page {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    overflow: hidden;
+    background:
+      linear-gradient(rgba(255, 252, 246, 0.92), rgba(255, 252, 246, 0.92)),
+      url('/assets/shared/backgrounds/texture-background-ivory-01.png') center / cover,
+      #f8f5f0;
+  }
+
+  .marketing-invite-app-container {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+  }
+}
 @media (max-width: 430px) {
   .marketing-card-section {
     padding-inline: 1.05rem;

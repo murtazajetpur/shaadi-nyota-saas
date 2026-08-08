@@ -1,0 +1,23 @@
+Create exactly one presenter video for Shaadi Nyota. Do not create variations, a batch, a collection, an alternate take, a product mockup or any follow-up asset.
+
+Before generating, use the currently selected saved character @NyotaBride as Aanya. Preserve her exact approved face, age, medium-brown skin tone, long dark wavy hair, small maroon bindi, natural medium build, ivory kurta, antique-gold detailing and deep-maroon dupatta over her left shoulder. Do not redesign or replace her.
+
+OUTPUT
+- One 8-second video only
+- Vertical 9:16
+- Gemini Omni Flash
+- Synchronized natural speech
+- Medium close-up, eye-level
+- Warm daylight in a quiet cream interior with subtle maroon and antique-gold wedding-planning accents
+- Keep her inside Instagram safe zones
+
+SAY THESE EXACT WORDS
+“Main nahi chahti thi ki hamara wedding invite bas ek aur PDF lage. I wanted it to feel like the wedding.”
+
+PERFORMANCE
+Aanya speaks directly to camera in natural conversational Hinglish. Begin thoughtful and slightly reflective; brighten with gentle conviction on “feel like the wedding.” Use a warm Indian female voice at approximately 155 words per minute. Keep gestures restrained and realistic. In the final half-second, make one small natural handoff gesture toward screen-right so the editor can cut to the real product footage.
+
+DO NOT
+Do not show or generate a phone, website, interface, invitation, logo, readable background text or captions. No bridal costume, heavy jewellery, religious ceremony styling, exaggerated influencer gestures, testimonial delivery, sales pitch, face drift, body drift, distorted hands, watermark or invented product claim.
+
+Return only the single 8-second presenter clip and stop.

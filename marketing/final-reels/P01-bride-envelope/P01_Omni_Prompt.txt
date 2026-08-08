@@ -1,0 +1,62 @@
+SHAADI NYOTA — P01 PRODUCTION PROMPTS
+
+Use each block as a separate Omni/Flow task. Do not ask the agent to locate files, characters, IDs, folders, or earlier outputs that have not been attached in the current task.
+
+=== CHARACTER REFERENCE: AANYA ===
+
+Create a consistent fictional Indian bride character named Aanya for Shaadi Nyota marketing.
+
+Face and hair: Indian woman in her late 20s; warm medium-brown complexion; oval face; expressive brown eyes; long dark softly wavy hair with a clean side part; subtle natural makeup; small maroon bindi; warm, intelligent expression.
+
+Body: average adult height, natural proportionate medium build, relaxed shoulders, realistic arms and hands, natural seated and standing posture. Keep anatomy realistic and consistent. Do not make her extremely thin, stylized, sexualized, or dressed as a ceremonial bride.
+
+Wardrobe: ivory straight-cut kurta with restrained antique-gold embroidery, burgundy dupatta over one shoulder, small gold earrings, and one thin gold bangle. No heavy jewelry, veil, bridal lehenga, ornate headpiece, or mehendi-heavy hands.
+
+Generate matching front-facing medium close-up, three-quarter view, seated mid-shot, and standing full-body references. Keep face, skin tone, hair, body proportions, outfit, and jewelry identical across every view. Clean cream interior, warm daylight, subtle maroon and antique-gold accents. No text, labels, name cards, borders, rectangles, logos, phones, or interface elements.
+
+=== PRESENTER PART A ===
+
+Use the attached approved Aanya reference as the identity target. Create one vertical 9:16 presenter clip at 1080 × 1920 and 30 fps.
+
+SAY THESE EXACT WORDS:
+“Main chahti thi ki hamara invite sirf ek PDF na ho—woh hamari shaadi ki pehli jhalak ho.”
+
+Performance: Aanya is seated and speaks directly to the camera with steady eye contact. Her face must point toward the lens from the first frame; do not have her look toward either side. Calm, personal bride-to-bride delivery, natural Hinglish rhythm, warm but not salesy. Keep her identity, outfit, hair, voice, body proportions, and background consistent with the approved reference.
+
+Framing: eye-level medium close-up, head and shoulders fully inside Instagram safe zones, clean cream interior, warm daylight. No camera drift that changes the framing.
+
+Do not add any readable text, the name Aanya, labels, lower thirds, boxes, rectangles, subtitles, logos, phones, or product UI. No repeated words or duplicated sentence endings. Export only the clean presenter clip.
+
+=== PRESENTER PART B / VOICE ===
+
+Use the same attached approved Aanya reference, voice, outfit, camera, lighting, and background. Create one vertical 9:16 clip with synchronized speech.
+
+SAY THESE EXACT WORDS:
+“Shaadi Nyota par hamari story, saare functions aur zaroori details ek website mein milti hain. Bas link WhatsApp par share karo, aur guests wahi se RSVP kar sakte hain.”
+
+Continue direct-to-camera eye contact and the same calm delivery. Do not add text, labels, boxes, subtitles, logos, phones, or generated product screens. Export a clean clip and clean audio.
+
+=== LARGE HANDHELD PHONE PLATE ===
+
+Create a photorealistic 9:16 physical phone-and-hands plate only. A straight-on modern smartphone must occupy approximately 68–72% of the full frame height and remain large enough for a wedding website recording to be clearly readable. Two realistic Indian hands hold the phone naturally from the lower side edges. Understated ivory sleeves, one restrained gold bangle, warm wedding ambience, burgundy fabric at the bottom, soft golden bokeh in the background.
+
+The phone screen must be a perfectly flat solid chroma-key green area with straight edges for later replacement. Do not generate, redraw, stylize, or invent any interface. No face, body, henna, heavy jewelry, extra fingers, warped phone, perspective tilt, screen glare, readable text, watermark, or logo.
+
+=== ASSEMBLY RULES ===
+
+1. Use the approved clean presenter for approximately 6.67 seconds.
+2. Composite the untouched real Shaadi Nyota screen recording inside the large phone plate. The real UI must remain pixel-accurate.
+3. Show the ceremonial envelope opening clearly. Extend an important reveal with continuous slow motion or motion interpolation; never freeze the opening animation.
+4. WhatsApp sharing can remain in the narration even when no WhatsApp screen recording exists. Do not invent one.
+5. Keep the genuine guest RSVP sequence from the real recording.
+6. Use the approved 2.5-second editorial CTA. Treat “in one click” as text, not a clickable-looking button.
+7. Final format: 1080 × 1920, 30 fps, H.264 video, AAC stereo audio, approximately 19.67 seconds.
+
+FINAL CTA COPY:
+“Send your wedding invite to all your guests in one click.”
+
+Lower action:
+“See the full experience”
+“LINK IN BIO”
+
+Do not add a question mark, arrow, decorative circle, button affordance, extra icon, or overlapping ornament.
