@@ -3,6 +3,10 @@ import './Admin.css';
 import { useAuth } from '../context/AuthContext';
 import {
     activePackageTypes,
+    DEFAULT_GUEST_RECORD_LIMIT,
+    DEFAULT_INVITEE_LIMIT,
+    MAX_GUEST_RECORD_LIMIT,
+    MAX_INVITEE_LIMIT,
     getPackageDisplayLabel,
     getThemeDisplayLabel,
     mockAdminWeddingsStorageKey,
@@ -34,6 +38,8 @@ interface SupabaseWeddingRow {
     bride_name: string | null;
     groom_name: string | null;
     display_name: string | null;
+    guest_record_limit: number | null;
+    invitee_limit: number | null;
     page_title: string | null;
     theme_key: string | null;
     published_at: string | null;
@@ -55,6 +61,8 @@ interface AdminWeddingRecord {
     invitedCount: number | null;
     responseCount: number | null;
     eventCount: number | null;
+    guestRecordLimit: number;
+    inviteeLimit: number;
 }
 
 const getAdminPackageOptions = (currentPackageType?: PackageType) => {
@@ -194,6 +202,8 @@ const mockWeddingToRecord = (wedding: SampleWeddingData, rsvpResponses: StoredRs
     invitedCount: wedding.rsvp.guests.reduce((total, guest) => total + guest.invitedCount, 0),
     responseCount: rsvpResponses.filter((response) => response.weddingSlug === wedding.wedding.slug).length,
     eventCount: wedding.events.length,
+    guestRecordLimit: wedding.wedding.guestRecordLimit ?? DEFAULT_GUEST_RECORD_LIMIT,
+    inviteeLimit: wedding.wedding.inviteeLimit ?? DEFAULT_INVITEE_LIMIT,
 });
 
 const supabaseWeddingToRecord = (
@@ -217,6 +227,8 @@ const supabaseWeddingToRecord = (
         invitedCount: counts.invitedCount ?? 0,
         responseCount: counts.responseCount ?? 0,
         eventCount: counts.eventCount ?? 0,
+        guestRecordLimit: wedding.guest_record_limit ?? DEFAULT_GUEST_RECORD_LIMIT,
+        inviteeLimit: wedding.invitee_limit ?? DEFAULT_INVITEE_LIMIT,
     };
 };
 
@@ -251,7 +263,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
         setIsLoadingWeddings(true);
         const { data, error } = await supabase
             .from('weddings')
-            .select('id, owner_id, slug, package_type, status, payment_status, bride_name, groom_name, display_name, page_title, theme_key, published_at, created_at')
+            .select('id, owner_id, slug, package_type, status, payment_status, bride_name, groom_name, display_name, page_title, theme_key, guest_record_limit, invitee_limit, published_at, created_at')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -408,6 +420,30 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
         }));
     };
 
+    const changeGuestCapacity = (
+        record: AdminWeddingRecord,
+        field: 'guestRecordLimit' | 'inviteeLimit',
+        rawValue: number
+    ) => {
+        const isGuestRecordLimit = field === 'guestRecordLimit';
+        const currentUsage = isGuestRecordLimit ? (record.guestCount ?? 0) : (record.invitedCount ?? 0);
+        const maximum = isGuestRecordLimit ? MAX_GUEST_RECORD_LIMIT : MAX_INVITEE_LIMIT;
+        const value = Math.max(currentUsage, Math.min(maximum, Math.floor(rawValue || currentUsage || 1)));
+        const column = isGuestRecordLimit ? 'guest_record_limit' : 'invitee_limit';
+
+        if (dataSource === 'supabase') {
+            void updateSupabaseWedding(record.id, { [column]: value } as Partial<SupabaseWeddingRow>);
+            return;
+        }
+
+        updateMockWedding(record.slug, (wedding) => ({
+            ...wedding,
+            wedding: {
+                ...wedding.wedding,
+                [field]: value,
+            },
+        }));
+    };
     const markPaid = (record: AdminWeddingRecord) => {
         if (dataSource === 'supabase') {
             void updateSupabaseWedding(record.id, { payment_status: 'paid' } as Partial<SupabaseWeddingRow>);
@@ -676,6 +712,37 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                         </label>
                                                     </div>
 
+                                                    <div className="admin-manage-section">
+                                                        <h3>Guest Capacity</h3>
+                                                        <p className="admin-helper-text">
+                                                            Current usage: {wedding.guestCount ?? 0} guest entries and {wedding.invitedCount ?? 0} people.
+                                                        </p>
+                                                        <div className="admin-limit-grid">
+                                                            <label className="admin-inline-field">
+                                                                <span>Guest entry limit</span>
+                                                                <input
+                                                                    key={`${wedding.id}-guest-limit-${wedding.guestRecordLimit}`}
+                                                                    type="number"
+                                                                    min={Math.max(1, wedding.guestCount ?? 0)}
+                                                                    max={MAX_GUEST_RECORD_LIMIT}
+                                                                    defaultValue={wedding.guestRecordLimit}
+                                                                    onBlur={(event) => changeGuestCapacity(wedding, 'guestRecordLimit', Number(event.target.value))}
+                                                                />
+                                                            </label>
+                                                            <label className="admin-inline-field">
+                                                                <span>Total people limit</span>
+                                                                <input
+                                                                    key={`${wedding.id}-invitee-limit-${wedding.inviteeLimit}`}
+                                                                    type="number"
+                                                                    min={Math.max(1, wedding.invitedCount ?? 0)}
+                                                                    max={MAX_INVITEE_LIMIT}
+                                                                    defaultValue={wedding.inviteeLimit}
+                                                                    onBlur={(event) => changeGuestCapacity(wedding, 'inviteeLimit', Number(event.target.value))}
+                                                                />
+                                                            </label>
+                                                        </div>
+                                                        <p className="admin-helper-text">Couples cannot increase these limits themselves.</p>
+                                                    </div>
                                                     <div className="admin-manage-section">
                                                         <h3>Payment Controls</h3>
                                                         <div className="admin-action-grid">

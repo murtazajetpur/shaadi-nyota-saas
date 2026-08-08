@@ -18,6 +18,13 @@ export type EventAnimationKey =
 export type RevealStyle = 'envelope' | 'scroll' | 'palace-door';
 export type RevealImageType = 'blessing' | 'couple' | 'floral';
 
+export const DEFAULT_GUEST_RECORD_LIMIT = 2000;
+export const DEFAULT_INVITEE_LIMIT = 10000;
+export const MAX_GUEST_RECORD_LIMIT = 10000;
+export const MAX_INVITEE_LIMIT = 100000;
+export const MAX_GUEST_FAMILY_SIZE = 20;
+export const MAX_GUEST_CSV_BYTES = 5 * 1024 * 1024;
+
 export const packageDisplayLabels: Record<PackageType, string> = {
   basic: 'Basic Website',
   rsvp: 'Basic Website + RSVP Management',
@@ -103,6 +110,8 @@ export interface SampleWeddingData {
     paymentStatus: PaymentStatus;
     themeKey: string;
     pageTitle: string;
+    guestRecordLimit: number;
+    inviteeLimit: number;
   };
   hero: {
     revealStyle: RevealStyle;
@@ -292,6 +301,8 @@ export const sampleWeddings: SampleWeddingData[] = [
       paymentStatus: 'paid',
       themeKey: 'palace-door-opening',
       pageTitle: 'Murtaza & Lubna | Shaadi Nyota',
+      guestRecordLimit: DEFAULT_GUEST_RECORD_LIMIT,
+      inviteeLimit: DEFAULT_INVITEE_LIMIT,
     },
     hero: sharedThemeMedia.hero,
     music: sharedThemeMedia.music,
@@ -427,6 +438,8 @@ export const sampleWeddings: SampleWeddingData[] = [
       paymentStatus: 'paid',
       themeKey: 'palace-door-opening',
       pageTitle: 'Ali & Sara | Shaadi Nyota',
+      guestRecordLimit: DEFAULT_GUEST_RECORD_LIMIT,
+      inviteeLimit: DEFAULT_INVITEE_LIMIT,
     },
     hero: sharedThemeMedia.hero,
     music: sharedThemeMedia.music,

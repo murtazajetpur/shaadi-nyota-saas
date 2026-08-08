@@ -20,6 +20,10 @@ import {
     saveSupabaseWeddingSettings,
 } from '../lib/supabaseWeddingData';
 import {
+    DEFAULT_GUEST_RECORD_LIMIT,
+    DEFAULT_INVITEE_LIMIT,
+    MAX_GUEST_CSV_BYTES,
+    MAX_GUEST_FAMILY_SIZE,
     canManageGuests,
     canUpgradePlan,
     canViewRsvpDashboard,
@@ -282,10 +286,29 @@ const guestCsvMetadataHeaders = ['inviteCode', 'inviteLink'];
 const guestCsvLegacyHeaders = ['invitedCount'];
 const invitedCsvValues = new Set(['yes', 'y', 'true', '1']);
 const notInvitedCsvValues = new Set(['no', 'n', 'false', '0']);
+const guestPageSizeOptions = [25, 50, 100] as const;
 
 const normalizeInvitedCount = (value: unknown) => (
     Math.max(1, Math.floor(Number(value) || 1))
 );
+const getGuestCapacityError = (wedding: SampleWeddingData) => {
+    const guestRecordLimit = wedding.wedding.guestRecordLimit ?? DEFAULT_GUEST_RECORD_LIMIT;
+    const inviteeLimit = wedding.wedding.inviteeLimit ?? DEFAULT_INVITEE_LIMIT;
+    const totalPeople = wedding.rsvp.guests.reduce((total, guest) => total + normalizeInvitedCount(guest.invitedCount), 0);
+    const oversizedGuest = wedding.rsvp.guests.find((guest) => normalizeInvitedCount(guest.invitedCount) > MAX_GUEST_FAMILY_SIZE);
+
+    if (oversizedGuest) {
+        return `${oversizedGuest.guestName || 'A guest entry'} has a Family Size above ${MAX_GUEST_FAMILY_SIZE}. Split larger groups into separate guest entries.`;
+    }
+    if (wedding.rsvp.guests.length > guestRecordLimit) {
+        return `This wedding supports up to ${guestRecordLimit.toLocaleString()} guest entries. Remove extra entries or ask Shaadi Nyota to increase the limit.`;
+    }
+    if (totalPeople > inviteeLimit) {
+        return `This wedding supports up to ${inviteeLimit.toLocaleString()} people. Reduce Family Size values or ask Shaadi Nyota to increase the limit.`;
+    }
+
+    return '';
+};
 
 
 const getGuestEventInvitedCount = (guest: WeddingGuest, eventId: string) => (
@@ -557,6 +580,8 @@ export default function Dashboard({
         restoredDashboardDraft ?? (initialWedding ? normalizeWedding(initialWedding) : loadInitialWedding())
     ));
     const [guestSearchQuery, setGuestSearchQuery] = useState('');
+    const [guestPage, setGuestPage] = useState(1);
+    const [guestPageSize, setGuestPageSize] = useState<(typeof guestPageSizeOptions)[number]>(50);
     const [guestImportMode, setGuestImportMode] = useState<CsvImportMode>('append');
     const [selectedGuestCsvFile, setSelectedGuestCsvFile] = useState<File | null>(null);
     const [guestImportWarnings, setGuestImportWarnings] = useState<string[]>([]);
@@ -693,7 +718,11 @@ export default function Dashboard({
             guests: weddingData.rsvp.guests.map((guest) => ({
                 guestName: guest.guestName.trim() ? '' : 'Guest name is required.',
                 phone: guest.phone.trim() ? '' : 'Phone is required.',
-                invitedCount: guest.invitedCount >= 1 ? '' : 'Family size must be at least 1.',
+                invitedCount: guest.invitedCount < 1
+                    ? 'Family size must be at least 1.'
+                    : guest.invitedCount > MAX_GUEST_FAMILY_SIZE
+                        ? 'Family size cannot exceed ' + MAX_GUEST_FAMILY_SIZE + '.'
+                        : '',
                 invitedEventIds: guest.invitedEventIds.length ? '' : 'Select at least one invited event.',
             })),
         };
@@ -724,6 +753,7 @@ export default function Dashboard({
     }), [weddingData.events]);
     const guestSummary = useMemo(() => ({
         totalGuests: weddingData.rsvp.guests.length,
+        totalPeople: weddingData.rsvp.guests.reduce((total, guest) => total + normalizeInvitedCount(guest.invitedCount), 0),
         totalInvitedCount: weddingData.rsvp.guests.reduce((total, guest) => (
             total + guest.invitedEventIds.reduce((eventTotal, eventId) => eventTotal + getGuestEventInvitedCount(guest, eventId), 0)
         ), 0),
@@ -867,7 +897,18 @@ export default function Dashboard({
                 ].some((value) => value.toLowerCase().includes(query));
             });
     }, [guestSearchQuery, rsvpAnalytics.guestSummaryById, weddingData.rsvp.guests]);
-    const areAllFilteredGuestsSelected = filteredGuestRows.length > 0 && filteredGuestRows.every(({ guest }) => (
+    const guestRecordLimit = weddingData.wedding.guestRecordLimit ?? DEFAULT_GUEST_RECORD_LIMIT;
+    const inviteeLimit = weddingData.wedding.inviteeLimit ?? DEFAULT_INVITEE_LIMIT;
+    const totalGuestPages = Math.max(1, Math.ceil(filteredGuestRows.length / guestPageSize));
+    const currentGuestPage = Math.min(guestPage, totalGuestPages);
+    const guestPageStartIndex = (currentGuestPage - 1) * guestPageSize;
+    const paginatedGuestRows = filteredGuestRows.slice(guestPageStartIndex, guestPageStartIndex + guestPageSize);
+    const firstVisibleGuestNumber = filteredGuestRows.length ? guestPageStartIndex + 1 : 0;
+    const lastVisibleGuestNumber = Math.min(guestPageStartIndex + guestPageSize, filteredGuestRows.length);
+    const hasReachedGuestEntryLimit = weddingData.rsvp.guests.length >= guestRecordLimit;
+    const hasReachedInviteeLimit = guestSummary.totalPeople >= inviteeLimit;
+    const cannotAddGuest = hasReachedGuestEntryLimit || hasReachedInviteeLimit;
+    const areAllVisibleGuestsSelected = paginatedGuestRows.length > 0 && paginatedGuestRows.every(({ guest }) => (
         selectedGuestIds.includes(guest.id)
     ));
 
@@ -894,6 +935,12 @@ export default function Dashboard({
         setSaveError('');
         setSaveErrorDetail('');
         setSaveStatus('Saving...');
+        const guestCapacityError = getGuestCapacityError(weddingToSave);
+        if (guestCapacityError) {
+            setSaveStatus('');
+            setSaveError(guestCapacityError);
+            return;
+        }
 
         if (supabaseWeddingId) {
             if (validation.slug || validation.brideName || validation.groomName) {
@@ -1288,6 +1335,16 @@ export default function Dashboard({
 
     const updateGuestFamilySize = (index: number, value: number) => {
         const familySize = normalizeInvitedCount(value);
+        const currentGuest = weddingData.rsvp.guests[index];
+        const nextPeopleTotal = guestSummary.totalPeople - normalizeInvitedCount(currentGuest?.invitedCount) + familySize;
+        if (familySize > MAX_GUEST_FAMILY_SIZE) {
+            setSaveError(`Family Size cannot be more than ${MAX_GUEST_FAMILY_SIZE}. Split larger groups into separate guest entries.`);
+            return;
+        }
+        if (nextPeopleTotal > inviteeLimit) {
+            setSaveError(`This wedding supports up to ${inviteeLimit.toLocaleString()} people. Reduce another Family Size before increasing this one.`);
+            return;
+        }
         updateWeddingData((current) => ({
             ...current,
             rsvp: {
@@ -1384,6 +1441,13 @@ export default function Dashboard({
         }));
     };
     const addGuest = async () => {
+        if (cannotAddGuest) {
+            setSaveError(hasReachedGuestEntryLimit
+                ? `This wedding already has the maximum ${guestRecordLimit.toLocaleString()} guest entries.`
+                : `This wedding already has the maximum ${inviteeLimit.toLocaleString()} people.`);
+            return;
+        }
+        const newGuestPage = Math.ceil((weddingData.rsvp.guests.length + 1) / guestPageSize);
         const newGuest: WeddingGuest = {
             id: `guest-${Date.now()}`,
             guestName: '',
@@ -1400,7 +1464,7 @@ export default function Dashboard({
             if (result.error || !result.guest) {
                 console.warn('Could not add guest', result.error);
                 setSaveErrorDetail(result.error ?? '');
-                setSaveError(`Could not add guest.${isAdminMode ? adminRlsHint : ''}`);
+                setSaveError(result.error || `Could not add guest.${isAdminMode ? adminRlsHint : ''}`);
                 return;
             }
             updateWeddingData((current) => ({
@@ -1410,6 +1474,8 @@ export default function Dashboard({
                     guests: [...current.rsvp.guests, result.guest],
                 },
             }));
+            setGuestSearchQuery('');
+            setGuestPage(newGuestPage);
             return;
         }
 
@@ -1419,7 +1485,9 @@ export default function Dashboard({
                 ...current.rsvp,
                 guests: [...current.rsvp.guests, newGuest],
             },
-        }));
+        }));        setGuestSearchQuery('');
+        setGuestPage(newGuestPage);
+
     };
 
     const getGuestInviteLink = (guest: WeddingGuest) => {
@@ -1492,6 +1560,10 @@ export default function Dashboard({
 
     const importGuestCsvFile = async (file: File) => {
         if (!file) return;
+        if (file.size > MAX_GUEST_CSV_BYTES) {
+            setGuestImportWarnings([`CSV files must be 5 MB or smaller. This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB.`]);
+            return;
+        }
 
         const rows = parseCsv(await file.text());
         if (rows.length < 2) {
@@ -1604,6 +1676,31 @@ export default function Dashboard({
             };
         });
 
+        const importedPeople = importedGuests.reduce((total, guest) => total + normalizeInvitedCount(guest.invitedCount), 0);
+        const resultingGuestEntries = guestImportMode === 'replace'
+            ? importedGuests.length
+            : weddingData.rsvp.guests.length + importedGuests.length;
+        const resultingPeople = guestImportMode === 'replace'
+            ? importedPeople
+            : guestSummary.totalPeople + importedPeople;
+        const capacityErrors: string[] = [];
+        const oversizedRows = importedGuests
+            .map((guest, index) => ({ guest, row: index + 2 }))
+            .filter(({ guest }) => normalizeInvitedCount(guest.invitedCount) > MAX_GUEST_FAMILY_SIZE);
+
+        if (oversizedRows.length) {
+            capacityErrors.push(`${oversizedRows.length} row${oversizedRows.length === 1 ? '' : 's'} exceed the maximum Family Size of ${MAX_GUEST_FAMILY_SIZE}.`);
+        }
+        if (resultingGuestEntries > guestRecordLimit) {
+            capacityErrors.push(`This import would create ${resultingGuestEntries.toLocaleString()} guest entries, above the ${guestRecordLimit.toLocaleString()} limit.`);
+        }
+        if (resultingPeople > inviteeLimit) {
+            capacityErrors.push(`This import would create ${resultingPeople.toLocaleString()} people, above the ${inviteeLimit.toLocaleString()} limit.`);
+        }
+        if (capacityErrors.length) {
+            setGuestImportWarnings([...capacityErrors, ...warnings]);
+            return;
+        }
         if (supabaseWeddingId) {
             const result = await importSupabaseGuests(supabaseWeddingId, importedGuests, guestImportMode, weddingData.events);
             if (result.error) {
@@ -1760,12 +1857,12 @@ export default function Dashboard({
         ));
     };
 
-    const toggleAllFilteredGuests = () => {
-        const filteredIds = filteredGuestRows.map(({ guest }) => guest.id);
+    const toggleAllVisibleGuests = () => {
+        const visibleIds = paginatedGuestRows.map(({ guest }) => guest.id);
         setSelectedGuestIds((current) => (
-            areAllFilteredGuestsSelected
-                ? current.filter((id) => !filteredIds.includes(id))
-                : Array.from(new Set([...current, ...filteredIds]))
+            areAllVisibleGuestsSelected
+                ? current.filter((id) => !visibleIds.includes(id))
+                : Array.from(new Set([...current, ...visibleIds]))
         ));
     };
 
@@ -2281,15 +2378,28 @@ export default function Dashboard({
                                 <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
                                     {saveAllChangesLabel}
                                 </button>
-                                <button className="dashboard-primary-btn" type="button" onClick={addGuest}>Add guest</button>
+                                <button
+                                    className="dashboard-primary-btn"
+                                    type="button"
+                                    disabled={cannotAddGuest}
+                                    title={cannotAddGuest ? 'Guest capacity reached' : undefined}
+                                    onClick={addGuest}
+                                >
+                                    Add guest
+                                </button>
                             </div>
                         </div>
                         <div className="guest-summary-grid">
-                            <InfoBlock label="Families" value={String(guestSummary.totalGuests)} />
-                            <InfoBlock label="Invited count" value={String(guestSummary.totalInvitedCount)} />
+                            <InfoBlock label="Guest Entries" value={`${guestSummary.totalGuests.toLocaleString()} / ${guestRecordLimit.toLocaleString()}`} />
+                            <InfoBlock label="Total People" value={`${guestSummary.totalPeople.toLocaleString()} / ${inviteeLimit.toLocaleString()}`} />
                             <InfoBlock label="Unassigned Families" value={String(guestSummary.noEventGuests)} />
                             <InfoBlock label="Missing phone" value={String(guestSummary.missingPhoneGuests)} />
                         </div>
+                        <p className={`guest-capacity-note${cannotAddGuest ? ' limit-reached' : ''}`}>
+                            {cannotAddGuest
+                                ? 'Guest capacity reached. Remove an entry, reduce Family Size, or contact Shaadi Nyota for a higher limit.'
+                                : `${(guestRecordLimit - guestSummary.totalGuests).toLocaleString()} guest entries and ${(inviteeLimit - guestSummary.totalPeople).toLocaleString()} people remaining.`}
+                        </p>
                         <div className="guest-csv-panel">
                             <div className="guest-csv-panel-header">
                                 <div>
@@ -2306,7 +2416,7 @@ export default function Dashboard({
                                 </button>
                             </div>
                             <p className="guest-csv-helper">
-                                Each event column accepts 0, All, or a number capped by Family Size. 0 means that event is hidden for that guest.
+                                Each event column accepts 0, All, or a number capped by Family Size. CSV files can contain up to the remaining guest capacity and must be 5 MB or smaller.
                             </p>
                             <div className="guest-csv-import-row">
                                 <label className="csv-mode-select">
@@ -2353,7 +2463,10 @@ export default function Dashboard({
                             <span>Search guests</span>
                             <input
                                 value={guestSearchQuery}
-                                onChange={(event) => setGuestSearchQuery(event.target.value)}
+                                onChange={(event) => {
+                                    setGuestSearchQuery(event.target.value);
+                                    setGuestPage(1);
+                                }}
                                 placeholder="Search by guest, phone, or category"
                             />
                         </label>
@@ -2363,11 +2476,11 @@ export default function Dashboard({
                                     <tr>
                                         <th className="guest-select-column">
                                             <input
-                                                aria-label="Select all visible guests"
+                                                aria-label="Select all guests on this page"
                                                 className="guest-select-checkbox"
                                                 type="checkbox"
-                                                checked={areAllFilteredGuestsSelected}
-                                                onChange={toggleAllFilteredGuests}
+                                                checked={areAllVisibleGuestsSelected}
+                                                onChange={toggleAllVisibleGuests}
                                             />
                                         </th>
                                         <th>Guest / Family Name</th>
@@ -2381,7 +2494,7 @@ export default function Dashboard({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredGuestRows.map(({ guest, guestIndex }) => {
+                                    {paginatedGuestRows.map(({ guest, guestIndex }) => {
                                         const guestRsvpSummary = rsvpAnalytics.guestSummaryById.get(guest.id);
                                         const inviteWhatsAppUrl = getGuestWhatsAppUrl(guest, 'invite');
                                         const reminderWhatsAppUrl = getGuestWhatsAppUrl(guest, 'reminder');
@@ -2412,6 +2525,7 @@ export default function Dashboard({
                                                                 className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
                                                                 type="number"
                                                                 min="1"
+                                                                max={MAX_GUEST_FAMILY_SIZE}
                                                                 value={guest.invitedCount}
                                                                 onChange={(event) => updateGuestFamilySize(guestIndex, Number(event.target.value))}
                                                             />
@@ -2531,6 +2645,42 @@ export default function Dashboard({
                                 </p>
                             )}
                         </div>
+                        {filteredGuestRows.length > 0 && (
+                            <div className="guest-pagination" aria-label="Guest list pagination">
+                                <p>
+                                    Showing {firstVisibleGuestNumber.toLocaleString()}-{lastVisibleGuestNumber.toLocaleString()} of {filteredGuestRows.length.toLocaleString()} guest entries
+                                </p>
+                                <label>
+                                    <span>Rows per page</span>
+                                    <select
+                                        value={guestPageSize}
+                                        onChange={(event) => {
+                                            setGuestPageSize(Number(event.target.value) as (typeof guestPageSizeOptions)[number]);
+                                            setGuestPage(1);
+                                        }}
+                                    >
+                                        {guestPageSizeOptions.map((size) => <option key={size} value={size}>{size}</option>)}
+                                    </select>
+                                </label>
+                                <div className="guest-pagination-actions">
+                                    <button
+                                        type="button"
+                                        disabled={currentGuestPage <= 1}
+                                        onClick={() => setGuestPage(Math.max(1, currentGuestPage - 1))}
+                                    >
+                                        Previous
+                                    </button>
+                                    <span>Page {currentGuestPage} of {totalGuestPages}</span>
+                                    <button
+                                        type="button"
+                                        disabled={currentGuestPage >= totalGuestPages}
+                                        onClick={() => setGuestPage(Math.min(totalGuestPages, currentGuestPage + 1))}
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <RsvpPlanLockedPanel title="Guest management is locked" whatsAppContext={paymentWhatsAppContext} />

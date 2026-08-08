@@ -19,6 +19,7 @@ export const optimizedAssetPaths = [
   '/assets/optimized/events/generic/event-generic-background-04.webp',
   '/assets/optimized/events/generic/event-generic-background-04-old.webp',
   '/assets/optimized/events/generic/event-generic-background-05.webp',
+  '/assets/optimized/events/generic/event-generic-background-06.webp',
   '/assets/optimized/events/generic/event-generic-premium-01.webp',
   '/assets/optimized/events/generic/event-generic-premium-02.webp',
   '/assets/optimized/events/generic/event-generic-premium-03.webp',

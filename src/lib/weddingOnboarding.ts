@@ -3,6 +3,8 @@ import {
   defaultOurStorySubtitle,
   defaultOurStoryText,
   defaultOurStoryTitle,
+  DEFAULT_GUEST_RECORD_LIMIT,
+  DEFAULT_INVITEE_LIMIT,
   sampleWeddingData,
   type PackageType,
   type PaymentStatus,
@@ -24,6 +26,8 @@ export interface OwnedWeddingRow {
   bride_name: string | null;
   groom_name: string | null;
   display_name: string | null;
+  guest_record_limit: number | null;
+  invitee_limit: number | null;
   published_at: string | null;
 }
 
@@ -124,6 +128,8 @@ export const buildWeddingShellFromRow = (row: OwnedWeddingRow): SampleWeddingDat
       paymentStatus: row.payment_status,
       themeKey: row.theme_key,
       pageTitle: row.page_title || `${displayName} | Shaadi Nyota`,
+      guestRecordLimit: row.guest_record_limit ?? DEFAULT_GUEST_RECORD_LIMIT,
+      inviteeLimit: row.invitee_limit ?? DEFAULT_INVITEE_LIMIT,
     },
     couple: {
       ...fallback.couple,
@@ -151,7 +157,7 @@ export const getOwnedWeddingForUser = async (userId: string) => {
 
   const { data, error } = await supabase
     .from('weddings')
-    .select('id, owner_id, created_by, slug, package_type, status, payment_status, theme_key, page_title, bride_name, groom_name, display_name, published_at')
+    .select('id, owner_id, created_by, slug, package_type, status, payment_status, theme_key, page_title, bride_name, groom_name, display_name, guest_record_limit, invitee_limit, published_at')
     .eq('owner_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -243,7 +249,7 @@ export const createWeddingShell = async (input: CreateWeddingInput) => {
       theme_key: templateDefaults.normalizedTemplateKey,
       page_title: input.pageTitle,
     })
-    .select('id, owner_id, created_by, slug, package_type, status, payment_status, theme_key, page_title, bride_name, groom_name, display_name, published_at')
+    .select('id, owner_id, created_by, slug, package_type, status, payment_status, theme_key, page_title, bride_name, groom_name, display_name, guest_record_limit, invitee_limit, published_at')
     .single();
 
   if (weddingError || !wedding) {

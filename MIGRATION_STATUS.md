@@ -47,6 +47,14 @@ Running the setup from scratch is a future reproducibility and production-readin
 
 For Closing Gallery uploads, also create a public Supabase Storage bucket named `wedding-assets` and run `supabase/storage_policies.sql`.
 
+## Guest Capacity Controls
+
+- RSVP weddings default to 2,000 guest/family entries and 10,000 total people.
+- Family Size is capped at 20 per guest entry.
+- The Guests tab paginates 50 rows by default with 25/50/100 row options.
+- Admins can override per-wedding limits; couples can view usage but cannot raise limits.
+- Supabase enforces limits for direct writes, CSV imports, and transactional dashboard saves.
+- Apply `supabase/add_guest_limits_and_pagination.sql` after the current Phase 2 and event-field migrations.
 ## Known Limitations
 
 - Theme media and detailed invite copy are still seeded from the existing theme defaults unless edited through current settings.
@@ -59,7 +67,7 @@ For Closing Gallery uploads, also create a public Supabase Storage bucket named 
 - Basic Website dashboards lock Guests and RSVP Dashboard behind an upgrade prompt. RSVP plan and admin editing keep full guest/RSVP access.
 - Custom domains are not implemented yet.
 - The couple dashboard currently assumes one active wedding per couple account.
-- CSV import is browser-side MVP logic and should be hardened further before very large production imports.
+- CSV import validates file size and wedding capacity in the browser and database. A staged server-side import job is still recommended before supporting imports approaching 10,000 rows.
 
 ## Required RLS Summary
 

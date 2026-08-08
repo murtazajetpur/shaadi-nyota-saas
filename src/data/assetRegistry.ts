@@ -679,6 +679,7 @@ export const assetRegistry: SectionFirstAssetRegistry = {
         'event-generic-background-03',
         'event-generic-background-04',
         'event-generic-background-05',
+        'event-generic-background-06',
       ]),
     },
     closingGallery: {

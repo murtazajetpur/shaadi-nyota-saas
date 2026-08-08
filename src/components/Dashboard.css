@@ -98,6 +98,10 @@
     background: #ffffff;
     color: #7a1f1f;
 }
+.dashboard-primary-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
 
 .dashboard-draft-bar {
     display: flex;
@@ -1921,6 +1925,63 @@
     margin-bottom: 18px;
 }
 
+.guest-capacity-note {
+    margin: -6px 0 18px;
+    color: #5f5f5f;
+    font-size: 0.84rem;
+}
+
+.guest-capacity-note.limit-reached {
+    color: #8a241f;
+    font-weight: 600;
+}
+
+.guest-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.guest-pagination p,
+.guest-pagination label,
+.guest-pagination-actions {
+    margin: 0;
+    color: #555555;
+    font-size: 0.82rem;
+}
+
+.guest-pagination label,
+.guest-pagination-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.guest-pagination select,
+.guest-pagination button {
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    border-radius: 6px;
+    padding: 7px 9px;
+    background: #ffffff;
+    color: #1f1f1f;
+    font: inherit;
+}
+
+.guest-pagination button {
+    cursor: pointer;
+}
+
+.guest-pagination button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
 .dashboard-header-actions,
 .guest-csv-toolbar,
 .guest-csv-import-row {
@@ -2424,6 +2485,14 @@
         grid-template-columns: 1fr;
     }
 
+    .guest-pagination {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .guest-pagination-actions {
+        justify-content: space-between;
+    }
     .event-editor-body,
     .opening-reveal-layout,
     .our-story-layout,

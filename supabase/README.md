@@ -221,6 +221,33 @@ Manual checks:
 - Deleting an event shows the guest/RSVP impact warning and cascades only after
   confirmation.
 - Bulk guest delete validates all selected guests before deleting any of them.
+## Guest Capacity And Pagination
+
+Run `supabase/add_guest_limits_and_pagination.sql` after the Phase 2 data-integrity
+SQL and the latest event-field migrations. It adds:
+
+- A default limit of 2,000 guest/family entries per wedding.
+- A default limit of 10,000 people, calculated from guest `Family Size` values.
+- A maximum Family Size of 20 per guest entry.
+- Admin-only per-wedding overrides up to 10,000 guest entries and 100,000 people.
+- Database validation for direct guest writes, CSV append/replace, and full dashboard saves.
+- `save_wedding_relational_data_limited`, which validates the final guest payload
+  before calling the existing Phase 2 transaction.
+
+The Guests tab keeps the complete guest list in memory for transactional-save
+compatibility, but renders 50 rows by default with 25/50/100 row options. This
+reduces table rendering cost without risking deletion of unloaded guest records.
+Server-side pagination should be added only after guest persistence is separated
+from the dashboard's global replace save.
+
+Manual checks:
+
+- Add Guest becomes unavailable at either capacity limit.
+- CSV append and replace reject payloads above the configured limits without
+  changing existing guests.
+- Couples cannot raise limits from the dashboard or direct API calls.
+- Admin Manage controls can raise limits for an individual wedding.
+- Pagination, search, cross-page selection, and bulk delete remain consistent.
 ## Opening Reveal Skip Image Migration
 
 Opening Reveal can skip the post-video reveal image with `wedding_settings.hero_skip_reveal_image`. For existing projects, run `supabase/add_skip_reveal_image.sql` before expecting this setting to persist.

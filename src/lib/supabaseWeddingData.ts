@@ -1,4 +1,6 @@
 import {
+  DEFAULT_GUEST_RECORD_LIMIT,
+  DEFAULT_INVITEE_LIMIT,
   defaultDashboardWeddingSlug,
   getWeddingBySlug,
   type MealPreference,
@@ -31,6 +33,8 @@ export interface SupabaseWeddingRow {
   bride_name: string | null;
   groom_name: string | null;
   display_name: string | null;
+  guest_record_limit?: number | null;
+  invitee_limit?: number | null;
   published_at: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -403,6 +407,8 @@ const mapWeddingBundle = (
       paymentStatus: wedding.payment_status as PaymentStatus,
       themeKey: wedding.theme_key ?? fallback.wedding.themeKey,
       pageTitle: wedding.page_title || `${displayName} | Shaadi Nyota`,
+      guestRecordLimit: wedding.guest_record_limit ?? DEFAULT_GUEST_RECORD_LIMIT,
+      inviteeLimit: wedding.invitee_limit ?? DEFAULT_INVITEE_LIMIT,
     },
     hero: {
       revealStyle,
@@ -928,6 +934,9 @@ function sanitizeRelationalSavePayload(
 
 const transactionalSaveError = (message?: string | null) => {
   const normalized = message?.toLowerCase() ?? '';
+  if (normalized.includes('schema cache') && normalized.includes('save_wedding_relational_data_limited')) {
+    return 'Could not save because the guest limits migration has not been applied. Run supabase/add_guest_limits_and_pagination.sql and try again.';
+  }
   if (normalized.includes('schema cache') && normalized.includes('save_wedding_')) {
     return 'Could not save because the Phase 2 data-integrity SQL has not been applied or Supabase has not refreshed its schema cache. Run supabase/data_integrity_phase_2.sql and try again.';
   }
@@ -940,6 +949,15 @@ const transactionalSaveError = (message?: string | null) => {
     normalized.includes('delete_wedding_guests_transactional')
   )) {
     return 'Could not save because the Phase 2 data-integrity SQL has not been applied or Supabase has not refreshed its schema cache. Run supabase/data_integrity_phase_2.sql and try again.';
+  }
+  if (normalized.includes('guest entry limit')) {
+    return 'This wedding has reached its guest-entry limit. Remove a guest or ask Shaadi Nyota to increase the limit.';
+  }
+  if (normalized.includes('total people limit') || normalized.includes('invitee limit')) {
+    return 'This wedding has reached its total-people limit. Reduce Family Size values or ask Shaadi Nyota to increase the limit.';
+  }
+  if (normalized.includes('family size') && normalized.includes('20')) {
+    return 'Family Size cannot be more than 20 for one guest entry.';
   }
   if (normalized.includes('duplicate') || normalized.includes('unique') || normalized.includes('already exists') || normalized.includes('already used')) {
     return 'A duplicate event key or guest invite code was found. Please make each value unique and try again.';
@@ -974,7 +992,7 @@ export async function saveSupabaseRelationalData(
     ? { events, guests: guestsToSave }
     : sanitizeRelationalSavePayload(events, guestsToSave, currentEventLookup.ids);
 
-  const saveRelationalData = (useLegacyTextPosition = false) => supabaseClient.rpc('save_wedding_relational_data', {
+  const saveRelationalData = (useLegacyTextPosition = false) => supabaseClient.rpc('save_wedding_relational_data_limited', {
     target_wedding_id: weddingId,
     event_rows: relationalPayload.events.map((event, index) => eventToTransactionalRow(event, index, useLegacyTextPosition)),
     guest_rows: relationalPayload.guests.map(guestToTransactionalRow),
@@ -1011,7 +1029,7 @@ export async function createSupabaseGuest(weddingId: string, guest: WeddingGuest
     .single();
 
   return error
-    ? { guest: null, error: error.message }
+    ? { guest: null, error: transactionalSaveError(error.message) }
     : {
       guest: mapGuestRows([data as SupabaseGuestRow], [])[0],
       error: '',

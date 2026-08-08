@@ -81,6 +81,8 @@ create table if not exists public.weddings (
   bride_name text,
   groom_name text,
   display_name text,
+  guest_record_limit integer not null default 2000 check (guest_record_limit between 1 and 10000),
+  invitee_limit integer not null default 10000 check (invitee_limit between 1 and 100000),
   published_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -91,6 +93,8 @@ comment on column public.weddings.owner_id is 'Couple/user who owns the wedding.
 comment on column public.weddings.created_by is 'User/admin who created the wedding record.';
 comment on column public.weddings.package_type is 'Internal values include active basic/rsvp plans plus a legacy compatibility value. Active purchasable plans are basic and rsvp.';
 comment on column public.weddings.payment_status is 'Manual payment workflow values: unpaid, manual_pending, ref_pending, paid.';
+comment on column public.weddings.guest_record_limit is 'Maximum guest/family records. Default 2000; admins may override up to 10000.';
+comment on column public.weddings.invitee_limit is 'Maximum total people across Family Size values. Default 10000; admins may override up to 100000.';
 comment on column public.weddings.published_at is 'Set when status first changes to published.';
 
 create trigger weddings_set_updated_at
@@ -109,7 +113,29 @@ language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
+declare
+  current_guest_count integer;
+  current_people_count integer;
 begin
+  if new.guest_record_limit is distinct from old.guest_record_limit
+    or new.invitee_limit is distinct from old.invitee_limit
+  then
+    select count(*)::integer, coalesce(sum(invited_count), 0)::integer
+    into current_guest_count, current_people_count
+    from public.guests
+    where wedding_id = old.id;
+
+    if new.guest_record_limit < current_guest_count then
+      raise exception 'Guest entry limit cannot be below the current guest count of %.', current_guest_count
+        using errcode = '22023';
+    end if;
+
+    if new.invitee_limit < current_people_count then
+      raise exception 'Total people limit cannot be below the current people count of %.', current_people_count
+        using errcode = '22023';
+    end if;
+  end if;
+
   if auth.uid() is null or public.is_admin() then
     return new;
   end if;
@@ -119,8 +145,10 @@ begin
     or new.published_at is distinct from old.published_at
     or new.owner_id is distinct from old.owner_id
     or new.created_by is distinct from old.created_by
+    or new.guest_record_limit is distinct from old.guest_record_limit
+    or new.invitee_limit is distinct from old.invitee_limit
   then
-    raise exception 'Only an admin can change wedding plan, publication, or ownership fields.'
+    raise exception 'Only an admin can change wedding plan, publication, ownership, or guest capacity fields.'
       using errcode = '42501';
   end if;
 
@@ -238,7 +266,7 @@ create table if not exists public.guests (
   wedding_id uuid not null references public.weddings(id) on delete cascade,
   guest_name text not null,
   phone text,
-  invited_count integer not null default 1 check (invited_count >= 1),
+  invited_count integer not null default 1 check (invited_count between 1 and 20),
   category text,
   invite_code text not null,
   meal_preference text check (meal_preference in ('veg', 'nonVeg', 'jain')),
@@ -257,13 +285,59 @@ for each row execute function public.set_updated_at();
 create index if not exists guests_wedding_id_idx on public.guests(wedding_id);
 create index if not exists guests_phone_idx on public.guests(phone);
 create index if not exists guests_category_idx on public.guests(category);
+create or replace function public.enforce_wedding_guest_capacity()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  target_wedding public.weddings%rowtype;
+  current_guest_count integer;
+  current_people_count integer;
+begin
+  if coalesce(current_setting('app.guest_capacity_validated_for', true), '') = new.wedding_id::text then
+    return new;
+  end if;
+
+  select * into target_wedding
+  from public.weddings
+  where id = new.wedding_id
+  for update;
+
+  if new.invited_count > 20 then
+    raise exception 'Family Size cannot be more than 20 for one guest entry.' using errcode = '22023';
+  end if;
+
+  select count(*)::integer, coalesce(sum(invited_count), 0)::integer
+  into current_guest_count, current_people_count
+  from public.guests
+  where wedding_id = new.wedding_id
+    and id <> new.id;
+
+  if current_guest_count + 1 > target_wedding.guest_record_limit then
+    raise exception 'Guest entry limit of % exceeded.', target_wedding.guest_record_limit using errcode = '22023';
+  end if;
+
+  if current_people_count + new.invited_count > target_wedding.invitee_limit then
+    raise exception 'Total people limit of % exceeded.', target_wedding.invitee_limit using errcode = '22023';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists guests_enforce_wedding_capacity on public.guests;
+create trigger guests_enforce_wedding_capacity
+before insert or update of wedding_id, invited_count on public.guests
+for each row execute function public.enforce_wedding_guest_capacity();
 
 create table if not exists public.guest_event_invites (
   id uuid primary key default gen_random_uuid(),
   wedding_id uuid not null references public.weddings(id) on delete cascade,
   guest_id uuid not null references public.guests(id) on delete cascade,
   event_id uuid not null references public.events(id) on delete cascade,
-  invited_count integer not null default 1 check (invited_count >= 1),
+  invited_count integer not null default 1 check (invited_count between 1 and 20),
   created_at timestamptz not null default now(),
   unique (guest_id, event_id)
 );
