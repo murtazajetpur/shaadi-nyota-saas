@@ -132,12 +132,12 @@ const dashboardTabGroups: Array<{ label: string; tabs: Array<{ id: DashboardTab;
         ],
     },
     {
-        label: 'Guests',
+        label: 'Wedding Management',
         tabs: [
-            { id: 'guests', label: 'Guests' },
-            { id: 'whatsapp', label: 'WhatsApp' },
-            { id: 'rsvp-settings', label: 'RSVP' },
-            { id: 'rsvp', label: 'RSVP Dashboard' },
+            { id: 'guests', label: 'Guest List' },
+            { id: 'whatsapp', label: 'WhatsApp Message' },
+            { id: 'rsvp-settings', label: 'RSVP Form' },
+            { id: 'rsvp', label: 'RSVP Responses' },
         ],
     },
     {
@@ -2512,8 +2512,8 @@ export default function Dashboard({
                     <div className="dashboard-panel">
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
-                                <p className="dashboard-eyebrow">Guests</p>
-                                <h2>Guest invite links</h2>
+                                <p className="dashboard-eyebrow">Guest List</p>
+                                <h2>Manage guests and invite links</h2>
                             </div>
                             <div className="dashboard-header-actions">
                                 {selectedGuestIds.length > 0 && (
@@ -2829,15 +2829,15 @@ export default function Dashboard({
                         )}
                     </div>
                 ) : (
-                    <RsvpPlanLockedPanel title="Guest management is locked" whatsAppContext={paymentWhatsAppContext} />
+                    <RsvpPlanLockedPanel title="Guest List is locked" whatsAppContext={paymentWhatsAppContext} />
                 ))}
 
                 {activeTab === 'whatsapp' && (hasDashboardGuestAccess ? (
                     <div className="dashboard-panel whatsapp-settings-panel">
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
-                                <p className="dashboard-eyebrow">WhatsApp</p>
-                                <h2>Invite message</h2>
+                                <p className="dashboard-eyebrow">WhatsApp Message</p>
+                                <h2>Configure the invite message</h2>
                             </div>
                             <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
                                 {saveAllChangesLabel}
@@ -2907,13 +2907,13 @@ export default function Dashboard({
                         </div>
                     </div>
                 ) : (
-                    <RsvpPlanLockedPanel title="WhatsApp invites are locked" whatsAppContext={paymentWhatsAppContext} />
+                    <RsvpPlanLockedPanel title="WhatsApp Message is locked" whatsAppContext={paymentWhatsAppContext} />
                 ))}
                 {activeTab === 'rsvp-settings' && (hasDashboardRsvpAccess ? (
                     <div className="dashboard-panel rsvp-settings-panel">
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
-                                <p className="dashboard-eyebrow">RSVP</p>
+                                <p className="dashboard-eyebrow">RSVP Form</p>
                                 <h2>RSVP form settings</h2>
                             </div>
                             <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
@@ -2949,14 +2949,14 @@ export default function Dashboard({
                         </section>
                     </div>
                 ) : (
-                    <RsvpPlanLockedPanel title="RSVP is locked" whatsAppContext={paymentWhatsAppContext} />
+                    <RsvpPlanLockedPanel title="RSVP Form is locked" whatsAppContext={paymentWhatsAppContext} />
                 ))}
                 {activeTab === 'rsvp' && (hasDashboardRsvpAccess ? (
                     <div className="dashboard-panel rsvp-dashboard-panel">
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
-                                <p className="dashboard-eyebrow">RSVP Dashboard</p>
-                                <h2>RSVP analytics</h2>
+                                <p className="dashboard-eyebrow">RSVP Responses</p>
+                                <h2>Response analytics</h2>
                             </div>
                             <div className="dashboard-header-actions">
                                 <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
@@ -3039,7 +3039,7 @@ export default function Dashboard({
                         </RsvpTable>
                     </div>
                 ) : (
-                    <RsvpPlanLockedPanel title="RSVP Dashboard is locked" whatsAppContext={paymentWhatsAppContext} />
+                    <RsvpPlanLockedPanel title="RSVP Responses is locked" whatsAppContext={paymentWhatsAppContext} />
                 ))}
 
                 {activeTab === 'closing-gallery' && (

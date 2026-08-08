@@ -341,7 +341,7 @@
     color: var(--color-text);
 }
 
-.rsvp-attending-count-field input {
+.rsvp-attending-count-field select {
     width: 76px;
     min-width: 76px;
     padding: 0.5rem 0.6rem;
@@ -352,6 +352,8 @@
     font-family: var(--font-secondary);
     font-size: 0.92rem;
     text-align: center;
+    text-align-last: center;
+    cursor: pointer;
 }
 
 .rsvp-attending-count-field small {

@@ -262,13 +262,13 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                                 {rsvp.attendingCountEnabled && selectedStatus === 'yes' && (
                                     <label className="rsvp-attending-count-field">
                                         <span>How many people will attend?</span>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            max={maxAttendingCount}
+                                        <select
+                                            aria-label={`Number of people attending ${event.eventName}`}
                                             value={attendingCount}
                                             onChange={(inputEvent) => updateAttendingCount(event.id, Number(inputEvent.target.value), maxAttendingCount)}
-                                        />
+                                        >
+                                            {Array.from({ length: maxAttendingCount + 1 }, (_, count) => <option key={count} value={count}>{count}</option>)}
+                                        </select>
                                         <small>Maximum {maxAttendingCount}</small>
                                     </label>
                                 )}
