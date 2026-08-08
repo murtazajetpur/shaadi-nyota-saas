@@ -73,6 +73,7 @@ import {
 } from '../data/assetRegistry';
 import {
     defaultWhatsAppInviteMessage,
+    normalizeWhatsAppInviteMessage,
     renderWhatsAppInviteMessage,
     whatsAppInviteEmojis,
     whatsAppInviteVariables,
@@ -336,7 +337,19 @@ const normalizeWhatsAppPhone = (phone: string) => {
 const buildWhatsAppUrl = (phone: string, message: string) => {
     const normalizedPhone = normalizeWhatsAppPhone(phone);
     if (!normalizedPhone) return '';
-    return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;
+
+    // WhatsApp Desktop can corrupt emoji text while handling wa.me deep links.
+    // Keep the native wa.me flow on phones, and use WhatsApp Web directly on desktop.
+    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent);
+    const whatsAppUrl = isMobileDevice
+        ? new URL(`https://wa.me/${normalizedPhone}`)
+        : new URL('https://web.whatsapp.com/send');
+
+    if (!isMobileDevice) {
+        whatsAppUrl.searchParams.set('phone', normalizedPhone);
+    }
+    whatsAppUrl.searchParams.set('text', message);
+    return whatsAppUrl.toString();
 };
 
 const normalizeCsvHeader = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -450,7 +463,7 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
         whatsapp: {
             ...defaults.whatsapp,
             ...wedding.whatsapp,
-            inviteMessage: wedding.whatsapp?.inviteMessage ?? defaultWhatsAppInviteMessage,
+            inviteMessage: normalizeWhatsAppInviteMessage(wedding.whatsapp?.inviteMessage ?? defaultWhatsAppInviteMessage),
         },
         couple: {
             ...mergedCouple,

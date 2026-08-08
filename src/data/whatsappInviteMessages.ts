@@ -15,6 +15,37 @@ export const whatsAppInviteVariables = [
   { token: '{inviteLink}', label: 'Invite link' },
 ] as const;
 
+const encodedEmojiRepairs = [
+  ['\u00F0\u009F\u0091\u008B', '\u{1F44B}'],
+  ['\u00F0\u0178\u2018\u2039', '\u{1F44B}'],
+  ['\u00F0\u009F\u0092\u008D', '\u{1F48D}'],
+  ['\u00F0\u0178\u2019\u008D', '\u{1F48D}'],
+  ['\u00E2\u009C\u00A8', '\u2728'],
+  ['\u00E2\u0153\u00A8', '\u2728'],
+] as const;
+
+const replacementCharacterVariants = ['\uFFFD', '\u00EF\u00BF\u00BD'] as const;
+const unresolvedReplacementCharacterPattern = /\uFFFD|\u00EF\u00BF\u00BD/g;
+const fallbackInviteEmojiSequence = ['\u{1F44B}', '\u{1F48D}', '\u2728'] as const;
+
+export const normalizeWhatsAppInviteMessage = (message: string) => {
+  const decodedMessage = encodedEmojiRepairs.reduce(
+    (normalizedMessage, [encoded, emoji]) => normalizedMessage.replaceAll(encoded, emoji),
+    message
+  );
+
+  return replacementCharacterVariants.reduce(
+    (normalizedMessage, marker) => normalizedMessage
+      .replaceAll(`{guestName} ${marker}`, `{guestName} \u{1F44B}`)
+      .replaceAll(`{coupleName}. ${marker}`, `{coupleName}. \u{1F48D}`)
+      .replaceAll(
+        `celebrating with you. ${marker}`,
+        `celebrating with you. \u2728`
+      ),
+    decodedMessage
+  );
+};
+
 export const whatsAppInviteEmojis = ['💍', '✨', '🎉', '❤️', '🙏', '🌸'] as const;
 
 export type WhatsAppInviteMessageValues = {
@@ -40,8 +71,13 @@ export const renderWhatsAppInviteMessage = (
     '{inviteLink}': values.inviteLink,
   };
 
-  return Object.entries(replacements).reduce(
+  const renderedMessage = Object.entries(replacements).reduce(
     (message, [token, value]) => message.replaceAll(token, value),
-    template
+    normalizeWhatsAppInviteMessage(template)
   );
+
+  let replacementIndex = 0;
+  return renderedMessage.replace(unresolvedReplacementCharacterPattern, () => (
+    fallbackInviteEmojiSequence[replacementIndex++] ?? ''
+  ));
 };
