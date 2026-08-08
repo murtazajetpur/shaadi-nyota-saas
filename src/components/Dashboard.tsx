@@ -511,6 +511,8 @@ const dashboardTabIds = new Set<DashboardTab>(
 );
 
 const createDashboardActiveTabStorageKey = (draftStorageKey: string) => `${draftStorageKey}:active-tab`;
+const createDashboardScrollStorageKey = (draftStorageKey: string) => `${draftStorageKey}:scroll-y`;
+const createEventVisualPickerStorageKey = (draftStorageKey: string) => `${draftStorageKey}:event-visual-picker`;
 
 const readDashboardActiveTab = (storageKey: string): DashboardTab => {
     try {
@@ -607,6 +609,8 @@ export default function Dashboard({
         ? createDashboardDraftStorageKey(mode, supabaseWeddingId, initialWedding?.wedding.slug)
         : mockDashboardDraftStorageKey;
     const dashboardActiveTabStorageKey = createDashboardActiveTabStorageKey(dashboardDraftStorageKey);
+    const dashboardScrollStorageKey = createDashboardScrollStorageKey(dashboardDraftStorageKey);
+    const eventVisualPickerStorageKey = createEventVisualPickerStorageKey(dashboardDraftStorageKey);
     const storedDashboardDraft = supabaseWeddingId ? readDashboardDraft(dashboardDraftStorageKey) : null;
     const restoredDashboardDraft = storedDashboardDraft
         ? applyAuthoritativePlanState(storedDashboardDraft, initialWedding)
@@ -680,6 +684,58 @@ export default function Dashboard({
         activeTabStorageKeyRef.current = dashboardActiveTabStorageKey;
         setActiveTab(readDashboardActiveTab(dashboardActiveTabStorageKey));
     }, [dashboardActiveTabStorageKey]);
+
+    useEffect(() => {
+        let restoreFrame = 0;
+        let settleFrame = 0;
+        let persistFrame = 0;
+
+        const persistScrollPosition = () => {
+            try {
+                window.sessionStorage.setItem(dashboardScrollStorageKey, String(window.scrollY));
+            } catch {
+                // Session storage may be unavailable in restricted browser contexts.
+            }
+        };
+        const queueScrollPositionPersist = () => {
+            if (persistFrame) return;
+            persistFrame = window.requestAnimationFrame(() => {
+                persistFrame = 0;
+                persistScrollPosition();
+            });
+        };
+        const restoreScrollPosition = () => {
+            try {
+                const storedScrollY = Number(window.sessionStorage.getItem(dashboardScrollStorageKey));
+                if (!Number.isFinite(storedScrollY) || storedScrollY <= 0) return;
+                restoreFrame = window.requestAnimationFrame(() => {
+                    settleFrame = window.requestAnimationFrame(() => {
+                        window.scrollTo({ top: storedScrollY, behavior: 'auto' });
+                    });
+                });
+            } catch {
+                // Keep the default scroll position when session storage is unavailable.
+            }
+        };
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') persistScrollPosition();
+        };
+
+        restoreScrollPosition();
+        window.addEventListener('scroll', queueScrollPositionPersist, { passive: true });
+        window.addEventListener('pagehide', persistScrollPosition);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            persistScrollPosition();
+            if (restoreFrame) window.cancelAnimationFrame(restoreFrame);
+            if (settleFrame) window.cancelAnimationFrame(settleFrame);
+            if (persistFrame) window.cancelAnimationFrame(persistFrame);
+            window.removeEventListener('scroll', queueScrollPositionPersist);
+            window.removeEventListener('pagehide', persistScrollPosition);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [dashboardScrollStorageKey]);
 
     useEffect(() => {
         const warnBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -2440,6 +2496,7 @@ export default function Dashboard({
                                             themeKey={weddingData.wedding.themeKey}
                                             onSelect={(visualKey) => updateEvent(index, 'eventVisualKey', visualKey)}
                                             isAdminMode={isAdminMode}
+                                            persistenceKey={eventVisualPickerStorageKey}
                                         />
                                     </div>
                                 </div>
@@ -3688,13 +3745,33 @@ function EventVisualPicker({
     themeKey,
     onSelect,
     isAdminMode = false,
+    persistenceKey,
 }: {
     event: WeddingEvent;
     themeKey: string;
     onSelect: (visualKey: string) => void;
     isAdminMode?: boolean;
+    persistenceKey: string;
 }) {
-    const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [isPickerOpen, setIsPickerOpenState] = useState(() => {
+        try {
+            return window.sessionStorage.getItem(persistenceKey) === event.id;
+        } catch {
+            return false;
+        }
+    });
+    const setIsPickerOpen = (isOpen: boolean) => {
+        setIsPickerOpenState(isOpen);
+        try {
+            if (isOpen) {
+                window.sessionStorage.setItem(persistenceKey, event.id);
+            } else if (window.sessionStorage.getItem(persistenceKey) === event.id) {
+                window.sessionStorage.removeItem(persistenceKey);
+            }
+        } catch {
+            // Keep the in-memory modal state when session storage is unavailable.
+        }
+    };
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [styleFilter, setStyleFilter] = useState('all');
     const recommendedVisual = getRecommendedVisualForEvent(event.eventName, event.eventKey, themeKey);

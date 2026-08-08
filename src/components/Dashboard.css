@@ -27,7 +27,7 @@
 
 .dashboard-sidebar h1,
 .dashboard-panel > h2,
-.event-editor h3 {
+.event-editor-header h3 {
     font-family: var(--font-secondary);
     letter-spacing: 0;
     color: #1f1f1f;
@@ -614,7 +614,7 @@
     margin-bottom: 18px;
 }
 
-.event-editor h3 {
+.event-editor-header h3 {
     font-size: 1.1rem;
     font-weight: 500;
 }
