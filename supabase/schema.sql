@@ -184,6 +184,7 @@ create table if not exists public.wedding_settings (
   hero_fade_at_seconds numeric,
   music_audio_src text,
   music_title text,
+  whatsapp_invite_message text,
   couple_enabled boolean not null default true,
   couple_intro_line text,
   couple_blessing_line text,

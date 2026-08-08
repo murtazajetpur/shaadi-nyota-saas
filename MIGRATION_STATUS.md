@@ -102,3 +102,8 @@ For Closing Gallery uploads, also create a public Supabase Storage bucket named 
 4. Add optional invitation delivery workflows after adding timezone-aware event datetime fields.
 5. Add admin wedding creation/support workflows.
 6. Add multi-wedding support per couple account if needed.
+## WhatsApp Invite Message Template
+
+- Dashboard and admin editors can save one invite message template per wedding.
+- Run `supabase/add_whatsapp_invite_message.sql` before saving this field in an existing project.
+- Manual RSVP reminders remain on their existing message; scheduled reminders are not part of this migration.

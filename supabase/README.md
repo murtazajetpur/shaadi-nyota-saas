@@ -251,3 +251,9 @@ Manual checks:
 ## Opening Reveal Skip Image Migration
 
 Opening Reveal can skip the post-video reveal image with `wedding_settings.hero_skip_reveal_image`. For existing projects, run `supabase/add_skip_reveal_image.sql` before expecting this setting to persist.
+## WhatsApp Invite Message
+
+For an existing Supabase project, run `supabase/add_whatsapp_invite_message.sql`
+once. It adds `wedding_settings.whatsapp_invite_message` and refreshes the
+PostgREST schema cache. The Dashboard WhatsApp editor and Guest `Send Invite`
+action use this saved template. Emoji and line breaks are stored as normal text.

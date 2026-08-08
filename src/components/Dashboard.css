@@ -715,11 +715,10 @@
     min-height: 0;
     border-radius: 18px;
     overflow: hidden;
-    background-position: center;
-    background-size: cover;
-    border: 1px solid rgba(0, 0, 0, 0.16);
     background-color: #efe7d9;
+    border: 1px solid rgba(0, 0, 0, 0.16);
     box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14);
+    container-type: inline-size;
 }
 
 .event-live-preview-surface {
@@ -741,57 +740,30 @@
     display: none;
 }
 
-.event-live-preview .section-wrapper,
-.event-live-preview .event-section,
-
-.event-live-preview .event-section-text-position-top .event-content-overlay {
-    top: 8%;
-    height: 40%;
-    padding-top: 0;
-    padding-bottom: 0;
+.event-live-preview .section-wrapper.event-section {
+    width: 100%;
+    min-height: 100%;
+    height: 100%;
 }
 
-.event-live-preview .event-section-text-position-middle .event-content-overlay {
-    top: 30%;
-    height: 40%;
-    padding-top: 0;
-    padding-bottom: 0;
+.event-live-preview .event-content-overlay {
+    padding-right: 4%;
+    padding-left: 4%;
 }
 
-
-.event-live-preview .event-title {
-    font-family: var(--font-primary);
-    font-size: 3.5rem;
-    font-weight: 400;
-    letter-spacing: 0.02em;
-    color: var(--color-text);
-    margin-bottom: 0.5rem;
-    line-height: 1;
+.event-live-preview .event-text-panel {
+    width: 78.25%;
 }
 
-.event-live-preview .wedding-title {
-    font-size: 3.8rem;
+.event-live-preview .event-section-text-position-top .event-details,
+.event-live-preview .event-section-text-position-middle .event-details {
+    margin-bottom: 0.9rem;
 }
 
-.event-live-preview .event-section-text-light .event-title,
-.event-live-preview .event-section-text-light .event-details,
-.event-live-preview .event-section-text-light .minimal-link-btn {
-    color: #ffffff;
-    text-shadow: 0 3px 14px rgba(0, 0, 0, 0.62);
+.event-live-preview .event-section-text-position-top .event-actions,
+.event-live-preview .event-section-text-position-middle .event-actions {
+    gap: 0.65rem;
 }
-
-.event-live-preview .event-section-text-dark .event-title,
-.event-live-preview .event-section-text-dark .event-details,
-.event-live-preview .event-section-text-dark .minimal-link-btn {
-    color: var(--color-text);
-    text-shadow: 0 1px 4px rgba(255, 255, 255, 0.7);
-}
-
-
-
-
-.event-live-preview .event-actions,
-
 
 .event-visual-picker-summary {
     display: flex;
@@ -2547,37 +2519,6 @@
 
 
 
-.event-live-preview .event-section-text-position-top .event-title,
-.event-live-preview .event-section-text-position-middle .event-title {
-    font-size: 3.5rem;
-    line-height: 0.95;
-    margin-bottom: 0.55rem;
-    text-wrap: balance;
-    overflow-wrap: anywhere;
-}
-
-.event-live-preview .event-section-text-position-top .wedding-title,
-.event-live-preview .event-section-text-position-middle .wedding-title {
-    font-size: 3.8rem;
-}
-
-.event-live-preview .event-section-text-position-top .event-details,
-.event-live-preview .event-section-text-position-middle .event-details {
-    font-size: 0.95rem;
-    line-height: 1.48;
-    margin-bottom: clamp(0.9rem, 2vh, 1.25rem);
-}
-
-.event-live-preview .event-section-text-position-top .event-actions,
-.event-live-preview .event-section-text-position-middle .event-actions {
-    gap: clamp(0.65rem, 2.2vw, 1.1rem);
-    flex-wrap: wrap;
-}
-
-.event-live-preview .event-section-text-position-top .minimal-link-btn,
-.event-live-preview .event-section-text-position-middle .minimal-link-btn {
-    font-size: 0.85rem;
-}
 
 
 
@@ -2799,4 +2740,109 @@
     gap: 10px;
     min-width: min(360px, 100%);
 }
+.whatsapp-message-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+    gap: 28px;
+    align-items: start;
+}
 
+.whatsapp-message-composer {
+    min-width: 0;
+}
+
+.whatsapp-message-composer textarea {
+    min-height: 280px;
+    resize: vertical;
+    white-space: pre-wrap;
+}
+
+.whatsapp-message-tools {
+    display: grid;
+    gap: 18px;
+    margin-top: 18px;
+}
+
+.whatsapp-message-tools-label,
+.whatsapp-message-preview > span {
+    display: block;
+    margin-bottom: 8px;
+    color: #6b6b6b;
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.whatsapp-message-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.whatsapp-message-chip,
+.whatsapp-emoji-button {
+    min-height: 36px;
+    border: 1px solid rgba(122, 31, 31, 0.2);
+    border-radius: 8px;
+    background: #fff;
+    color: #4a2525;
+    cursor: pointer;
+    font: inherit;
+}
+
+.whatsapp-message-chip {
+    padding: 8px 10px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 0.76rem;
+}
+
+.whatsapp-emoji-button {
+    width: 38px;
+    padding: 6px;
+    font-size: 1.05rem;
+}
+
+.whatsapp-message-chip:hover,
+.whatsapp-message-chip:focus-visible,
+.whatsapp-emoji-button:hover,
+.whatsapp-emoji-button:focus-visible {
+    border-color: rgba(122, 31, 31, 0.55);
+    outline: none;
+    background: #fff8ef;
+}
+
+.whatsapp-reset-button {
+    margin-top: 18px;
+}
+
+.whatsapp-message-preview {
+    min-width: 0;
+    padding: 18px;
+    border-left: 1px solid rgba(0, 0, 0, 0.1);
+    background: #f5f0e9;
+}
+
+.whatsapp-message-bubble {
+    position: relative;
+    padding: 14px 16px;
+    border-radius: 8px;
+    background: #dcf8c6;
+    color: #222;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+@media (max-width: 900px) {
+    .whatsapp-message-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .whatsapp-message-preview {
+        border-left: 0;
+        border-top: 1px solid rgba(0, 0, 0, 0.1);
+    }
+}

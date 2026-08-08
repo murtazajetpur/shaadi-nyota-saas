@@ -54,6 +54,7 @@ interface SupabaseWeddingSettingsRow {
   hero_fade_at_seconds: number | null;
   music_audio_src: string | null;
   music_title: string | null;
+  whatsapp_invite_message: string | null;
   couple_enabled: boolean | null;
   couple_intro_line: string | null;
   couple_blessing_line: string | null;
@@ -427,6 +428,9 @@ const mapWeddingBundle = (
       audioSrc: valueOr(settings?.music_audio_src, fallback.music.audioSrc),
       title: valueOr(settings?.music_title, fallback.music.title),
     },
+    whatsapp: {
+      inviteMessage: valueOr(settings?.whatsapp_invite_message, fallback.whatsapp.inviteMessage),
+    },
     couple: {
       enabled: settings?.couple_enabled ?? fallback.couple.enabled,
       brideName: wedding.bride_name ?? fallback.couple.brideName,
@@ -747,6 +751,7 @@ export async function saveSupabaseWeddingSettings(weddingId: string, wedding: Sa
     hero_fade_at_seconds: wedding.hero.heroFadeAtSeconds,
     music_audio_src: wedding.music.audioSrc,
     music_title: wedding.music.title,
+    whatsapp_invite_message: wedding.whatsapp.inviteMessage,
     couple_enabled: wedding.couple.enabled,
     couple_intro_line: wedding.couple.introLine,
     couple_blessing_line: wedding.couple.blessingLine,
@@ -807,6 +812,11 @@ export async function saveSupabaseWeddingSettings(weddingId: string, wedding: Sa
     }
 
     const missingColumn = getSchemaCacheMissingColumn(error.message);
+    if (missingColumn === 'whatsapp_invite_message') {
+      return {
+        error: 'WhatsApp invite messages cannot be saved until supabase/add_whatsapp_invite_message.sql has been applied.',
+      };
+    }
     if (missingColumn && closingSettingsColumns.has(missingColumn) && missingColumn in payload) {
       delete payload[missingColumn];
       removedColumns.add(missingColumn);

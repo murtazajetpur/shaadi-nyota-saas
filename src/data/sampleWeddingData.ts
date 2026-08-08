@@ -1,3 +1,5 @@
+import { defaultWhatsAppInviteMessage } from './whatsappInviteMessages';
+
 export type PackageType = 'basic' | 'rsvp' | 'whatsapp';
 export type WeddingStatus = 'draft' | 'unpaid' | 'paid' | 'published' | 'suspended';
 export type PaymentStatus = 'unpaid' | 'paid' | 'manual_pending' | 'ref_pending';
@@ -129,6 +131,9 @@ export interface SampleWeddingData {
   music: {
     audioSrc: string;
     title: string;
+  };
+  whatsapp: {
+    inviteMessage: string;
   };
   couple: {
     enabled: boolean;
@@ -306,6 +311,9 @@ export const sampleWeddings: SampleWeddingData[] = [
     },
     hero: sharedThemeMedia.hero,
     music: sharedThemeMedia.music,
+    whatsapp: {
+      inviteMessage: defaultWhatsAppInviteMessage,
+    },
     couple: {
       enabled: true,
       brideName: 'Lubna',
@@ -443,6 +451,9 @@ export const sampleWeddings: SampleWeddingData[] = [
     },
     hero: sharedThemeMedia.hero,
     music: sharedThemeMedia.music,
+    whatsapp: {
+      inviteMessage: defaultWhatsAppInviteMessage,
+    },
     couple: {
       enabled: true,
       brideName: 'Sara',

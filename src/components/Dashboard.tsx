@@ -71,9 +71,15 @@ import {
     getAudioAssets,
     resolveAssetPath,
 } from '../data/assetRegistry';
+import {
+    defaultWhatsAppInviteMessage,
+    renderWhatsAppInviteMessage,
+    whatsAppInviteEmojis,
+    whatsAppInviteVariables,
+} from '../data/whatsappInviteMessages';
 import { supabase } from '../lib/supabaseClient';
 
-type DashboardTab = 'overview' | 'opening-reveal' | 'our-story' | 'couple' | 'events' | 'guests' | 'rsvp-settings' | 'rsvp' | 'closing-gallery' | 'preview';
+type DashboardTab = 'overview' | 'opening-reveal' | 'our-story' | 'couple' | 'events' | 'guests' | 'whatsapp' | 'rsvp-settings' | 'rsvp' | 'closing-gallery' | 'preview';
 type CsvImportMode = 'append' | 'replace';
 type DashboardMode = 'couple' | 'admin';
 
@@ -129,6 +135,7 @@ const dashboardTabGroups: Array<{ label: string; tabs: Array<{ id: DashboardTab;
         label: 'Guests',
         tabs: [
             { id: 'guests', label: 'Guests' },
+            { id: 'whatsapp', label: 'WhatsApp' },
             { id: 'rsvp-settings', label: 'RSVP' },
             { id: 'rsvp', label: 'RSVP Dashboard' },
         ],
@@ -440,6 +447,11 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
             ...defaults.music,
             ...wedding.music,
         },
+        whatsapp: {
+            ...defaults.whatsapp,
+            ...wedding.whatsapp,
+            inviteMessage: wedding.whatsapp?.inviteMessage ?? defaultWhatsAppInviteMessage,
+        },
         couple: {
             ...mergedCouple,
             introLine: wedding.couple?.introLine ?? '',
@@ -493,6 +505,29 @@ const dashboardDraftStoragePrefix = 'shaadi-nyota-dashboard-draft';
 const createDashboardDraftStorageKey = (mode: DashboardMode, weddingId?: string, slug?: string) => (
     `${dashboardDraftStoragePrefix}:${mode}:${weddingId || slug || 'fallback'}`
 );
+
+const dashboardTabIds = new Set<DashboardTab>(
+    dashboardTabGroups.flatMap((group) => group.tabs.map((tab) => tab.id))
+);
+
+const createDashboardActiveTabStorageKey = (draftStorageKey: string) => `${draftStorageKey}:active-tab`;
+
+const readDashboardActiveTab = (storageKey: string): DashboardTab => {
+    try {
+        const storedTab = window.sessionStorage.getItem(storageKey) as DashboardTab | null;
+        return storedTab && dashboardTabIds.has(storedTab) ? storedTab : 'overview';
+    } catch {
+        return 'overview';
+    }
+};
+
+const writeDashboardActiveTab = (storageKey: string, tab: DashboardTab) => {
+    try {
+        window.sessionStorage.setItem(storageKey, tab);
+    } catch {
+        // Session storage may be unavailable in restricted browser contexts.
+    }
+};
 
 type DashboardDraftSnapshot = {
     savedAt: string;
@@ -571,11 +606,12 @@ export default function Dashboard({
     const dashboardDraftStorageKey = supabaseWeddingId
         ? createDashboardDraftStorageKey(mode, supabaseWeddingId, initialWedding?.wedding.slug)
         : mockDashboardDraftStorageKey;
+    const dashboardActiveTabStorageKey = createDashboardActiveTabStorageKey(dashboardDraftStorageKey);
     const storedDashboardDraft = supabaseWeddingId ? readDashboardDraft(dashboardDraftStorageKey) : null;
     const restoredDashboardDraft = storedDashboardDraft
         ? applyAuthoritativePlanState(storedDashboardDraft, initialWedding)
         : null;
-    const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+    const [activeTab, setActiveTab] = useState<DashboardTab>(() => readDashboardActiveTab(dashboardActiveTabStorageKey));
     const [weddingData, setWeddingData] = useState<SampleWeddingData>(() => (
         restoredDashboardDraft ?? (initialWedding ? normalizeWedding(initialWedding) : loadInitialWedding())
     ));
@@ -601,6 +637,8 @@ export default function Dashboard({
     const weddingDataRef = useRef(weddingData);
     const hasUnsavedChangesRef = useRef(Boolean(restoredDashboardDraft));
     const activeDraftStorageKeyRef = useRef(dashboardDraftStorageKey);
+    const activeTabStorageKeyRef = useRef(dashboardActiveTabStorageKey);
+    const whatsappMessageTextareaRef = useRef<HTMLTextAreaElement | null>(null);
     const isAdminMode = mode === 'admin';
     const visibleStoryImageOptions = storyImageOptions.filter((option) => isAdminMode || option.visibility !== 'admin');
     const hasDashboardGuestAccess = isAdminMode || canManageGuests(weddingData);
@@ -636,6 +674,12 @@ export default function Dashboard({
     useEffect(() => {
         hasUnsavedChangesRef.current = hasUnsavedChanges;
     }, [hasUnsavedChanges]);
+
+    useEffect(() => {
+        if (activeTabStorageKeyRef.current === dashboardActiveTabStorageKey) return;
+        activeTabStorageKeyRef.current = dashboardActiveTabStorageKey;
+        setActiveTab(readDashboardActiveTab(dashboardActiveTabStorageKey));
+    }, [dashboardActiveTabStorageKey]);
 
     useEffect(() => {
         const warnBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -1496,14 +1540,56 @@ export default function Dashboard({
 
     const getGuestInviteUrl = (guest: WeddingGuest) => `${window.location.origin}${getGuestInviteLink(guest)}`;
 
+    const updateWhatsAppInviteMessage = (inviteMessage: string) => {
+        updateWeddingData((current) => ({
+            ...current,
+            whatsapp: {
+                ...current.whatsapp,
+                inviteMessage,
+            },
+        }));
+    };
+
+    const insertWhatsAppMessageContent = (content: string) => {
+        const textarea = whatsappMessageTextareaRef.current;
+        const message = weddingData.whatsapp.inviteMessage;
+        const selectionStart = textarea?.selectionStart ?? message.length;
+        const selectionEnd = textarea?.selectionEnd ?? selectionStart;
+        const nextMessage = `${message.slice(0, selectionStart)}${content}${message.slice(selectionEnd)}`;
+        const nextCursorPosition = selectionStart + content.length;
+
+        updateWhatsAppInviteMessage(nextMessage);
+        window.requestAnimationFrame(() => {
+            whatsappMessageTextareaRef.current?.focus();
+            whatsappMessageTextareaRef.current?.setSelectionRange(nextCursorPosition, nextCursorPosition);
+        });
+    };
+
     const getGuestWhatsAppUrl = (guest: WeddingGuest, messageType: 'invite' | 'reminder') => {
         const inviteUrl = getGuestInviteUrl(guest);
         const guestName = guest.guestName || 'there';
         const message = messageType === 'invite'
-            ? `Hi ${guestName},\n\nWith great joy, we invite you to celebrate the wedding of ${weddingData.couple.displayName}.\n\nWe would be honoured to have you with us on this special occasion.\n\nPlease open your personalized wedding invitation here:\n${inviteUrl}\n\nLooking forward to celebrating together.`
+            ? renderWhatsAppInviteMessage(weddingData.whatsapp.inviteMessage, {
+                guestName,
+                coupleName: weddingData.couple.displayName,
+                brideName: weddingData.couple.brideName,
+                groomName: weddingData.couple.groomName,
+                inviteLink: inviteUrl,
+            })
             : `Hi ${guestName},\n\nA gentle reminder to confirm your RSVP for ${weddingData.couple.displayName}'s wedding celebration.\n\nPlease open your invitation and share your response here:\n${inviteUrl}\n\nYour presence would mean a lot to us.`;
         return buildWhatsAppUrl(guest.phone, message);
     };
+
+    const whatsAppPreviewGuest = weddingData.rsvp.guests[0];
+    const whatsAppPreviewMessage = renderWhatsAppInviteMessage(weddingData.whatsapp.inviteMessage, {
+        guestName: whatsAppPreviewGuest?.guestName || 'Guest Name',
+        coupleName: weddingData.couple.displayName,
+        brideName: weddingData.couple.brideName,
+        groomName: weddingData.couple.groomName,
+        inviteLink: whatsAppPreviewGuest
+            ? getGuestInviteUrl(whatsAppPreviewGuest)
+            : `${window.location.origin}/${weddingData.wedding.slug}/invite/guest-code`,
+    });
 
     const copyGuestInviteLink = async (guest: WeddingGuest) => {
         await window.navigator.clipboard?.writeText(getGuestInviteUrl(guest));
@@ -1981,14 +2067,17 @@ export default function Dashboard({
                         <div className="dashboard-tab-group" key={group.label}>
                             <p className="dashboard-tab-group-label">{group.label}</p>
                             {group.tabs.map((tab) => {
-                                const isLockedTab = (tab.id === 'guests' && !hasDashboardGuestAccess)
+                                const isLockedTab = ((tab.id === 'guests' || tab.id === 'whatsapp') && !hasDashboardGuestAccess)
                                     || ((tab.id === 'rsvp' || tab.id === 'rsvp-settings') && !hasDashboardRsvpAccess);
 
                                 return (
                                     <button
                                         key={tab.id}
                                         className={`${activeTab === tab.id ? 'active' : ''}${isLockedTab ? ' locked' : ''}`}
-                                        onClick={() => setActiveTab(tab.id)}
+                                        onClick={() => {
+                                            writeDashboardActiveTab(dashboardActiveTabStorageKey, tab.id);
+                                            setActiveTab(tab.id);
+                                        }}
                                         type="button"
                                     >
                                         {tab.label}{isLockedTab ? ' Locked' : ''}
@@ -2686,6 +2775,83 @@ export default function Dashboard({
                     <RsvpPlanLockedPanel title="Guest management is locked" whatsAppContext={paymentWhatsAppContext} />
                 ))}
 
+                {activeTab === 'whatsapp' && (hasDashboardGuestAccess ? (
+                    <div className="dashboard-panel whatsapp-settings-panel">
+                        <div className="dashboard-panel-header dashboard-panel-header-row">
+                            <div>
+                                <p className="dashboard-eyebrow">WhatsApp</p>
+                                <h2>Invite message</h2>
+                            </div>
+                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
+                                {saveAllChangesLabel}
+                            </button>
+                        </div>
+
+                        <div className="whatsapp-message-layout">
+                            <section className="whatsapp-message-composer" aria-labelledby="whatsapp-message-label">
+                                <label className="dashboard-field">
+                                    <span id="whatsapp-message-label">Message sent with Send Invite</span>
+                                    <textarea
+                                        ref={whatsappMessageTextareaRef}
+                                        value={weddingData.whatsapp.inviteMessage}
+                                        rows={11}
+                                        onChange={(event) => updateWhatsAppInviteMessage(event.target.value)}
+                                    />
+                                </label>
+
+                                <div className="whatsapp-message-tools">
+                                    <div>
+                                        <span className="whatsapp-message-tools-label">Insert guest details</span>
+                                        <div className="whatsapp-message-chip-row">
+                                            {whatsAppInviteVariables.map((variable) => (
+                                                <button
+                                                    className="whatsapp-message-chip"
+                                                    type="button"
+                                                    key={variable.token}
+                                                    title={`Insert ${variable.label}`}
+                                                    onClick={() => insertWhatsAppMessageContent(variable.token)}
+                                                >
+                                                    {variable.token}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span className="whatsapp-message-tools-label">Insert emoji</span>
+                                        <div className="whatsapp-message-chip-row">
+                                            {whatsAppInviteEmojis.map((emoji) => (
+                                                <button
+                                                    className="whatsapp-emoji-button"
+                                                    type="button"
+                                                    key={emoji}
+                                                    aria-label={`Insert ${emoji}`}
+                                                    onClick={() => insertWhatsAppMessageContent(emoji)}
+                                                >
+                                                    {emoji}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    className="dashboard-primary-btn secondary whatsapp-reset-button"
+                                    type="button"
+                                    onClick={() => updateWhatsAppInviteMessage(defaultWhatsAppInviteMessage)}
+                                >
+                                    Restore default message
+                                </button>
+                            </section>
+
+                            <aside className="whatsapp-message-preview" aria-label="WhatsApp message preview">
+                                <span>Message preview</span>
+                                <div className="whatsapp-message-bubble">{whatsAppPreviewMessage}</div>
+                            </aside>
+                        </div>
+                    </div>
+                ) : (
+                    <RsvpPlanLockedPanel title="WhatsApp invites are locked" whatsAppContext={paymentWhatsAppContext} />
+                ))}
                 {activeTab === 'rsvp-settings' && (hasDashboardRsvpAccess ? (
                     <div className="dashboard-panel rsvp-settings-panel">
                         <div className="dashboard-panel-header dashboard-panel-header-row">
