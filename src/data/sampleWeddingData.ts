@@ -1,4 +1,9 @@
-import { defaultWhatsAppInviteMessage } from './whatsappInviteMessages';
+import {
+  defaultWhatsAppInviteMessage,
+  defaultWhatsAppReminderMessage,
+  getDefaultWhatsAppPreviewDescription,
+  getDefaultWhatsAppPreviewTitle,
+} from './whatsappInviteMessages';
 
 export type PackageType = 'basic' | 'rsvp' | 'whatsapp';
 export type WeddingStatus = 'draft' | 'unpaid' | 'paid' | 'published' | 'suspended';
@@ -134,6 +139,10 @@ export interface SampleWeddingData {
   };
   whatsapp: {
     inviteMessage: string;
+    reminderMessage: string;
+    previewTitle: string;
+    previewDescription: string;
+    previewImageSrc: string;
   };
   couple: {
     enabled: boolean;
@@ -313,6 +322,10 @@ export const sampleWeddings: SampleWeddingData[] = [
     music: sharedThemeMedia.music,
     whatsapp: {
       inviteMessage: defaultWhatsAppInviteMessage,
+      reminderMessage: defaultWhatsAppReminderMessage,
+      previewTitle: getDefaultWhatsAppPreviewTitle('Murtaza & Lubna'),
+      previewDescription: getDefaultWhatsAppPreviewDescription('Murtaza & Lubna'),
+      previewImageSrc: '',
     },
     couple: {
       enabled: true,
@@ -453,6 +466,10 @@ export const sampleWeddings: SampleWeddingData[] = [
     music: sharedThemeMedia.music,
     whatsapp: {
       inviteMessage: defaultWhatsAppInviteMessage,
+      reminderMessage: defaultWhatsAppReminderMessage,
+      previewTitle: getDefaultWhatsAppPreviewTitle('Ali & Sara'),
+      previewDescription: getDefaultWhatsAppPreviewDescription('Ali & Sara'),
+      previewImageSrc: '',
     },
     couple: {
       enabled: true,

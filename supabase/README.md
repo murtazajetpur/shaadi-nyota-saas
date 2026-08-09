@@ -78,7 +78,7 @@ It does not seed full weddings, guests, or RSVP responses.
 
 ## 5. Configure Storage For Wedding Assets
 
-Closing Gallery uploads use Supabase Storage bucket `wedding-assets`.
+Dashboard image uploads use the reusable wedding-scoped media library in the Supabase Storage bucket `wedding-assets`.
 
 Create the bucket in Supabase Storage:
 
@@ -251,9 +251,38 @@ Manual checks:
 ## Opening Reveal Skip Image Migration
 
 Opening Reveal can skip the post-video reveal image with `wedding_settings.hero_skip_reveal_image`. For existing projects, run `supabase/add_skip_reveal_image.sql` before expecting this setting to persist.
-## WhatsApp Invite Message
+## WhatsApp Messages And Invitation Link Preview
 
-For an existing Supabase project, run `supabase/add_whatsapp_invite_message.sql`
-once. It adds `wedding_settings.whatsapp_invite_message` and refreshes the
-PostgREST schema cache. The Dashboard WhatsApp editor and Guest `Send Invite`
-action use this saved template. Emoji and line breaks are stored as normal text.
+For an existing Supabase project, run
+`supabase/add_whatsapp_message_and_preview_settings.sql` once. It adds the
+saved invite template, reminder template, link-preview title, description, and
+image fields to `wedding_settings`, then refreshes the PostgREST schema cache.
+
+The Dashboard WhatsApp editor supports variables, emoji, and line breaks for
+both invitation and reminder templates. The invitation link preview can use a
+visual preset or a JPG, PNG, or WebP upload of up to 5 MB. Uploaded preview
+images use the existing public `wedding-assets` bucket and the path convention
+`weddings/{weddingId}/whatsapp-preview/{timestamp}-{filename}`.
+
+Personalized invite routes are served through `api/invite-preview.js` on
+Vercel so WhatsApp receives server-rendered Open Graph metadata before the
+React app loads. Ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are
+available to the Vercel function. Normal public wedding routes and dashboard
+previews keep their existing routing behavior.
+
+## Wedding Media Library
+
+Run `supabase/add_wedding_media_library.sql` once for an existing Supabase project. The migration creates the `wedding_media` metadata table, configures the public `wedding-assets` bucket, applies owner/admin RLS and Storage policies, and enforces the limits in the database.
+
+Current upload rules:
+
+- 15 uploaded images per wedding.
+- 50 MB total optimized media per wedding.
+- 5 MB maximum source file.
+- JPG, PNG, and WebP inputs only.
+- Browser-generated WebP master and thumbnail files.
+- Storage path: `weddings/{weddingId}/media/{mediaId}/image.webp` and `thumbnail.webp`.
+- One uploaded image can be reused across Opening Reveal, Our Story, Events, RSVP, Closing Gallery, and WhatsApp preview.
+- Removing an in-use image clears every matching section reference and deletes the file only after the wedding save succeeds.
+
+The database migration is authoritative for quotas and ownership. The browser checks provide faster feedback, but cannot bypass the trigger or RLS rules. Existing preset paths and older Storage URLs remain valid.

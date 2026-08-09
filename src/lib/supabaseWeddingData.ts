@@ -15,6 +15,11 @@ import {
   type WeddingGuest,
   type WeddingStatus,
 } from '../data/sampleWeddingData';
+import {
+  defaultWhatsAppReminderMessage,
+  getDefaultWhatsAppPreviewDescription,
+  getDefaultWhatsAppPreviewTitle,
+} from '../data/whatsappInviteMessages';
 import { normalizeEventAnimationKey } from '../data/eventAnimations';
 import { supabase } from './supabaseClient';
 
@@ -55,6 +60,10 @@ interface SupabaseWeddingSettingsRow {
   music_audio_src: string | null;
   music_title: string | null;
   whatsapp_invite_message: string | null;
+  whatsapp_reminder_message: string | null;
+  whatsapp_preview_title: string | null;
+  whatsapp_preview_description: string | null;
+  whatsapp_preview_image_src: string | null;
   couple_enabled: boolean | null;
   couple_intro_line: string | null;
   couple_blessing_line: string | null;
@@ -430,6 +439,10 @@ const mapWeddingBundle = (
     },
     whatsapp: {
       inviteMessage: valueOr(settings?.whatsapp_invite_message, fallback.whatsapp.inviteMessage),
+      reminderMessage: valueOr(settings?.whatsapp_reminder_message, defaultWhatsAppReminderMessage),
+      previewTitle: valueOr(settings?.whatsapp_preview_title, getDefaultWhatsAppPreviewTitle(displayName)),
+      previewDescription: valueOr(settings?.whatsapp_preview_description, getDefaultWhatsAppPreviewDescription(displayName)),
+      previewImageSrc: settings?.whatsapp_preview_image_src ?? '',
     },
     couple: {
       enabled: settings?.couple_enabled ?? fallback.couple.enabled,
@@ -733,6 +746,14 @@ const closingSettingsColumns = new Set([
   'closing_gallery_images',
 ]);
 
+const whatsappSettingsColumns = new Set([
+  'whatsapp_invite_message',
+  'whatsapp_reminder_message',
+  'whatsapp_preview_title',
+  'whatsapp_preview_description',
+  'whatsapp_preview_image_src',
+]);
+
 export async function saveSupabaseWeddingSettings(weddingId: string, wedding: SampleWeddingData) {
   if (!supabase) return { error: 'Supabase is not configured.' };
 
@@ -752,6 +773,10 @@ export async function saveSupabaseWeddingSettings(weddingId: string, wedding: Sa
     music_audio_src: wedding.music.audioSrc,
     music_title: wedding.music.title,
     whatsapp_invite_message: wedding.whatsapp.inviteMessage,
+    whatsapp_reminder_message: wedding.whatsapp.reminderMessage,
+    whatsapp_preview_title: wedding.whatsapp.previewTitle,
+    whatsapp_preview_description: wedding.whatsapp.previewDescription,
+    whatsapp_preview_image_src: wedding.whatsapp.previewImageSrc,
     couple_enabled: wedding.couple.enabled,
     couple_intro_line: wedding.couple.introLine,
     couple_blessing_line: wedding.couple.blessingLine,
@@ -812,9 +837,9 @@ export async function saveSupabaseWeddingSettings(weddingId: string, wedding: Sa
     }
 
     const missingColumn = getSchemaCacheMissingColumn(error.message);
-    if (missingColumn === 'whatsapp_invite_message') {
+    if (whatsappSettingsColumns.has(missingColumn)) {
       return {
-        error: 'WhatsApp invite messages cannot be saved until supabase/add_whatsapp_invite_message.sql has been applied.',
+        error: 'WhatsApp messages and link preview settings cannot be saved until supabase/add_whatsapp_message_and_preview_settings.sql has been applied.',
       };
     }
     if (missingColumn && closingSettingsColumns.has(missingColumn) && missingColumn in payload) {

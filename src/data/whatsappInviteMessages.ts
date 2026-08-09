@@ -6,6 +6,22 @@ Please open your personalized wedding invitation here:
 {inviteLink}
 
 We look forward to celebrating with you. ✨`;
+export const defaultWhatsAppReminderMessage = `Hi {guestName} \u{1F44B}
+
+Just a gentle reminder to confirm your RSVP for {coupleName}'s wedding celebration.
+
+Please open your personalized invitation and share your response here:
+{inviteLink}
+
+We look forward to celebrating with you. \u2728`;
+
+export const getDefaultWhatsAppPreviewTitle = (coupleName: string) => (
+  `${coupleName.trim() || 'Wedding'} Invitation`
+);
+
+export const getDefaultWhatsAppPreviewDescription = (coupleName: string) => (
+  `You are invited to celebrate ${coupleName.trim() || 'our wedding'}. Open your personalized wedding invitation.`
+);
 
 export const whatsAppInviteVariables = [
   { token: '{guestName}', label: 'Guest name' },

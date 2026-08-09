@@ -1,0 +1,46 @@
+P02 - Approved Google Flow / OmniFlash Prompt
+
+Goal:
+Create two presenter/voiceover assets for a Shaadi Nyota Instagram Reel about RSVP management.
+
+Important:
+Do not generate website footage, phone footage, UI, dashboard, RSVP screens, WhatsApp screens, logos, captions, subtitles, labels, lower-thirds, boxes, or product mockups. The product proof is added later using real Shaadi Nyota screen recording only.
+
+Character:
+Use the approved fresh Indian bride and groom reference.
+- Bride: pastel rose embroidered Indian outfit, light jewelry, long dark hair, calm premium bridal look.
+- Groom: cream kurta with muted beige/taupe Nehru jacket, clean groomed look.
+- Do not reuse or resemble Aanya.
+- Keep identity, body proportions, outfit, hair, jewelry, lighting, background, and framing stable.
+
+Asset 1 - Couple problem setup, one continuous take:
+- Duration: 8 to 9.5 seconds.
+- Vertical 1080x1920, realistic cinematic video.
+- Bride and groom seated side by side.
+- Groom on viewer's left, bride on viewer's right.
+- Warm neutral modern Indian home or neutral studio.
+- One continuous take only: no jump cuts, no scene cuts, no camera angle changes, no sudden zooms.
+- Direct eye contact from the first frame.
+- Clean spoken audio only, no music.
+
+Exact dialogue:
+Bride: "Shaadi mein RSVP handle karna honestly bahut bada headache hota hai."
+Groom: "Sabko details bhejo, replies track karo, phir follow-up karo."
+
+Asset 2 - Bride solution clean voiceover:
+- Duration: 7 to 8.5 seconds.
+- Same bride voice/accent as Asset 1.
+- Calm, relieved, confident delivery.
+- Clean audio only, no music, no captions, no text.
+- The visual can be the same seated setup or a plain warm neutral background; it will likely not be used.
+
+Exact voiceover:
+"Isliye humne Shaadi Nyota par website banayi. Beautiful invite, saari information, aur guests RSVP bhi ek hi jagah se kar sakte hain."
+
+Final assembly used:
+- 00:00-00:08.00: Asset 1 visible with original audio.
+- 00:08.00-00:19.20: approved real Shaadi Nyota product proof with Asset 2 voiceover.
+- 00:19.20-00:21.70: approved CTA still.
+
+Approved lesson:
+Avoid generating three separate presenter clips for one conversation. Small continuity changes make the edit feel stitched. Use one continuous presenter take for the problem setup, then move the solution line into voiceover over real product proof.

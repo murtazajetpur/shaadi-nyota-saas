@@ -1,5 +1,15 @@
 {
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "functions": {
+        "api/invite-preview.js": {
+            "includeFiles": "dist/index.html"
+        }
+    },
     "rewrites": [
+        {
+            "source": "/:slug/invite/:guestCode",
+            "destination": "/api/invite-preview?slug=:slug&guestCode=:guestCode"
+        },
         {
             "source": "/(.*)",
             "destination": "/"

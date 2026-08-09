@@ -77,9 +77,30 @@ const legacyTheme2VisualKeyMap: Record<string, string> = {
 
 export const eventVisuals: EventVisual[] = registryEventVisuals;
 
-export const getEventVisualByKey = (key?: string) => (
-  eventVisuals.find((visual) => visual.key === (key ? legacyTheme2VisualKeyMap[key] ?? legacyEventAssetIdMap[key] ?? key : key))
+const isDirectEventImageSource = (key?: string) => Boolean(
+  key && (/^https?:\/\//i.test(key) || key.startsWith('/'))
 );
+
+export const getEventVisualByKey = (key?: string) => {
+  if (isDirectEventImageSource(key)) {
+    return {
+      key: key!,
+      label: 'Uploaded image',
+      eventType: 'custom',
+      themeKey: 'user-upload',
+      themeLabel: 'My uploads',
+      imageSrc: key!,
+      thumbnailSrc: key!,
+      optimizedSrc: key!,
+      style: 'custom',
+      defaultTextStyle: 'dark',
+      previewObjectPosition: 'center center',
+    } satisfies EventVisual;
+  }
+
+  const resolvedKey = key ? legacyTheme2VisualKeyMap[key] ?? legacyEventAssetIdMap[key] ?? key : key;
+  return eventVisuals.find((visual) => visual.key === resolvedKey);
+};
 
 export const getEventVisualsForTheme = (themeKey: string) => (
   eventVisuals.filter((visual) => visual.themeKey === themeKey)

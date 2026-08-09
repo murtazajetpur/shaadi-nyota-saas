@@ -1,9 +1,12 @@
--- Closing Gallery uploads use the public `wedding-assets` bucket.
+-- Reusable dashboard image uploads use the public `wedding-assets` bucket.
 -- Create the bucket first in Supabase Storage:
 --   bucket id: wedding-assets
 --   public: true
 --
--- Uploaded object path convention:
+-- Uploaded object path conventions:
+--   weddings/{weddingId}/media/{mediaId}/image.webp
+--   weddings/{weddingId}/media/{mediaId}/thumbnail.webp
+--   weddings/{weddingId}/whatsapp-preview/{timestamp}-{filename}
 --   weddings/{weddingId}/closing-gallery/{timestamp}-{filename}
 
 drop policy if exists "Users can read wedding assets" on storage.objects;

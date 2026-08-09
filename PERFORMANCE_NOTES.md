@@ -22,10 +22,10 @@
 
 ## Upload Guardrails
 
-- Closing Gallery uploads accept JPG, PNG, and WebP only.
-- Closing Gallery uploads are limited to 5 MB per image.
-- Uploaded files keep unique timestamped Supabase Storage paths under the wedding-specific folder.
-- Client-side resizing/compression is not implemented yet.
+- Wedding Media Library uploads accept JPG, PNG, and WebP only and are limited to 5 MB per source image.
+- The browser creates a WebP master capped at 1440 x 2000 and a WebP thumbnail capped at 360 x 640 while preserving aspect ratio.
+- Uploaded files use unique wedding-scoped Supabase Storage paths under `weddings/{weddingId}/media/{mediaId}/`.
+- Picker grids render the thumbnail URL; public invite sections continue to render the optimized master URL.
 
 ## Future Asset Work
 

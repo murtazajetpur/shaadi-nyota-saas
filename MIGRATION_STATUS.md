@@ -61,7 +61,7 @@ For Closing Gallery uploads, also create a public Supabase Storage bucket named 
 - Opening Reveal supports path-based configuration and a local preview, but image/video/audio upload is not implemented yet.
 - Our Story supports preset/path-based story images and a local preview, but image upload is not implemented yet. The separate Couple tab is hidden from dashboard/admin navigation.
 - Closing Gallery supports preset optional couple photos, Supabase Storage uploads, and a local preview. Gallery photos are not used as the closing section background.
-- Supabase Storage is implemented for Closing Gallery photo uploads only. Opening Reveal, Our Story, theme media, video, and music uploads remain future phases.
+- A reusable wedding-scoped Supabase media library now supports image uploads for Opening Reveal, Our Story, Events, RSVP backgrounds, Closing Gallery, and WhatsApp link previews. Video and music uploads remain future phases.
 - Additional invitation delivery channels are not implemented yet.
 - Real online payments are not implemented yet; manual payment instructions use a WhatsApp contact link and `manual_pending` as the verification-requested state.
 - Basic Website dashboards lock Guests and RSVP Dashboard behind an upgrade prompt. RSVP plan and admin editing keep full guest/RSVP access.
@@ -102,8 +102,28 @@ For Closing Gallery uploads, also create a public Supabase Storage bucket named 
 4. Add optional invitation delivery workflows after adding timezone-aware event datetime fields.
 5. Add admin wedding creation/support workflows.
 6. Add multi-wedding support per couple account if needed.
-## WhatsApp Invite Message Template
+## WhatsApp Messages And Link Preview
 
-- Dashboard and admin editors can save one invite message template per wedding.
-- Run `supabase/add_whatsapp_invite_message.sql` before saving this field in an existing project.
-- Manual RSVP reminders remain on their existing message; scheduled reminders are not part of this migration.
+- Dashboard and admin editors can save separate invitation and reminder templates per wedding.
+- Both templates support guest/couple variables, emoji, and line breaks; reminder scheduling remains a future phase.
+- Couples can configure the personalized invitation link title, description, and preview image from the WhatsApp section.
+- Preview images can be selected from the visual library or uploaded to the public `wedding-assets` bucket under `weddings/{weddingId}/whatsapp-preview/`.
+- Personalized invite routes use `api/invite-preview.js` on Vercel to return server-rendered Open Graph metadata while preserving the existing React invite experience.
+- Run `supabase/add_whatsapp_message_and_preview_settings.sql` before saving these fields in an existing project.
+
+## Manual WhatsApp Send Tracking
+
+- Run `supabase/add_guest_message_history.sql` to enable invitation and reminder tracking.
+- Each confirmed send is stored as a separate history row, so reminder counts are not capped.
+- The Guests table shows the first invitation date, reminder count, last reminder date, and full removable history.
+- Tracking is manually confirmed by the dashboard user; it does not represent WhatsApp delivery or read verification.
+- Guest deletion removes its tracking history through the existing database cascade.
+
+## Wedding Media Library
+
+- Run `supabase/add_wedding_media_library.sql` for existing Supabase projects.
+- Couples and admins can upload JPG, PNG, or WebP source images up to 5 MB.
+- The browser stores an optimized WebP master and a lightweight WebP thumbnail in `wedding-assets`.
+- Limits are 15 uploaded images and 50 MB of optimized media per wedding, enforced in PostgreSQL as well as the UI.
+- Uploaded images are reusable across image-based editor sections; preset assets and existing saved URLs remain compatible.
+- Removing an in-use image clears every matching section reference and queues the file deletion until the wedding save succeeds.

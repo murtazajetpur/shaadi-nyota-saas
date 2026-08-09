@@ -1,0 +1,201 @@
+.wedding-media-library {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(66, 48, 40, 0.12);
+  font-family: var(--font-secondary);
+}
+
+.wedding-media-library-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.wedding-media-library-header strong,
+.wedding-media-library-header span {
+  display: block;
+}
+
+.wedding-media-library-header strong {
+  color: #2d2723;
+  font-size: 0.9rem;
+}
+
+.wedding-media-library-header > div:first-child > span {
+  margin-top: 3px;
+  color: #6c625c;
+  font-size: 0.78rem;
+}
+
+.wedding-media-usage {
+  flex: 0 0 auto;
+  color: #6f625b;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.wedding-media-upload {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 50px;
+  border: 1px dashed rgba(122, 31, 31, 0.36);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #7a1f1f;
+  cursor: pointer;
+}
+
+.wedding-media-upload:hover {
+  border-color: #7a1f1f;
+  background: #fffafa;
+}
+
+.wedding-media-upload:focus-within {
+  outline: 2px solid rgba(122, 31, 31, 0.35);
+  outline-offset: 2px;
+}
+
+.wedding-media-upload.disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.wedding-media-upload > span {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.wedding-media-upload > small {
+  color: #736760;
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.wedding-media-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.wedding-media-note {
+  margin: 10px 0 0;
+  color: #71655f;
+  font-size: 0.77rem;
+}
+
+.wedding-media-note.error {
+  color: #9a2727;
+}
+
+.wedding-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.wedding-media-card {
+  position: relative;
+  min-width: 0;
+  border: 1px solid rgba(65, 49, 42, 0.14);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.wedding-media-card.selected {
+  border-color: #7a1f1f;
+  box-shadow: 0 0 0 1px #7a1f1f;
+}
+
+.wedding-media-select {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #302925;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wedding-media-select:focus-visible,
+.wedding-media-remove:focus-visible {
+  outline: 2px solid #7a1f1f;
+  outline-offset: -2px;
+}
+
+.wedding-media-select img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  background: #eee8e2;
+}
+
+.wedding-media-library-landscape .wedding-media-select img {
+  aspect-ratio: 1.91 / 1;
+}
+
+.wedding-media-library-flexible .wedding-media-select img {
+  aspect-ratio: 4 / 5;
+}
+
+.wedding-media-select > span {
+  display: block;
+  overflow: hidden;
+  padding: 8px 9px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wedding-media-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: #721d1d;
+  cursor: pointer;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.wedding-media-remove:disabled {
+  color: #817873;
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+@media (max-width: 640px) {
+  .wedding-media-library-header,
+  .wedding-media-upload {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .wedding-media-usage,
+  .wedding-media-upload > small {
+    text-align: left;
+  }
+
+  .wedding-media-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -4,6 +4,7 @@ import OpeningRevealScrollPrompt from './OpeningRevealScrollPrompt';
 import { EventSection as Theme1EventPreviewSection } from './Section3';
 import Section2 from './Section2';
 import Section5 from './Section5';
+import WeddingMediaLibrary from './WeddingMediaLibrary';
 import './Dashboard.css';
 import { useAuth } from '../context/AuthContext';
 import { updateWeddingPaymentStatus, updateWeddingShell } from '../lib/weddingOnboarding';
@@ -19,6 +20,13 @@ import {
     saveSupabaseRelationalData,
     saveSupabaseWeddingSettings,
 } from '../lib/supabaseWeddingData';
+import {
+    loadGuestMessageHistory,
+    recordGuestMessageSent,
+    removeGuestMessageHistoryEntry,
+    type GuestMessageHistoryEntry,
+    type GuestMessageType,
+} from '../lib/guestMessageHistory';
 import {
     DEFAULT_GUEST_RECORD_LIMIT,
     DEFAULT_INVITEE_LIMIT,
@@ -73,16 +81,33 @@ import {
 } from '../data/assetRegistry';
 import {
     defaultWhatsAppInviteMessage,
+    defaultWhatsAppReminderMessage,
+    getDefaultWhatsAppPreviewDescription,
+    getDefaultWhatsAppPreviewTitle,
     normalizeWhatsAppInviteMessage,
     renderWhatsAppInviteMessage,
     whatsAppInviteEmojis,
     whatsAppInviteVariables,
 } from '../data/whatsappInviteMessages';
-import { supabase } from '../lib/supabaseClient';
+import {
+    deleteWeddingMedia,
+    loadWeddingMedia,
+    uploadWeddingMedia,
+    type WeddingMediaAsset,
+    type WeddingMediaSection,
+} from '../lib/weddingMedia';
 
 type DashboardTab = 'overview' | 'opening-reveal' | 'our-story' | 'couple' | 'events' | 'guests' | 'whatsapp' | 'rsvp-settings' | 'rsvp' | 'closing-gallery' | 'preview';
 type CsvImportMode = 'append' | 'replace';
 type DashboardMode = 'couple' | 'admin';
+type GuestWhatsAppFilter = 'all' | 'invite-not-sent' | 'invite-sent' | 'no-reminders' | 'reminders-sent';
+type GuestRsvpFilter = 'all' | 'no-response' | 'pending' | 'complete' | 'attending' | 'maybe' | 'declined';
+type GuestActivityFilter = 'all' | 'never' | 'last-7-days' | 'older-than-7-days';
+type GuestPhoneFilter = 'all' | 'available' | 'missing';
+type PendingGuestMessageConfirmation = {
+    guestId: string;
+    messageType: GuestMessageType;
+} | null;
 
 class DashboardPreviewErrorBoundary extends Component<{
     children: ReactNode;
@@ -197,14 +222,10 @@ const musicOptions = Array.from(
     label: option.label,
 }));
 const musicOptionLabels = Object.fromEntries(musicOptions.map((option) => [option.value, option.label]));
-const closingGalleryBucket = 'wedding-assets';
+const whatsAppPreviewFallbackImageSrc = '/assets/brand/shaadi-nyota-logo.png';
 const closingGalleryMaxImages = 3;
-const closingGalleryMaxUploadSizeBytes = 5 * 1024 * 1024;
-const closingGalleryAllowedUploadTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const closingGalleryAcceptedUploadTypes = 'image/jpeg,image/png,image/webp';
 const saveAllChangesLabel = 'Save All Changes';
 const discardUnsavedChangesLabel = 'Discard Unsaved Changes';
-const uploadSetupMessage = 'Image upload is not configured yet. Please create the wedding-assets Supabase Storage bucket and run the storage policies.';
 const rsvpStatusLabels: Record<string, string> = {
     yes: 'Yes',
     no: 'No',
@@ -464,6 +485,10 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
             ...defaults.whatsapp,
             ...wedding.whatsapp,
             inviteMessage: normalizeWhatsAppInviteMessage(wedding.whatsapp?.inviteMessage ?? defaultWhatsAppInviteMessage),
+            reminderMessage: normalizeWhatsAppInviteMessage(wedding.whatsapp?.reminderMessage ?? defaultWhatsAppReminderMessage),
+            previewTitle: wedding.whatsapp?.previewTitle ?? getDefaultWhatsAppPreviewTitle(mergedCouple.displayName),
+            previewDescription: wedding.whatsapp?.previewDescription ?? getDefaultWhatsAppPreviewDescription(mergedCouple.displayName),
+            previewImageSrc: wedding.whatsapp?.previewImageSrc ?? '',
         },
         couple: {
             ...mergedCouple,
@@ -581,6 +606,56 @@ const applyAuthoritativePlanState = (
     };
 };
 
+const getWeddingMediaUsageLabels = (wedding: SampleWeddingData, imageSrc: string) => {
+    const labels: string[] = [];
+    if (wedding.hero.revealImageSrc === imageSrc) labels.push('Opening Reveal');
+    if (wedding.couple.backgroundImageSrc === imageSrc) labels.push('Our Story');
+    wedding.events.forEach((event) => {
+        if ([event.eventVisualKey, event.foregroundImageSrc, event.backgroundImageSrc].includes(imageSrc)) {
+            labels.push(event.eventName ? `Event: ${event.eventName}` : 'Events');
+        }
+    });
+    if (wedding.rsvp.backgroundImageSrc === imageSrc) labels.push('RSVP');
+    if (wedding.closing.backgroundImageSrc === imageSrc) labels.push('Closing background');
+    if (wedding.closing.frameImageSrc === imageSrc) labels.push('Closing frame');
+    if (wedding.closing.carouselImages.includes(imageSrc)) labels.push('Closing Gallery photos');
+    if (wedding.whatsapp.previewImageSrc === imageSrc) labels.push('WhatsApp preview');
+    return Array.from(new Set(labels));
+};
+
+const removeWeddingMediaReferences = (wedding: SampleWeddingData, imageSrc: string): SampleWeddingData => ({
+    ...wedding,
+    hero: {
+        ...wedding.hero,
+        revealImageSrc: wedding.hero.revealImageSrc === imageSrc ? '' : wedding.hero.revealImageSrc,
+        skipRevealImage: wedding.hero.revealImageSrc === imageSrc ? true : wedding.hero.skipRevealImage,
+    },
+    couple: {
+        ...wedding.couple,
+        backgroundImageSrc: wedding.couple.backgroundImageSrc === imageSrc ? '' : wedding.couple.backgroundImageSrc,
+    },
+    events: wedding.events.map((event) => ({
+        ...event,
+        eventVisualKey: event.eventVisualKey === imageSrc ? '' : event.eventVisualKey,
+        foregroundImageSrc: event.foregroundImageSrc === imageSrc ? '' : event.foregroundImageSrc,
+        backgroundImageSrc: event.backgroundImageSrc === imageSrc ? '' : event.backgroundImageSrc,
+    })),
+    rsvp: {
+        ...wedding.rsvp,
+        backgroundImageSrc: wedding.rsvp.backgroundImageSrc === imageSrc ? '' : wedding.rsvp.backgroundImageSrc,
+    },
+    closing: {
+        ...wedding.closing,
+        backgroundImageSrc: wedding.closing.backgroundImageSrc === imageSrc ? '' : wedding.closing.backgroundImageSrc,
+        frameImageSrc: wedding.closing.frameImageSrc === imageSrc ? '' : wedding.closing.frameImageSrc,
+        carouselImages: wedding.closing.carouselImages.filter((src) => src !== imageSrc),
+    },
+    whatsapp: {
+        ...wedding.whatsapp,
+        previewImageSrc: wedding.whatsapp.previewImageSrc === imageSrc ? '' : wedding.whatsapp.previewImageSrc,
+    },
+});
+
 const writeDashboardDraft = (storageKey: string, wedding: SampleWeddingData) => {
     const draft: DashboardDraftSnapshot = {
         savedAt: new Date().toISOString(),
@@ -600,6 +675,24 @@ const loadStoredRsvpResponses = () => {
         window.localStorage.removeItem(mockRsvpResponsesStorageKey);
         return [];
     }
+};
+
+const getMockGuestMessageHistoryStorageKey = (weddingSlug: string) => (
+    `shaadiNyotaGuestMessageHistory:${weddingSlug}`
+);
+
+const loadStoredGuestMessageHistory = (weddingSlug: string) => {
+    const storageKey = getMockGuestMessageHistoryStorageKey(weddingSlug);
+    try {
+        return JSON.parse(window.localStorage.getItem(storageKey) ?? '[]') as GuestMessageHistoryEntry[];
+    } catch {
+        window.localStorage.removeItem(storageKey);
+        return [];
+    }
+};
+
+const persistStoredGuestMessageHistory = (weddingSlug: string, entries: GuestMessageHistoryEntry[]) => {
+    window.localStorage.setItem(getMockGuestMessageHistoryStorageKey(weddingSlug), JSON.stringify(entries));
 };
 
 export default function Dashboard({
@@ -633,6 +726,11 @@ export default function Dashboard({
         restoredDashboardDraft ?? (initialWedding ? normalizeWedding(initialWedding) : loadInitialWedding())
     ));
     const [guestSearchQuery, setGuestSearchQuery] = useState('');
+    const [guestCategoryFilter, setGuestCategoryFilter] = useState('all');
+    const [guestWhatsAppFilter, setGuestWhatsAppFilter] = useState<GuestWhatsAppFilter>('all');
+    const [guestRsvpFilter, setGuestRsvpFilter] = useState<GuestRsvpFilter>('all');
+    const [guestActivityFilter, setGuestActivityFilter] = useState<GuestActivityFilter>('all');
+    const [guestPhoneFilter, setGuestPhoneFilter] = useState<GuestPhoneFilter>('all');
     const [guestPage, setGuestPage] = useState(1);
     const [guestPageSize, setGuestPageSize] = useState<(typeof guestPageSizeOptions)[number]>(50);
     const [guestImportMode, setGuestImportMode] = useState<CsvImportMode>('append');
@@ -644,6 +742,18 @@ export default function Dashboard({
     const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
     const [rsvpResponses, setRsvpResponses] = useState<StoredRsvpResponse[]>(loadStoredRsvpResponses);
     const [isRsvpLoading, setIsRsvpLoading] = useState(false);
+    const [guestMessageHistory, setGuestMessageHistory] = useState<GuestMessageHistoryEntry[]>([]);
+    const [isGuestMessageHistoryLoading, setIsGuestMessageHistoryLoading] = useState(false);
+    const [pendingGuestMessageConfirmation, setPendingGuestMessageConfirmation] = useState<PendingGuestMessageConfirmation>(null);
+    const [whatsAppMessageMode, setWhatsAppMessageMode] = useState<GuestMessageType>('invitation');
+    const [isWhatsAppPreviewImagePickerOpen, setIsWhatsAppPreviewImagePickerOpen] = useState(false);
+    const [isWhatsAppPreviewImageUploading, setIsWhatsAppPreviewImageUploading] = useState(false);
+    const [weddingMedia, setWeddingMedia] = useState<WeddingMediaAsset[]>([]);
+    const [pendingWeddingMediaDeletions, setPendingWeddingMediaDeletions] = useState<WeddingMediaAsset[]>([]);
+    const [isWeddingMediaLoading, setIsWeddingMediaLoading] = useState(false);
+    const [weddingMediaSetupRequired, setWeddingMediaSetupRequired] = useState(false);
+    const [mediaUploadingSection, setMediaUploadingSection] = useState<WeddingMediaSection | ''>('');
+    const [guestMessageHistorySavingKey, setGuestMessageHistorySavingKey] = useState('');
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(restoredDashboardDraft));
     const [saveStatus, setSaveStatus] = useState('');
     const [saveError, setSaveError] = useState('');
@@ -658,6 +768,44 @@ export default function Dashboard({
     const whatsappMessageTextareaRef = useRef<HTMLTextAreaElement | null>(null);
     const isAdminMode = mode === 'admin';
     const visibleStoryImageOptions = storyImageOptions.filter((option) => isAdminMode || option.visibility !== 'admin');
+    const whatsAppPreviewImageOptions = Array.from(new Map([
+        ...revealedImageOptions.map((option) => ({
+            key: `whatsapp-reveal-${option.key}`,
+            label: option.label,
+            imageSrc: option.imageSrc,
+            thumbnailSrc: option.thumbnailSrc,
+            sectionLabel: 'Opening Reveal',
+        })),
+        ...visibleStoryImageOptions.map((option) => ({
+            key: `whatsapp-story-${option.key}`,
+            label: option.label,
+            imageSrc: option.imageSrc,
+            thumbnailSrc: option.thumbnailSrc,
+            sectionLabel: 'Our Story',
+        })),
+        ...closingImagePresets.map((option) => ({
+            key: `whatsapp-closing-${option.key}`,
+            label: option.label,
+            imageSrc: option.imageSrc,
+            thumbnailSrc: option.thumbnailSrc,
+            sectionLabel: 'Closing Gallery',
+        })),
+    ].filter((option) => Boolean(option.imageSrc)).map((option) => [option.imageSrc, option])).values());
+    const usedWeddingMediaSources = useMemo(() => new Set([
+        weddingData.hero.revealImageSrc,
+        weddingData.couple.backgroundImageSrc,
+        ...weddingData.events.flatMap((event) => [event.eventVisualKey, event.foregroundImageSrc, event.backgroundImageSrc]),
+        weddingData.rsvp.backgroundImageSrc,
+        weddingData.closing.backgroundImageSrc,
+        weddingData.closing.frameImageSrc,
+        ...weddingData.closing.carouselImages,
+        weddingData.whatsapp.previewImageSrc,
+    ].filter((value): value is string => Boolean(value))), [weddingData]);
+    const isWeddingMediaInUse = (asset: WeddingMediaAsset) => usedWeddingMediaSources.has(asset.publicUrl);
+    const pendingWeddingMediaDeletionIds = useMemo(
+        () => new Set(pendingWeddingMediaDeletions.map((asset) => asset.id)),
+        [pendingWeddingMediaDeletions]
+    );
     const hasDashboardGuestAccess = isAdminMode || canManageGuests(weddingData);
     const hasDashboardRsvpAccess = isAdminMode || canViewRsvpDashboard(weddingData);
     const showPlanUpgrade = !isAdminMode && canUpgradePlan(weddingData);
@@ -762,6 +910,38 @@ export default function Dashboard({
     }, []);
 
     useEffect(() => {
+        let cancelled = false;
+
+        const refreshWeddingMedia = async () => {
+            await Promise.resolve();
+            if (cancelled) return;
+
+            if (!supabaseWeddingId) {
+                setWeddingMedia([]);
+                setWeddingMediaSetupRequired(false);
+                return;
+            }
+
+            setIsWeddingMediaLoading(true);
+            const result = await loadWeddingMedia(supabaseWeddingId);
+            if (cancelled) return;
+
+            setIsWeddingMediaLoading(false);
+            setWeddingMedia(result.assets);
+            setPendingWeddingMediaDeletions([]);
+            setWeddingMediaSetupRequired(result.setupRequired);
+            if (result.error && !result.setupRequired) {
+                setSaveError(result.error);
+            }
+        };
+
+        void refreshWeddingMedia();
+        return () => {
+            cancelled = true;
+        };
+    }, [supabaseWeddingId]);
+
+    useEffect(() => {
         if ((activeTab === 'guests' || activeTab === 'rsvp') && hasDashboardRsvpAccess) {
             if (supabaseWeddingId) {
                 setIsRsvpLoading(true);
@@ -784,6 +964,34 @@ export default function Dashboard({
         }
     }, [activeTab, hasDashboardRsvpAccess, supabaseWeddingId, weddingData.wedding.slug, weddingData.rsvp.guests]);
 
+
+    useEffect(() => {
+        if (activeTab !== 'guests' || !hasDashboardGuestAccess) return;
+
+        let cancelled = false;
+        setIsGuestMessageHistoryLoading(true);
+
+        if (supabaseWeddingId) {
+            loadGuestMessageHistory(supabaseWeddingId).then((result) => {
+                if (cancelled) return;
+                setIsGuestMessageHistoryLoading(false);
+                if (result.error) {
+                    setGuestMessageHistory([]);
+                    setSaveError(result.error);
+                    setSaveErrorDetail(result.detail);
+                    return;
+                }
+                setGuestMessageHistory(result.entries);
+            });
+        } else {
+            setGuestMessageHistory(loadStoredGuestMessageHistory(weddingData.wedding.slug));
+            setIsGuestMessageHistoryLoading(false);
+        }
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, hasDashboardGuestAccess, supabaseWeddingId, weddingData.wedding.slug]);
     useEffect(() => {
         setSelectedGuestIds((current) => current.filter((id) => (
             weddingData.rsvp.guests.some((guest) => guest.id === id)
@@ -994,23 +1202,109 @@ export default function Dashboard({
             guestSummaryById: new Map(guestSummaries.map((summary) => [summary.guest.id, summary])),
         };
     }, [rsvpResponses, weddingData]);
+    const guestMessageHistoryByGuestId = useMemo(() => {
+        const lookup = new Map<string, GuestMessageHistoryEntry[]>();
+        [...guestMessageHistory]
+            .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+            .forEach((entry) => {
+                const existing = lookup.get(entry.guestId) ?? [];
+                existing.push(entry);
+                lookup.set(entry.guestId, existing);
+            });
+        return lookup;
+    }, [guestMessageHistory]);
+    const guestCategoryOptions = useMemo(() => (
+        Array.from(new Set(
+            weddingData.rsvp.guests
+                .map((guest) => guest.category.trim())
+                .filter(Boolean),
+        )).sort((a, b) => a.localeCompare(b))
+    ), [weddingData.rsvp.guests]);
     const filteredGuestRows = useMemo(() => {
         const query = guestSearchQuery.trim().toLowerCase();
+        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+
         return weddingData.rsvp.guests
             .map((guest, guestIndex) => ({ guest, guestIndex }))
             .filter(({ guest }) => {
-                if (!query) return true;
                 const rsvpSummary = rsvpAnalytics.guestSummaryById.get(guest.id);
-                return [
+                const messageHistory = guestMessageHistoryByGuestId.get(guest.id) ?? [];
+                const hasInvitation = messageHistory.some((entry) => entry.messageType === 'invitation');
+                const hasReminder = messageHistory.some((entry) => entry.messageType === 'reminder');
+                const statuses = rsvpSummary?.eventStatuses.map((item) => item.status) ?? [];
+                const hasResponse = Boolean(rsvpSummary?.lastUpdated);
+                const hasPendingResponse = statuses.some((status) => status === 'pending');
+                const lastUpdatedTime = rsvpSummary?.lastUpdated ? Date.parse(rsvpSummary.lastUpdated) : Number.NaN;
+                const hasValidLastUpdated = Number.isFinite(lastUpdatedTime);
+                const normalizedCategory = guest.category.trim();
+                const hasPhone = Boolean(guest.phone.trim());
+
+                const matchesSearch = !query || [
                     guest.guestName,
                     guest.phone,
                     guest.category,
                     rsvpSummary?.statusSummary ?? '',
                     rsvpSummary?.mealPreference ?? '',
                 ].some((value) => value.toLowerCase().includes(query));
+                const matchesCategory = guestCategoryFilter === 'all'
+                    || (guestCategoryFilter === 'uncategorized' ? !normalizedCategory : normalizedCategory === guestCategoryFilter);
+                const matchesWhatsApp = guestWhatsAppFilter === 'all'
+                    || (guestWhatsAppFilter === 'invite-not-sent' && !hasInvitation)
+                    || (guestWhatsAppFilter === 'invite-sent' && hasInvitation)
+                    || (guestWhatsAppFilter === 'no-reminders' && !hasReminder)
+                    || (guestWhatsAppFilter === 'reminders-sent' && hasReminder);
+                const matchesRsvp = guestRsvpFilter === 'all'
+                    || (guestRsvpFilter === 'no-response' && !hasResponse)
+                    || (guestRsvpFilter === 'pending' && hasPendingResponse)
+                    || (guestRsvpFilter === 'complete' && statuses.length > 0 && !hasPendingResponse)
+                    || (guestRsvpFilter === 'attending' && statuses.some((status) => status === 'yes'))
+                    || (guestRsvpFilter === 'maybe' && statuses.some((status) => status === 'maybe'))
+                    || (guestRsvpFilter === 'declined' && statuses.length > 0 && statuses.every((status) => status === 'no'));
+                const matchesActivity = guestActivityFilter === 'all'
+                    || (guestActivityFilter === 'never' && !hasValidLastUpdated)
+                    || (guestActivityFilter === 'last-7-days' && hasValidLastUpdated && lastUpdatedTime >= sevenDaysAgo)
+                    || (guestActivityFilter === 'older-than-7-days' && hasValidLastUpdated && lastUpdatedTime < sevenDaysAgo);
+                const matchesPhone = guestPhoneFilter === 'all'
+                    || (guestPhoneFilter === 'available' && hasPhone)
+                    || (guestPhoneFilter === 'missing' && !hasPhone);
+
+                return matchesSearch
+                    && matchesCategory
+                    && matchesWhatsApp
+                    && matchesRsvp
+                    && matchesActivity
+                    && matchesPhone;
             });
-    }, [guestSearchQuery, rsvpAnalytics.guestSummaryById, weddingData.rsvp.guests]);
+    }, [
+        guestActivityFilter,
+        guestCategoryFilter,
+        guestMessageHistoryByGuestId,
+        guestPhoneFilter,
+        guestRsvpFilter,
+        guestSearchQuery,
+        guestWhatsAppFilter,
+        rsvpAnalytics.guestSummaryById,
+        weddingData.rsvp.guests,
+    ]);
+    const activeGuestFilterCount = [
+        Boolean(guestSearchQuery.trim()),
+        guestCategoryFilter !== 'all',
+        guestWhatsAppFilter !== 'all',
+        guestRsvpFilter !== 'all',
+        guestActivityFilter !== 'all',
+        guestPhoneFilter !== 'all',
+    ].filter(Boolean).length;
+    const clearGuestFilters = () => {
+        setGuestSearchQuery('');
+        setGuestCategoryFilter('all');
+        setGuestWhatsAppFilter('all');
+        setGuestRsvpFilter('all');
+        setGuestActivityFilter('all');
+        setGuestPhoneFilter('all');
+        setGuestPage(1);
+    };
     const guestRecordLimit = weddingData.wedding.guestRecordLimit ?? DEFAULT_GUEST_RECORD_LIMIT;
+
     const inviteeLimit = weddingData.wedding.inviteeLimit ?? DEFAULT_INVITEE_LIMIT;
     const totalGuestPages = Math.max(1, Math.ceil(filteredGuestRows.length / guestPageSize));
     const currentGuestPage = Math.min(guestPage, totalGuestPages);
@@ -1128,6 +1422,23 @@ export default function Dashboard({
             weddingToSave.rsvp.guests = relationalResult.guests;
         }
 
+        let mediaCleanupWarning = '';
+        if (supabaseWeddingId && pendingWeddingMediaDeletions.length > 0) {
+            const deletionResults = await Promise.all(
+                pendingWeddingMediaDeletions.map(async (asset) => ({ asset, result: await deleteWeddingMedia(asset) }))
+            );
+            const failedDeletions = deletionResults.filter(({ result }) => Boolean(result.error));
+            const deletedIds = new Set(
+                deletionResults.filter(({ result }) => !result.error).map(({ asset }) => asset.id)
+            );
+            setWeddingMedia((current) => current.filter((asset) => !deletedIds.has(asset.id)));
+            setPendingWeddingMediaDeletions([]);
+            if (failedDeletions.length > 0) {
+                mediaCleanupWarning = `The wedding was saved, but ${failedDeletions.length} image file${failedDeletions.length === 1 ? '' : 's'} could not be removed. Please try removing ${failedDeletions.length === 1 ? 'it' : 'them'} again.`;
+                setSaveErrorDetail(failedDeletions.map(({ result }) => result.detail || result.error).join(' | '));
+            }
+        }
+
         if (supabaseWeddingId) {
             clearDashboardDraft(dashboardDraftStorageKey);
         } else {
@@ -1135,13 +1446,15 @@ export default function Dashboard({
         }
         hasUnsavedChangesRef.current = false;
         setHasUnsavedChanges(false);
-        setSaveStatus('Saved');
+        setSaveStatus(mediaCleanupWarning ? 'Saved with image cleanup warning' : 'Saved');
+        if (mediaCleanupWarning) setSaveError(mediaCleanupWarning);
     };
 
     const handleResetDraft = async () => {
         if (!window.confirm('Discard unsaved changes and reload the last saved version?')) return;
         clearDashboardDraft(dashboardDraftStorageKey);
         window.localStorage.removeItem(mockDashboardDraftStorageKey);
+        setPendingWeddingMediaDeletions([]);
         if (supabaseWeddingId) {
             const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
             const nextWedding = refreshed.wedding ?? normalizeWedding(initialWedding ?? dashboardBaseWedding);
@@ -1268,51 +1581,68 @@ export default function Dashboard({
         }));
     };
 
-    const uploadClosingGalleryImage = async (file: File) => {
-        if (!closingGalleryAllowedUploadTypes.has(file.type)) {
-            setSaveError('Please upload a JPG, PNG, or WebP image for the Closing Gallery.');
+    const uploadWeddingImage = async (
+        file: File,
+        section: WeddingMediaSection,
+        onUploaded: (imageSrc: string) => void
+    ) => {
+        if (!supabaseWeddingId) {
+            setSaveError('Custom uploads are available after the wedding has been saved to Supabase.');
             return;
         }
-        if (file.size > closingGalleryMaxUploadSizeBytes) {
-            setSaveError('Please upload a Closing Gallery image smaller than 5 MB.');
-            return;
-        }
-        if (!supabaseWeddingId || !supabase) {
-            console.error('Closing Gallery upload failed: Supabase Storage is only available for saved Supabase weddings.');
-            setSaveError('Could not upload image. Supabase Storage is only available for saved Supabase weddings.');
-            return;
-        }
-        if (closingImagePickerTarget === null) return;
 
         setSaveError('');
-        setIsClosingImageUploading(true);
-        const safeName = file.name
-            .toLowerCase()
-            .replace(/[^a-z0-9.]+/g, '-')
-            .replace(/-+/g, '-')
-            .replace(/^-|-$/g, '');
-        const storagePath = `weddings/${supabaseWeddingId}/closing-gallery/${Date.now()}-${safeName || 'photo'}`;
-        const { error: uploadError } = await supabase.storage
-            .from(closingGalleryBucket)
-            .upload(storagePath, file, {
-                cacheControl: '3600',
-                contentType: file.type,
-                upsert: false,
-            });
+        setSaveErrorDetail('');
+        setMediaUploadingSection(section);
+        if (section === 'closing-gallery') setIsClosingImageUploading(true);
+        if (section === 'whatsapp') setIsWhatsAppPreviewImageUploading(true);
+        const result = await uploadWeddingMedia({ weddingId: supabaseWeddingId, file, section });
+        setMediaUploadingSection('');
+        if (section === 'closing-gallery') setIsClosingImageUploading(false);
+        if (section === 'whatsapp') setIsWhatsAppPreviewImageUploading(false);
 
-        if (uploadError) {
-            setIsClosingImageUploading(false);
-            console.error('Closing Gallery upload failed:', uploadError);
-            const uploadErrorMessage = uploadError.message.toLowerCase().includes('bucket')
-                ? uploadSetupMessage
-                : `Could not upload image. ${uploadError.message}`;
-            setSaveError(uploadErrorMessage);
+        if (result.error || !result.asset) {
+            setSaveError(result.error || 'Could not upload this image.');
+            setSaveErrorDetail(result.detail);
+            if (result.error.includes('migration')) setWeddingMediaSetupRequired(true);
             return;
         }
 
-        const { data } = supabase.storage.from(closingGalleryBucket).getPublicUrl(storagePath);
-        setClosingGalleryImage(closingImagePickerTarget, data.publicUrl);
-        setIsClosingImageUploading(false);
+        setWeddingMedia((current) => [result.asset!, ...current]);
+        onUploaded(result.asset.publicUrl);
+    };
+
+    const removeWeddingMediaAsset = async (asset: WeddingMediaAsset) => {
+        const usageLabels = getWeddingMediaUsageLabels(weddingDataRef.current, asset.publicUrl);
+        if (usageLabels.length > 0) {
+            const confirmed = window.confirm(
+                `This image is used in ${usageLabels.join(', ')}. Removing it will clear the image from every listed section when you save. Continue?`
+            );
+            if (!confirmed) return;
+
+            updateWeddingData((current) => removeWeddingMediaReferences(current, asset.publicUrl));
+            setPendingWeddingMediaDeletions((current) => (
+                current.some((item) => item.id === asset.id) ? current : [...current, asset]
+            ));
+            setSaveStatus('Image removal is ready. Save changes to update the live invitation.');
+            return;
+        }
+
+        if (!window.confirm('Remove this image from your wedding media library?')) return;
+        const result = await deleteWeddingMedia(asset);
+        if (result.error) {
+            setSaveError(result.error);
+            setSaveErrorDetail(result.detail);
+            return;
+        }
+        setWeddingMedia((current) => current.filter((item) => item.id !== asset.id));
+    };
+
+    const uploadClosingGalleryImage = async (file: File) => {
+        if (closingImagePickerTarget === null) return;
+        await uploadWeddingImage(file, 'closing-gallery', (imageSrc) => {
+            setClosingGalleryImage(closingImagePickerTarget, imageSrc);
+        });
     };
 
     const updateWeddingShellField = <Key extends keyof SampleWeddingData['wedding']>(
@@ -1609,48 +1939,145 @@ export default function Dashboard({
 
     const getGuestInviteUrl = (guest: WeddingGuest) => `${window.location.origin}${getGuestInviteLink(guest)}`;
 
-    const updateWhatsAppInviteMessage = (inviteMessage: string) => {
+    const updateWhatsAppSetting = <Key extends keyof SampleWeddingData['whatsapp']>(
+        key: Key,
+        value: SampleWeddingData['whatsapp'][Key]
+    ) => {
         updateWeddingData((current) => ({
             ...current,
             whatsapp: {
                 ...current.whatsapp,
-                inviteMessage,
+                [key]: value,
             },
         }));
     };
 
+    const activeWhatsAppMessage = whatsAppMessageMode === 'invitation'
+        ? weddingData.whatsapp.inviteMessage
+        : weddingData.whatsapp.reminderMessage;
+
+    const updateWhatsAppMessage = (message: string) => {
+        updateWhatsAppSetting(
+            whatsAppMessageMode === 'invitation' ? 'inviteMessage' : 'reminderMessage',
+            message
+        );
+    };
+
     const insertWhatsAppMessageContent = (content: string) => {
         const textarea = whatsappMessageTextareaRef.current;
-        const message = weddingData.whatsapp.inviteMessage;
-        const selectionStart = textarea?.selectionStart ?? message.length;
+        const selectionStart = textarea?.selectionStart ?? activeWhatsAppMessage.length;
         const selectionEnd = textarea?.selectionEnd ?? selectionStart;
-        const nextMessage = `${message.slice(0, selectionStart)}${content}${message.slice(selectionEnd)}`;
+        const nextMessage = `${activeWhatsAppMessage.slice(0, selectionStart)}${content}${activeWhatsAppMessage.slice(selectionEnd)}`;
         const nextCursorPosition = selectionStart + content.length;
 
-        updateWhatsAppInviteMessage(nextMessage);
+        updateWhatsAppMessage(nextMessage);
         window.requestAnimationFrame(() => {
             whatsappMessageTextareaRef.current?.focus();
             whatsappMessageTextareaRef.current?.setSelectionRange(nextCursorPosition, nextCursorPosition);
         });
     };
 
-    const getGuestWhatsAppUrl = (guest: WeddingGuest, messageType: 'invite' | 'reminder') => {
+    const uploadWhatsAppPreviewImage = async (file: File) => {
+        await uploadWeddingImage(file, 'whatsapp', (imageSrc) => {
+            updateWhatsAppSetting('previewImageSrc', imageSrc);
+            setIsWhatsAppPreviewImagePickerOpen(false);
+        });
+    };
+
+    const getGuestWhatsAppMessage = (guest: WeddingGuest, messageType: GuestMessageType) => {
         const inviteUrl = getGuestInviteUrl(guest);
-        const guestName = guest.guestName || 'there';
-        const message = messageType === 'invite'
-            ? renderWhatsAppInviteMessage(weddingData.whatsapp.inviteMessage, {
-                guestName,
+        return renderWhatsAppInviteMessage(
+            messageType === 'invitation'
+                ? weddingData.whatsapp.inviteMessage
+                : weddingData.whatsapp.reminderMessage,
+            {
+                guestName: guest.guestName || 'there',
                 coupleName: weddingData.couple.displayName,
                 brideName: weddingData.couple.brideName,
                 groomName: weddingData.couple.groomName,
                 inviteLink: inviteUrl,
-            })
-            : `Hi ${guestName},\n\nA gentle reminder to confirm your RSVP for ${weddingData.couple.displayName}'s wedding celebration.\n\nPlease open your invitation and share your response here:\n${inviteUrl}\n\nYour presence would mean a lot to us.`;
-        return buildWhatsAppUrl(guest.phone, message);
+            }
+        );
+    };
+
+    const getGuestWhatsAppUrl = (guest: WeddingGuest, messageType: GuestMessageType) => (
+        buildWhatsAppUrl(guest.phone, getGuestWhatsAppMessage(guest, messageType))
+    );
+
+    const handleGuestWhatsAppOpened = (guestId: string, messageType: GuestMessageType) => {
+        setPendingGuestMessageConfirmation({ guestId, messageType });
+    };
+
+    const confirmGuestMessageSent = async (guest: WeddingGuest, messageType: GuestMessageType) => {
+        const savingKey = `${guest.id}:${messageType}`;
+        setGuestMessageHistorySavingKey(savingKey);
+        setSaveError('');
+        setSaveErrorDetail('');
+
+        let entry: GuestMessageHistoryEntry;
+        if (supabaseWeddingId) {
+            const result = await recordGuestMessageSent({
+                weddingId: supabaseWeddingId,
+                guestId: guest.id,
+                messageType,
+                messageSnapshot: getGuestWhatsAppMessage(guest, messageType),
+            });
+            if (result.error || !result.entry) {
+                setGuestMessageHistorySavingKey('');
+                setSaveError(result.error || 'Could not update WhatsApp tracking. Please try again.');
+                setSaveErrorDetail(result.detail);
+                return;
+            }
+            entry = result.entry;
+        } else {
+            const sentAt = new Date().toISOString();
+            entry = {
+                id: window.crypto.randomUUID(),
+                weddingId: `mock:${weddingData.wedding.slug}`,
+                guestId: guest.id,
+                messageType,
+                messageSnapshot: getGuestWhatsAppMessage(guest, messageType),
+                sentAt,
+                recordedBy: user?.id,
+                createdAt: sentAt,
+            };
+        }
+
+        setGuestMessageHistory((current) => {
+            const next = [entry, ...current];
+            if (!supabaseWeddingId) persistStoredGuestMessageHistory(weddingData.wedding.slug, next);
+            return next;
+        });
+        setPendingGuestMessageConfirmation(null);
+        setGuestMessageHistorySavingKey('');
+        setSaveStatus(messageType === 'invitation' ? 'Invitation marked as sent' : 'Reminder marked as sent');
+    };
+
+    const removeGuestMessageRecord = async (entry: GuestMessageHistoryEntry) => {
+        if (!window.confirm('Remove this manually recorded WhatsApp send?')) return;
+
+        setGuestMessageHistorySavingKey(entry.id);
+        if (supabaseWeddingId) {
+            const result = await removeGuestMessageHistoryEntry(supabaseWeddingId, entry.id);
+            if (result.error) {
+                setGuestMessageHistorySavingKey('');
+                setSaveError(result.error);
+                setSaveErrorDetail(result.detail);
+                return;
+            }
+        }
+
+        setGuestMessageHistory((current) => {
+            const next = current.filter((item) => item.id !== entry.id);
+            if (!supabaseWeddingId) persistStoredGuestMessageHistory(weddingData.wedding.slug, next);
+            return next;
+        });
+        setGuestMessageHistorySavingKey('');
+        setSaveStatus('WhatsApp send record removed');
     };
 
     const whatsAppPreviewGuest = weddingData.rsvp.guests[0];
-    const whatsAppPreviewMessage = renderWhatsAppInviteMessage(weddingData.whatsapp.inviteMessage, {
+    const whatsAppPreviewMessage = renderWhatsAppInviteMessage(activeWhatsAppMessage, {
         guestName: whatsAppPreviewGuest?.guestName || 'Guest Name',
         coupleName: weddingData.couple.displayName,
         brideName: weddingData.couple.brideName,
@@ -2291,6 +2718,19 @@ export default function Dashboard({
                                                 />
                                             ))}
                                         </div>
+                                        <WeddingMediaLibrary
+                                            assets={weddingMedia}
+                                            pendingRemovalIds={pendingWeddingMediaDeletionIds}
+                                            selectedSrc={weddingData.hero.revealImageSrc}
+                                            isUploading={mediaUploadingSection === 'opening-reveal'}
+                                            isLoading={isWeddingMediaLoading}
+                                            setupRequired={weddingMediaSetupRequired}
+                                            disabled={!supabaseWeddingId}
+                                            onUpload={(file) => void uploadWeddingImage(file, 'opening-reveal', (imageSrc) => updateHero('revealImageSrc', imageSrc))}
+                                            onSelect={(asset) => updateHero('revealImageSrc', asset.publicUrl)}
+                                            onDelete={(asset) => void removeWeddingMediaAsset(asset)}
+                                            isInUse={isWeddingMediaInUse}
+                                        />
                                     </section>
                                 )}
                             </div>
@@ -2365,6 +2805,19 @@ export default function Dashboard({
                                             </button>
                                         ))}
                                     </div>
+                                    <WeddingMediaLibrary
+                                        assets={weddingMedia}
+                                        pendingRemovalIds={pendingWeddingMediaDeletionIds}
+                                        selectedSrc={weddingData.couple.backgroundImageSrc}
+                                        isUploading={mediaUploadingSection === 'our-story'}
+                                        isLoading={isWeddingMediaLoading}
+                                        setupRequired={weddingMediaSetupRequired}
+                                        disabled={!supabaseWeddingId}
+                                        onUpload={(file) => void uploadWeddingImage(file, 'our-story', (imageSrc) => updateCouple('backgroundImageSrc', imageSrc))}
+                                        onSelect={(asset) => updateCouple('backgroundImageSrc', asset.publicUrl)}
+                                        onDelete={(asset) => void removeWeddingMediaAsset(asset)}
+                                        isInUse={isWeddingMediaInUse}
+                                    />
                                 </section>
                             </div>
 
@@ -2510,6 +2963,15 @@ export default function Dashboard({
                                             onSelect={(visualKey) => updateEvent(index, 'eventVisualKey', visualKey)}
                                             isAdminMode={isAdminMode}
                                             persistenceKey={eventVisualPickerStorageKey}
+                                            uploadedMedia={weddingMedia}
+                                            pendingRemovalIds={pendingWeddingMediaDeletionIds}
+                                            isMediaUploading={mediaUploadingSection === 'events'}
+                                            isMediaLoading={isWeddingMediaLoading}
+                                            mediaSetupRequired={weddingMediaSetupRequired}
+                                            mediaUploadDisabled={!supabaseWeddingId}
+                                            onUploadMedia={(file) => void uploadWeddingImage(file, 'events', (imageSrc) => updateEvent(index, 'eventVisualKey', imageSrc))}
+                                            onDeleteMedia={(asset) => void removeWeddingMediaAsset(asset)}
+                                            isMediaInUse={isWeddingMediaInUse}
                                         />
                                     </div>
                                 </div>
@@ -2618,17 +3080,115 @@ export default function Dashboard({
                                 )}
                             </div>
                         )}
-                        <label className="guest-search">
-                            <span>Search guests</span>
-                            <input
-                                value={guestSearchQuery}
-                                onChange={(event) => {
-                                    setGuestSearchQuery(event.target.value);
-                                    setGuestPage(1);
-                                }}
-                                placeholder="Search by guest, phone, or category"
-                            />
-                        </label>
+                        <div className="guest-filter-bar">
+                            <div className="guest-filter-header">
+                                <div>
+                                    <strong>Filter guest list</strong>
+                                    <span>
+                                        {filteredGuestRows.length.toLocaleString()} of {weddingData.rsvp.guests.length.toLocaleString()} guests
+                                    </span>
+                                </div>
+                                {activeGuestFilterCount > 0 && (
+                                    <button className="guest-filter-clear" type="button" onClick={clearGuestFilters}>
+                                        Clear filters ({activeGuestFilterCount})
+                                    </button>
+                                )}
+                            </div>
+                            <div className="guest-filter-grid">
+                                <label className="guest-filter-field guest-filter-search">
+                                    <span>Search</span>
+                                    <input
+                                        value={guestSearchQuery}
+                                        onChange={(event) => {
+                                            setGuestSearchQuery(event.target.value);
+                                            setGuestPage(1);
+                                        }}
+                                        placeholder="Guest, phone, category, or RSVP"
+                                    />
+                                </label>
+                                <label className="guest-filter-field">
+                                    <span>Category</span>
+                                    <select
+                                        value={guestCategoryFilter}
+                                        onChange={(event) => {
+                                            setGuestCategoryFilter(event.target.value);
+                                            setGuestPage(1);
+                                        }}
+                                    >
+                                        <option value="all">All categories</option>
+                                        {weddingData.rsvp.guests.some((guest) => !guest.category.trim()) && (
+                                            <option value="uncategorized">Uncategorized</option>
+                                        )}
+                                        {guestCategoryOptions.map((category) => (
+                                            <option key={category} value={category}>{category}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="guest-filter-field">
+                                    <span>WhatsApp</span>
+                                    <select
+                                        value={guestWhatsAppFilter}
+                                        onChange={(event) => {
+                                            setGuestWhatsAppFilter(event.target.value as GuestWhatsAppFilter);
+                                            setGuestPage(1);
+                                        }}
+                                    >
+                                        <option value="all">Any send status</option>
+                                        <option value="invite-not-sent">Invite not sent</option>
+                                        <option value="invite-sent">Invite sent</option>
+                                        <option value="no-reminders">No reminder sent</option>
+                                        <option value="reminders-sent">Reminder sent</option>
+                                    </select>
+                                </label>
+                                <label className="guest-filter-field">
+                                    <span>RSVP Progress</span>
+                                    <select
+                                        value={guestRsvpFilter}
+                                        onChange={(event) => {
+                                            setGuestRsvpFilter(event.target.value as GuestRsvpFilter);
+                                            setGuestPage(1);
+                                        }}
+                                    >
+                                        <option value="all">Any RSVP status</option>
+                                        <option value="no-response">No response yet</option>
+                                        <option value="pending">Has pending responses</option>
+                                        <option value="complete">All events answered</option>
+                                        <option value="attending">Attending an event</option>
+                                        <option value="maybe">Maybe for an event</option>
+                                        <option value="declined">Declined all events</option>
+                                    </select>
+                                </label>
+                                <label className="guest-filter-field">
+                                    <span>Last RSVP Update</span>
+                                    <select
+                                        value={guestActivityFilter}
+                                        onChange={(event) => {
+                                            setGuestActivityFilter(event.target.value as GuestActivityFilter);
+                                            setGuestPage(1);
+                                        }}
+                                    >
+                                        <option value="all">Any update time</option>
+                                        <option value="never">Never submitted</option>
+                                        <option value="last-7-days">Updated in last 7 days</option>
+                                        <option value="older-than-7-days">Updated over 7 days ago</option>
+                                    </select>
+                                </label>
+                                <label className="guest-filter-field">
+                                    <span>Phone</span>
+                                    <select
+                                        value={guestPhoneFilter}
+                                        onChange={(event) => {
+                                            setGuestPhoneFilter(event.target.value as GuestPhoneFilter);
+                                            setGuestPage(1);
+                                        }}
+                                    >
+                                        <option value="all">Any phone status</option>
+                                        <option value="available">Ready to message</option>
+                                        <option value="missing">Missing phone</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
                         <div className="guest-table-wrap">
                             <table className="guest-table">
                                 <thead>
@@ -2655,7 +3215,15 @@ export default function Dashboard({
                                 <tbody>
                                     {paginatedGuestRows.map(({ guest, guestIndex }) => {
                                         const guestRsvpSummary = rsvpAnalytics.guestSummaryById.get(guest.id);
-                                        const inviteWhatsAppUrl = getGuestWhatsAppUrl(guest, 'invite');
+                                        const messageHistory = guestMessageHistoryByGuestId.get(guest.id) ?? [];
+                                        const invitationHistory = messageHistory.filter((entry) => entry.messageType === 'invitation');
+                                        const reminderHistory = messageHistory.filter((entry) => entry.messageType === 'reminder');
+                                        const firstInvitation = invitationHistory[invitationHistory.length - 1];
+                                        const lastReminder = reminderHistory[0];
+                                        const pendingMessageType = pendingGuestMessageConfirmation?.guestId === guest.id
+                                            ? pendingGuestMessageConfirmation.messageType
+                                            : null;
+                                        const inviteWhatsAppUrl = getGuestWhatsAppUrl(guest, 'invitation');
                                         const reminderWhatsAppUrl = getGuestWhatsAppUrl(guest, 'reminder');
 
                                         return (
@@ -2736,12 +3304,83 @@ export default function Dashboard({
                                                             <button type="button" onClick={() => previewGuestInvite(guest)}>Preview</button>
                                                         </div>
                                                     </td>
-                                                    <td>
+                                                    <td className="guest-whatsapp-cell">
                                                         {inviteWhatsAppUrl ? (
-                                                            <div className="guest-link-actions compact guest-whatsapp-actions">
-                                                                <a href={inviteWhatsAppUrl} target="_blank" rel="noreferrer">Send Invite</a>
-                                                                <a href={reminderWhatsAppUrl} target="_blank" rel="noreferrer">Reminder</a>
-                                                            </div>
+                                                            <>
+                                                                <div className="guest-whatsapp-status">
+                                                                    <span>
+                                                                        <strong>Invitation</strong>
+                                                                        {isGuestMessageHistoryLoading
+                                                                            ? 'Loading...'
+                                                                            : firstInvitation
+                                                                                ? `Sent ${new Date(firstInvitation.sentAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+                                                                                : 'Not sent'}
+                                                                    </span>
+                                                                    <span>
+                                                                        <strong>Reminders</strong>
+                                                                        {isGuestMessageHistoryLoading
+                                                                            ? 'Loading...'
+                                                                            : reminderHistory.length
+                                                                                ? `${reminderHistory.length} sent - Last ${new Date(lastReminder.sentAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+                                                                                : 'None sent'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="guest-link-actions compact guest-whatsapp-actions">
+                                                                    <a
+                                                                        href={inviteWhatsAppUrl}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        onClick={() => handleGuestWhatsAppOpened(guest.id, 'invitation')}
+                                                                    >
+                                                                        {firstInvitation ? 'Resend Invite' : 'Send Invite'}
+                                                                    </a>
+                                                                    <a
+                                                                        href={reminderWhatsAppUrl}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        onClick={() => handleGuestWhatsAppOpened(guest.id, 'reminder')}
+                                                                    >
+                                                                        Send Reminder
+                                                                    </a>
+                                                                </div>
+                                                                {pendingMessageType && (
+                                                                    <div className="guest-whatsapp-confirmation">
+                                                                        <span>Sent in WhatsApp?</span>
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={guestMessageHistorySavingKey === `${guest.id}:${pendingMessageType}`}
+                                                                            onClick={() => confirmGuestMessageSent(guest, pendingMessageType)}
+                                                                        >
+                                                                            Mark as sent
+                                                                        </button>
+                                                                        <button type="button" onClick={() => setPendingGuestMessageConfirmation(null)}>
+                                                                            Not yet
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                                {messageHistory.length > 0 && (
+                                                                    <details className="guest-whatsapp-history">
+                                                                        <summary>History ({messageHistory.length})</summary>
+                                                                        <div>
+                                                                            {messageHistory.map((entry) => (
+                                                                                <span key={entry.id}>
+                                                                                    <span>
+                                                                                        <strong>{entry.messageType === 'invitation' ? 'Invitation' : 'Reminder'}</strong>
+                                                                                        <time dateTime={entry.sentAt}>{new Date(entry.sentAt).toLocaleString()}</time>
+                                                                                    </span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        disabled={guestMessageHistorySavingKey === entry.id}
+                                                                                        onClick={() => removeGuestMessageRecord(entry)}
+                                                                                    >
+                                                                                        Remove
+                                                                                    </button>
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    </details>
+                                                                )}
+                                                            </>
                                                         ) : (
                                                             <button className="guest-missing-phone-btn" type="button" disabled>Missing phone</button>
                                                         )}
@@ -2800,7 +3439,7 @@ export default function Dashboard({
                                 <p className="dashboard-note">
                                     {weddingData.rsvp.guests.length === 0
                                         ? 'No guests yet. Add guests manually or import CSV.'
-                                        : 'No guests match this search.'}
+                                        : 'No guests match the current filters.'}
                                 </p>
                             )}
                         </div>
@@ -2850,7 +3489,7 @@ export default function Dashboard({
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
                                 <p className="dashboard-eyebrow">WhatsApp Message</p>
-                                <h2>Configure the invite message</h2>
+                                <h2>Configure messages and link preview</h2>
                             </div>
                             <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
                                 {saveAllChangesLabel}
@@ -2859,13 +3498,34 @@ export default function Dashboard({
 
                         <div className="whatsapp-message-layout">
                             <section className="whatsapp-message-composer" aria-labelledby="whatsapp-message-label">
+                                <div className="whatsapp-message-mode" role="group" aria-label="WhatsApp message type">
+                                    <button
+                                        className={whatsAppMessageMode === 'invitation' ? 'active' : ''}
+                                        type="button"
+                                        onClick={() => setWhatsAppMessageMode('invitation')}
+                                    >
+                                        Invite Message
+                                    </button>
+                                    <button
+                                        className={whatsAppMessageMode === 'reminder' ? 'active' : ''}
+                                        type="button"
+                                        onClick={() => setWhatsAppMessageMode('reminder')}
+                                    >
+                                        Reminder Message
+                                    </button>
+                                </div>
                                 <label className="dashboard-field">
-                                    <span id="whatsapp-message-label">Message sent with Send Invite</span>
+                                    <span id="whatsapp-message-label">
+                                        {whatsAppMessageMode === 'invitation'
+                                            ? 'Message sent with Send Invite'
+                                            : 'Message sent with Send Reminder'}
+                                    </span>
                                     <textarea
+                                        key={whatsAppMessageMode}
                                         ref={whatsappMessageTextareaRef}
-                                        value={weddingData.whatsapp.inviteMessage}
+                                        value={activeWhatsAppMessage}
                                         rows={11}
-                                        onChange={(event) => updateWhatsAppInviteMessage(event.target.value)}
+                                        onChange={(event) => updateWhatsAppMessage(event.target.value)}
                                     />
                                 </label>
 
@@ -2907,17 +3567,151 @@ export default function Dashboard({
                                 <button
                                     className="dashboard-primary-btn secondary whatsapp-reset-button"
                                     type="button"
-                                    onClick={() => updateWhatsAppInviteMessage(defaultWhatsAppInviteMessage)}
+                                    onClick={() => updateWhatsAppMessage(
+                                        whatsAppMessageMode === 'invitation'
+                                            ? defaultWhatsAppInviteMessage
+                                            : defaultWhatsAppReminderMessage
+                                    )}
                                 >
-                                    Restore default message
+                                    Restore default {whatsAppMessageMode === 'invitation' ? 'invite' : 'reminder'} message
                                 </button>
                             </section>
 
                             <aside className="whatsapp-message-preview" aria-label="WhatsApp message preview">
-                                <span>Message preview</span>
+                                <span>{whatsAppMessageMode === 'invitation' ? 'Invite preview' : 'Reminder preview'}</span>
                                 <div className="whatsapp-message-bubble">{whatsAppPreviewMessage}</div>
                             </aside>
                         </div>
+
+                        <section className="whatsapp-link-preview-section" aria-labelledby="whatsapp-link-preview-title">
+                            <div className="whatsapp-link-preview-header">
+                                <div>
+                                    <h3 id="whatsapp-link-preview-title">Invitation link preview</h3>
+                                    <p>Choose the image and copy shown when a personalized invitation link is shared.</p>
+                                </div>
+                            </div>
+                            <div className="whatsapp-link-preview-layout">
+                                <div className="whatsapp-link-preview-editor">
+                                    <label className="dashboard-field">
+                                        <span>Preview Title</span>
+                                        <input
+                                            value={weddingData.whatsapp.previewTitle}
+                                            maxLength={90}
+                                            onChange={(event) => updateWhatsAppSetting('previewTitle', event.target.value)}
+                                            placeholder={getDefaultWhatsAppPreviewTitle(weddingData.couple.displayName)}
+                                        />
+                                    </label>
+                                    <label className="dashboard-field">
+                                        <span>Preview Description</span>
+                                        <textarea
+                                            value={weddingData.whatsapp.previewDescription}
+                                            maxLength={200}
+                                            rows={4}
+                                            onChange={(event) => updateWhatsAppSetting('previewDescription', event.target.value)}
+                                            placeholder={getDefaultWhatsAppPreviewDescription(weddingData.couple.displayName)}
+                                        />
+                                    </label>
+                                    <div className="whatsapp-preview-image-control">
+                                        <span>Preview Image</span>
+                                        <div className="whatsapp-preview-image-current">
+                                            <img
+                                                src={resolveAssetPath(weddingData.whatsapp.previewImageSrc || whatsAppPreviewFallbackImageSrc)}
+                                                alt=""
+                                                loading="lazy"
+                                                decoding="async"
+                                            />
+                                            <div>
+                                                <strong>
+                                                    {weddingData.whatsapp.previewImageSrc ? 'Selected wedding image' : 'Shaadi Nyota default image'}
+                                                </strong>
+                                                <span>Landscape images work best in WhatsApp link cards.</span>
+                                                <div className="guest-link-actions compact">
+                                                    <button type="button" onClick={() => setIsWhatsAppPreviewImagePickerOpen(true)}>
+                                                        Change Image
+                                                    </button>
+                                                    {weddingData.whatsapp.previewImageSrc && (
+                                                        <button type="button" onClick={() => updateWhatsAppSetting('previewImageSrc', '')}>
+                                                            Use Default
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {isWhatsAppPreviewImagePickerOpen && (
+                                        <div className="closing-picker-panel whatsapp-preview-image-picker">
+                                            <div className="closing-picker-header">
+                                                <div>
+                                                    <strong>Choose preview image</strong>
+                                                    <span>Select a wedding image or upload your own.</span>
+                                                </div>
+                                                <button type="button" onClick={() => setIsWhatsAppPreviewImagePickerOpen(false)}>Close</button>
+                                            </div>
+                                            <div className="whatsapp-preview-image-grid">
+                                                {whatsAppPreviewImageOptions.map((option) => (
+                                                    <button
+                                                        key={option.key}
+                                                        className="whatsapp-preview-image-option"
+                                                        type="button"
+                                                        onClick={() => {
+                                                            updateWhatsAppSetting('previewImageSrc', option.imageSrc);
+                                                            setIsWhatsAppPreviewImagePickerOpen(false);
+                                                        }}
+                                                    >
+                                                        <img src={resolveAssetPath(option.thumbnailSrc)} alt="" loading="lazy" decoding="async" />
+                                                        <span>
+                                                            <strong>{option.label}</strong>
+                                                            <small>{option.sectionLabel}</small>
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <WeddingMediaLibrary
+                                                assets={weddingMedia}
+                                                pendingRemovalIds={pendingWeddingMediaDeletionIds}
+                                                selectedSrc={weddingData.whatsapp.previewImageSrc}
+                                                isUploading={isWhatsAppPreviewImageUploading}
+                                                isLoading={isWeddingMediaLoading}
+                                                setupRequired={weddingMediaSetupRequired}
+                                                disabled={!supabaseWeddingId}
+                                                previewShape="landscape"
+                                                onUpload={(file) => void uploadWhatsAppPreviewImage(file)}
+                                                onSelect={(asset) => {
+                                                    updateWhatsAppSetting('previewImageSrc', asset.publicUrl);
+                                                    setIsWhatsAppPreviewImagePickerOpen(false);
+                                                }}
+                                                onDelete={(asset) => void removeWeddingMediaAsset(asset)}
+                                                isInUse={isWeddingMediaInUse}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <aside className="whatsapp-link-card-preview" aria-label="Invitation link card preview">
+                                    <span>Link preview</span>
+                                    <div className="whatsapp-link-card">
+                                        <img
+                                            src={resolveAssetPath(weddingData.whatsapp.previewImageSrc || whatsAppPreviewFallbackImageSrc)}
+                                            alt=""
+                                            loading="lazy"
+                                            decoding="async"
+                                        />
+                                        <div>
+                                            <strong>
+                                                {weddingData.whatsapp.previewTitle.trim()
+                                                    || getDefaultWhatsAppPreviewTitle(weddingData.couple.displayName)}
+                                            </strong>
+                                            <p>
+                                                {weddingData.whatsapp.previewDescription.trim()
+                                                    || getDefaultWhatsAppPreviewDescription(weddingData.couple.displayName)}
+                                            </p>
+                                            <span>{window.location.host}</span>
+                                        </div>
+                                    </div>
+                                </aside>
+                            </div>
+                        </section>
                     </div>
                 ) : (
                     <RsvpPlanLockedPanel title="WhatsApp Message is locked" whatsAppContext={paymentWhatsAppContext} />
@@ -2958,6 +3752,15 @@ export default function Dashboard({
                                 label="RSVP Background"
                                 value={weddingData.rsvp.backgroundImageSrc}
                                 onChange={(imageSrc) => updateRsvp('backgroundImageSrc', imageSrc)}
+                                uploadedMedia={weddingMedia}
+                                pendingRemovalIds={pendingWeddingMediaDeletionIds}
+                                isMediaUploading={mediaUploadingSection === 'rsvp'}
+                                isMediaLoading={isWeddingMediaLoading}
+                                mediaSetupRequired={weddingMediaSetupRequired}
+                                mediaUploadDisabled={!supabaseWeddingId}
+                                onUploadMedia={(file) => void uploadWeddingImage(file, 'rsvp', (imageSrc) => updateRsvp('backgroundImageSrc', imageSrc))}
+                                onDeleteMedia={(asset) => void removeWeddingMediaAsset(asset)}
+                                isMediaInUse={isWeddingMediaInUse}
                             />
                         </section>
                     </div>
@@ -3097,6 +3900,15 @@ export default function Dashboard({
                                         label="With Love Background"
                                         value={weddingData.closing.backgroundImageSrc}
                                         onChange={(imageSrc) => updateClosing('backgroundImageSrc', imageSrc)}
+                                        uploadedMedia={weddingMedia}
+                                        pendingRemovalIds={pendingWeddingMediaDeletionIds}
+                                        isMediaUploading={mediaUploadingSection === 'closing-gallery'}
+                                        isMediaLoading={isWeddingMediaLoading}
+                                        mediaSetupRequired={weddingMediaSetupRequired}
+                                        mediaUploadDisabled={!supabaseWeddingId}
+                                        onUploadMedia={(file) => void uploadWeddingImage(file, 'closing-gallery', (imageSrc) => updateClosing('backgroundImageSrc', imageSrc))}
+                                        onDeleteMedia={(asset) => void removeWeddingMediaAsset(asset)}
+                                        isMediaInUse={isWeddingMediaInUse}
                                     />
                                 </section>
 
@@ -3138,21 +3950,6 @@ export default function Dashboard({
                                                     </div>
                                                     <button type="button" onClick={() => setClosingImagePickerTarget(null)}>Close</button>
                                                 </div>
-                                                <label className="closing-upload-control">
-                                                    <span>{isClosingImageUploading ? 'Uploading...' : 'Upload Image'}</span>
-                                                    <input
-                                                        type="file"
-                                                        accept={closingGalleryAcceptedUploadTypes}
-                                                        disabled={isClosingImageUploading}
-                                                        onChange={(event) => {
-                                                            const file = event.target.files?.[0];
-                                                            if (file) {
-                                                                void uploadClosingGalleryImage(file);
-                                                            }
-                                                            event.target.value = '';
-                                                        }}
-                                                    />
-                                                </label>
                                                 <div className="closing-image-grid">
                                                     {closingImagePresets.map((option) => (
                                                         <button
@@ -3167,6 +3964,18 @@ export default function Dashboard({
                                                         </button>
                                                     ))}
                                                 </div>
+                                                <WeddingMediaLibrary
+                                                    assets={weddingMedia}
+                                                    pendingRemovalIds={pendingWeddingMediaDeletionIds}
+                                                    isUploading={isClosingImageUploading}
+                                                    isLoading={isWeddingMediaLoading}
+                                                    setupRequired={weddingMediaSetupRequired}
+                                                    disabled={!supabaseWeddingId}
+                                                    onUpload={(file) => void uploadClosingGalleryImage(file)}
+                                                    onSelect={(asset) => setClosingGalleryImage(closingImagePickerTarget, asset.publicUrl)}
+                                                    onDelete={(asset) => void removeWeddingMediaAsset(asset)}
+                                                    isInUse={isWeddingMediaInUse}
+                                                />
                                             </div>
                                         )}
                                     </section>
@@ -3566,10 +4375,28 @@ function SectionBackgroundPicker({
     label,
     value,
     onChange,
+    uploadedMedia,
+    pendingRemovalIds,
+    isMediaUploading,
+    isMediaLoading,
+    mediaSetupRequired,
+    mediaUploadDisabled,
+    onUploadMedia,
+    onDeleteMedia,
+    isMediaInUse,
 }: {
     label: string;
     value: string;
     onChange: (imageSrc: string) => void;
+    uploadedMedia: WeddingMediaAsset[];
+    pendingRemovalIds: ReadonlySet<string>;
+    isMediaUploading: boolean;
+    isMediaLoading: boolean;
+    mediaSetupRequired: boolean;
+    mediaUploadDisabled: boolean;
+    onUploadMedia: (file: File) => void;
+    onDeleteMedia: (asset: WeddingMediaAsset) => void;
+    isMediaInUse: (asset: WeddingMediaAsset) => boolean;
 }) {
     return (
         <div className="section-background-picker">
@@ -3594,6 +4421,20 @@ function SectionBackgroundPicker({
                     );
                 })}
             </div>
+            <WeddingMediaLibrary
+                assets={uploadedMedia}
+                pendingRemovalIds={pendingRemovalIds}
+                selectedSrc={value}
+                isUploading={isMediaUploading}
+                isLoading={isMediaLoading}
+                setupRequired={mediaSetupRequired}
+                disabled={mediaUploadDisabled}
+                previewShape="flexible"
+                onUpload={onUploadMedia}
+                onSelect={(asset) => onChange(asset.publicUrl)}
+                onDelete={onDeleteMedia}
+                isInUse={isMediaInUse}
+            />
         </div>
     );
 }
@@ -3759,12 +4600,30 @@ function EventVisualPicker({
     onSelect,
     isAdminMode = false,
     persistenceKey,
+    uploadedMedia,
+    pendingRemovalIds,
+    isMediaUploading,
+    isMediaLoading,
+    mediaSetupRequired,
+    mediaUploadDisabled,
+    onUploadMedia,
+    onDeleteMedia,
+    isMediaInUse,
 }: {
     event: WeddingEvent;
     themeKey: string;
     onSelect: (visualKey: string) => void;
     isAdminMode?: boolean;
     persistenceKey: string;
+    uploadedMedia: WeddingMediaAsset[];
+    pendingRemovalIds: ReadonlySet<string>;
+    isMediaUploading: boolean;
+    isMediaLoading: boolean;
+    mediaSetupRequired: boolean;
+    mediaUploadDisabled: boolean;
+    onUploadMedia: (file: File) => void;
+    onDeleteMedia: (asset: WeddingMediaAsset) => void;
+    isMediaInUse: (asset: WeddingMediaAsset) => boolean;
 }) {
     const [isPickerOpen, setIsPickerOpenState] = useState(() => {
         try {
@@ -3926,6 +4785,23 @@ function EventVisualPicker({
                                 ))}
                             </div>
                         </div>
+
+                        <WeddingMediaLibrary
+                            assets={uploadedMedia}
+                            pendingRemovalIds={pendingRemovalIds}
+                            selectedSrc={selectedKey}
+                            isUploading={isMediaUploading}
+                            isLoading={isMediaLoading}
+                            setupRequired={mediaSetupRequired}
+                            disabled={mediaUploadDisabled}
+                            onUpload={onUploadMedia}
+                            onSelect={(asset) => {
+                                onSelect(asset.publicUrl);
+                                setIsPickerOpen(false);
+                            }}
+                            onDelete={onDeleteMedia}
+                            isInUse={isMediaInUse}
+                        />
 
                         <div className="event-visual-card-grid modal-grid">
                             <EventVisualCard

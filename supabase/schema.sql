@@ -185,6 +185,10 @@ create table if not exists public.wedding_settings (
   music_audio_src text,
   music_title text,
   whatsapp_invite_message text,
+  whatsapp_reminder_message text,
+  whatsapp_preview_title text,
+  whatsapp_preview_description text,
+  whatsapp_preview_image_src text,
   couple_enabled boolean not null default true,
   couple_intro_line text,
   couple_blessing_line text,
@@ -224,6 +228,29 @@ comment on column public.wedding_settings.closing_carousel_images is 'JSON array
 create trigger wedding_settings_set_updated_at
 before update on public.wedding_settings
 for each row execute function public.set_updated_at();
+
+create table if not exists public.wedding_media (
+  id uuid primary key default gen_random_uuid(),
+  wedding_id uuid not null references public.weddings(id) on delete cascade,
+  storage_path text not null,
+  public_url text not null,
+  thumbnail_path text not null,
+  thumbnail_url text not null,
+  original_filename text not null default '',
+  mime_type text not null check (mime_type in ('image/jpeg', 'image/png', 'image/webp')),
+  size_bytes bigint not null default 0 check (size_bytes >= 0),
+  thumbnail_size_bytes bigint not null default 0 check (thumbnail_size_bytes >= 0),
+  width integer not null check (width > 0),
+  height integer not null check (height > 0),
+  initial_section text not null default 'shared' check (
+    initial_section in ('opening-reveal', 'our-story', 'events', 'rsvp', 'closing-gallery', 'whatsapp', 'shared')
+  ),
+  created_by uuid references auth.users(id) on delete set null default auth.uid(),
+  created_at timestamptz not null default now(),
+  unique (wedding_id, storage_path)
+);
+
+comment on table public.wedding_media is 'Reusable wedding-scoped media metadata. Binary files live in the wedding-assets Storage bucket.';
 
 create table if not exists public.events (
   id uuid primary key default gen_random_uuid(),
@@ -347,6 +374,46 @@ comment on table public.guest_event_invites is 'Join table for guest-wise event 
 
 create index if not exists guest_event_invites_wedding_id_idx on public.guest_event_invites(wedding_id);
 create index if not exists guest_event_invites_event_id_idx on public.guest_event_invites(event_id);
+
+create table if not exists public.guest_message_history (
+  id uuid primary key default gen_random_uuid(),
+  wedding_id uuid not null references public.weddings(id) on delete cascade,
+  guest_id uuid not null references public.guests(id) on delete cascade,
+  message_type text not null check (message_type in ('invitation', 'reminder')),
+  message_snapshot text not null default '',
+  sent_at timestamptz not null default now(),
+  recorded_by uuid default auth.uid(),
+  created_at timestamptz not null default now()
+);
+
+comment on table public.guest_message_history is 'Manual audit log for guest WhatsApp invitations and reminders.';
+
+create index if not exists guest_message_history_wedding_id_idx on public.guest_message_history(wedding_id);
+create index if not exists guest_message_history_guest_sent_idx on public.guest_message_history(guest_id, sent_at desc);
+
+create or replace function public.validate_guest_message_history_scope()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.guests
+    where guests.id = new.guest_id
+      and guests.wedding_id = new.wedding_id
+  ) then
+    raise exception 'Guest does not belong to this wedding.' using errcode = '23503';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists guest_message_history_validate_scope on public.guest_message_history;
+create trigger guest_message_history_validate_scope
+before insert or update of wedding_id, guest_id on public.guest_message_history
+for each row execute function public.validate_guest_message_history_scope();
+
 
 create table if not exists public.rsvp_responses (
   id uuid primary key default gen_random_uuid(),

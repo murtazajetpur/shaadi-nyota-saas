@@ -4,9 +4,11 @@
 alter table public.profiles enable row level security;
 alter table public.weddings enable row level security;
 alter table public.wedding_settings enable row level security;
+alter table public.wedding_media enable row level security;
 alter table public.events enable row level security;
 alter table public.guests enable row level security;
 alter table public.guest_event_invites enable row level security;
+alter table public.guest_message_history enable row level security;
 alter table public.rsvp_responses enable row level security;
 
 create or replace function public.is_admin()
@@ -29,9 +31,11 @@ grant select on public.profiles to authenticated;
 grant select on public.weddings to authenticated;
 grant select, insert, update on public.weddings to authenticated;
 grant select, insert, update, delete on public.wedding_settings to authenticated;
+grant select, insert, delete on public.wedding_media to authenticated;
 grant select, insert, update, delete on public.events to authenticated;
 grant select, insert, update, delete on public.guests to authenticated;
 grant select, insert, update, delete on public.guest_event_invites to authenticated;
+grant select, insert, delete on public.guest_message_history to authenticated;
 grant select, insert, update on public.rsvp_responses to authenticated;
 
 drop policy if exists "Users can read own profile" on public.profiles;
@@ -177,6 +181,45 @@ using (
   )
 );
 
+drop policy if exists "Couples and admins can read wedding media" on public.wedding_media;
+create policy "Couples and admins can read wedding media"
+on public.wedding_media
+for select
+to authenticated
+using (
+  exists (
+    select 1 from public.weddings
+    where weddings.id = wedding_media.wedding_id
+      and (weddings.owner_id = auth.uid() or public.is_admin())
+  )
+);
+
+drop policy if exists "Couples and admins can add wedding media" on public.wedding_media;
+create policy "Couples and admins can add wedding media"
+on public.wedding_media
+for insert
+to authenticated
+with check (
+  exists (
+    select 1 from public.weddings
+    where weddings.id = wedding_media.wedding_id
+      and (weddings.owner_id = auth.uid() or public.is_admin())
+  )
+);
+
+drop policy if exists "Couples and admins can delete wedding media" on public.wedding_media;
+create policy "Couples and admins can delete wedding media"
+on public.wedding_media
+for delete
+to authenticated
+using (
+  exists (
+    select 1 from public.weddings
+    where weddings.id = wedding_media.wedding_id
+      and (weddings.owner_id = auth.uid() or public.is_admin())
+  )
+);
+
 drop policy if exists "Couples can manage own events" on public.events;
 create policy "Couples can manage own events"
 on public.events
@@ -280,6 +323,47 @@ to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
+
+drop policy if exists "Couples can manage own guest message history" on public.guest_message_history;
+create policy "Couples can manage own guest message history"
+on public.guest_message_history
+for all
+to authenticated
+using (
+  exists (
+    select 1 from public.weddings
+    where weddings.id = guest_message_history.wedding_id
+      and weddings.owner_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1 from public.weddings
+    where weddings.id = guest_message_history.wedding_id
+      and weddings.owner_id = auth.uid()
+  )
+  and exists (
+    select 1 from public.guests
+    where guests.id = guest_message_history.guest_id
+      and guests.wedding_id = guest_message_history.wedding_id
+  )
+);
+
+drop policy if exists "Admins can manage all guest message history" on public.guest_message_history;
+create policy "Admins can manage all guest message history"
+on public.guest_message_history
+for all
+to authenticated
+using (public.is_admin())
+with check (
+  public.is_admin()
+  and exists (
+    select 1 from public.guests
+    where guests.id = guest_message_history.guest_id
+      and guests.wedding_id = guest_message_history.wedding_id
+  )
+);
+
 -- Public guest-event assignments are returned only by get_public_invite_by_code.
 drop policy if exists "Public can read published guest event invites" on public.guest_event_invites;
 
@@ -309,6 +393,7 @@ drop policy if exists "Public can insert published valid RSVP responses" on publ
 drop policy if exists "Public can update published valid RSVP responses" on public.rsvp_responses;
 
 revoke all privileges on public.guests from anon;
+revoke all privileges on public.guest_message_history from anon;
 revoke all privileges on public.guest_event_invites from anon;
 revoke all privileges on public.rsvp_responses from anon;
 

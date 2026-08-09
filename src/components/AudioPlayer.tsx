@@ -130,17 +130,20 @@ export default function AudioPlayer({ triggerPlay, audioSrc, title, audioElement
                 className="mute-btn micro-interaction"
                 onClick={toggleAudio}
                 title={title}
-                aria-label={isPlaying ? 'Pause Audio' : 'Play Audio'}
+                aria-label={isPlaying ? 'Mute audio' : 'Unmute audio'}
                 type="button"
             >
                 {isPlaying ? (
-                    <svg viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="currentColor" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="6" y="4" width="4" height="16"></rect>
-                        <rect x="14" y="4" width="4" height="16"></rect>
+                    <svg viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+                        <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                        <path d="M18.5 5.5a9 9 0 0 1 0 13" />
                     </svg>
                 ) : (
-                    <svg viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="currentColor" strokeLinecap="round" strokeLinejoin="round">
-                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    <svg viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+                        <path d="m16 9 5 5" />
+                        <path d="m21 9-5 5" />
                     </svg>
                 )}
             </button>
