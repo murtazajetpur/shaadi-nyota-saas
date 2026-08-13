@@ -107,6 +107,9 @@ export default function AuthPage({ mode }: AuthPageProps) {
           <button type="submit" disabled={isSubmitting || !isConfigured}>
             {isSubmitting ? 'Please wait...' : isSignup ? 'Create Account' : 'Sign In'}
           </button>
+          {!isSignup && (
+            <a className="auth-forgot-link" href="/forgot-password">Forgot password?</a>
+          )}
         </form>
 
         <p className="auth-switch">

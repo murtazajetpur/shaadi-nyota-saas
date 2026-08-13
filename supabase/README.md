@@ -14,8 +14,11 @@ The setup order below is for future reproducibility and production-readiness tes
 4. For an existing project, run `supabase/security_hardening_phase_1.sql`
 5. Run `supabase/data_integrity_phase_2.sql`
 6. Create the `wedding-assets` Storage bucket and run `supabase/storage_policies.sql`
-7. Add local env vars
-8. Configure Auth settings, including Confirm Email behavior
+7. Apply the feature migrations required by the deployed frontend.
+8. Run `supabase/production_security_hotfix.sql` on an existing production project.
+9. Run `supabase/verify_production_security_hotfix.sql` and confirm every check passes.
+10. Add local env vars
+11. Configure Auth settings, including Confirm Email behavior
 
 ## 1. Create A Supabase Project
 
@@ -179,6 +182,35 @@ Manual checks:
   `published_at`, `owner_id`, or `created_by`.
 - Admin payment, package, publish, suspend, guest, and RSVP controls still work.
 
+## Production Security Hotfix
+
+For the currently linked production project, apply this only after the latest
+Phase 1, Phase 2, feature, and wedding-media migrations:
+
+1. Open the Supabase SQL Editor.
+2. Run the complete contents of `supabase/production_security_hotfix.sql`.
+3. Run `supabase/verify_production_security_hotfix.sql` in a new query.
+4. Confirm every row in the first result set is `PASS`.
+5. Confirm both detail result sets return zero rows.
+
+The hotfix is idempotent. It:
+
+- prevents authenticated couples from changing `profiles.role`;
+- removes browser-role `TRUNCATE`, `REFERENCES`, and `TRIGGER` grants;
+- removes stale direct public guest, invite, and RSVP policies;
+- keeps personalized invite lookup and RSVP submission behind invite-code
+  validated SECURITY DEFINER RPCs;
+- consolidates duplicate event/guest/invite ownership policies;
+- limits catalog tables to read-only active rows; and
+- prevents anonymous Storage metadata listing while preserving exact public
+  image URLs from the public `wedding-assets` bucket.
+
+After applying it, test a couple login/save, admin editing, a paid public invite,
+a personalized guest invite, RSVP submission, and media upload/removal. If
+PostgREST temporarily reports a missing function after the migration, wait for
+the included schema reload notification or reload the schema cache from the
+Supabase dashboard.
+
 ## Data Integrity Hardening Phase 2
 
 Run `supabase/data_integrity_phase_2.sql` after Phase 1. It adds
@@ -286,3 +318,13 @@ Current upload rules:
 - Removing an in-use image clears every matching section reference and deletes the file only after the wedding save succeeds.
 
 The database migration is authoritative for quotas and ownership. The browser checks provide faster feedback, but cannot bypass the trigger or RLS rules. Existing preset paths and older Storage URLs remain valid.
+## Password Recovery
+
+Password recovery uses Supabase Auth and does not require a database migration.
+Before testing production recovery emails, configure Supabase Dashboard > Authentication > URL Configuration:
+
+- Site URL: `https://www.shaadinyota.com`
+- Additional Redirect URL: `https://www.shaadinyota.com/reset-password`
+- Local Redirect URL: `http://localhost:5173/reset-password`
+
+The login page links to `/forgot-password`. Supabase sends the recovery email back to `/reset-password`, where the recovery session is validated before a new password can be submitted. Configure custom SMTP before launch for reliable branded email delivery.

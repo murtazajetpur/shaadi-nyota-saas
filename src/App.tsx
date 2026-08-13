@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import './App.css';
 import Admin from './components/Admin';
 import AuthPage from './components/AuthPage';
+import PasswordRecoveryPage from './components/PasswordRecoveryPage';
 import CreateWeddingPage from './components/CreateWeddingPage';
 import Dashboard from './components/Dashboard';
 import InviteExperience from './components/InviteExperience';
@@ -557,6 +558,8 @@ function AppRoutes() {
   const isAdmin = firstSegment === 'admin';
   const isLogin = firstSegment === 'login';
   const isSignup = firstSegment === 'signup';
+  const isForgotPassword = firstSegment === 'forgot-password';
+  const isResetPassword = firstSegment === 'reset-password';
   const isCreateWedding = firstSegment === 'create-wedding';
   const isTemplateDemo = firstSegment === 'templates';
   const isMarketingEnvelopePreview = firstSegment === 'marketing-envelope-preview';
@@ -579,6 +582,14 @@ function AppRoutes() {
 
   if (isSignup) {
     return <AuthPage mode="signup" />;
+  }
+
+  if (isForgotPassword) {
+    return <PasswordRecoveryPage mode="request" />;
+  }
+
+  if (isResetPassword) {
+    return <PasswordRecoveryPage mode="reset" />;
   }
 
   if (isCreateWedding) {

@@ -8,6 +8,7 @@ Shaadi Nyota is a Supabase-backed Vite React MVP for premium wedding invitation 
 - Create Wedding onboarding
 - Couple dashboard for wedding details, events, guests, CSV import/export, and RSVP dashboard
 - Admin panel for package, payment, publish status, and selected-wedding editing
+- Supabase email-based password recovery through `/forgot-password` and `/reset-password`
 - Public wedding invite routes and personalized RSVP links
 - Vercel SPA deployment support
 

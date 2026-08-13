@@ -124,3 +124,19 @@
     color: #7a1f1f;
     font-weight: 700;
 }
+
+.auth-forgot-link {
+    width: fit-content;
+    justify-self: end;
+    color: #7a1f1f;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.auth-forgot-link:hover,
+.auth-forgot-link:focus-visible,
+.auth-switch a:hover,
+.auth-switch a:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}

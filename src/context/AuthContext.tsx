@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
+import { isPasswordRecoveryCallback, isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 export interface AuthProfile {
   id: string;
@@ -18,12 +18,15 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   profile: AuthProfile | null;
+  isPasswordRecovery: boolean;
   loading: boolean;
   profileLoading: boolean;
   profileError: string;
   isConfigured: boolean;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (fullName: string, email: string, password: string) => Promise<AuthResult>;
+  requestPasswordReset: (email: string) => Promise<AuthResult>;
+  updatePassword: (password: string) => Promise<AuthResult>;
   signOut: () => Promise<AuthResult>;
   refreshProfile: () => Promise<void>;
 }
@@ -39,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(isPasswordRecoveryCallback);
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [profileLoading, setProfileLoading] = useState(isSupabaseConfigured);
   const [profileError, setProfileError] = useState('');
@@ -79,6 +83,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let isMounted = true;
 
+    // Subscribe before awaiting initialization so a fast recovery redirect cannot lose the event.
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      } else if (event === 'SIGNED_OUT') {
+        setIsPasswordRecovery(false);
+      }
+      void loadProfile(nextSession?.user ?? null);
+    });
+
     supabase.auth.getSession().then(async ({ data }) => {
       if (!isMounted) return;
       setSession(data.session);
@@ -86,12 +102,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadProfile(data.session?.user ?? null);
       if (!isMounted) return;
       setLoading(false);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-      void loadProfile(nextSession?.user ?? null);
     });
 
     return () => {
@@ -131,6 +141,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   };
 
+  const requestPasswordReset = async (email: string): Promise<AuthResult> => {
+    if (!supabase) return { error: 'Supabase is not configured for this environment.' };
+
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    return { error: error?.message ?? null };
+  };
+
+  const updatePassword = async (password: string): Promise<AuthResult> => {
+    if (!supabase) return { error: 'Supabase is not configured for this environment.' };
+
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { error: error.message };
+
+    setIsPasswordRecovery(false);
+    const { error: signOutError } = await supabase.auth.signOut();
+    return { error: signOutError?.message ?? null };
+  };
   const signOut = async (): Promise<AuthResult> => {
     if (!supabase) return { error: null };
     const { error } = await supabase.auth.signOut();
@@ -139,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setProfile(null);
       setProfileError('');
+      setIsPasswordRecovery(false);
     }
     return { error: error?.message ?? null };
   };
@@ -147,15 +176,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     user,
     profile,
+    isPasswordRecovery,
     profileError,
     loading,
     profileLoading,
     isConfigured: isSupabaseConfigured,
     signIn,
     signUp,
+    requestPasswordReset,
+    updatePassword,
     signOut,
     refreshProfile,
-  }), [loading, profile, profileError, profileLoading, session, user]);
+  }), [isPasswordRecovery, loading, profile, profileError, profileLoading, session, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
