@@ -85,23 +85,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Subscribe before awaiting initialization so a fast recovery redirect cannot lose the event.
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!isMounted) return;
+
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
+      setLoading(false);
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true);
       } else if (event === 'SIGNED_OUT') {
         setIsPasswordRecovery(false);
       }
-      void loadProfile(nextSession?.user ?? null);
+
+      // Run profile I/O after the auth callback releases Supabase's initialization lock.
+      window.setTimeout(() => {
+        if (isMounted) void loadProfile(nextSession?.user ?? null);
+      }, 0);
     });
 
-    supabase.auth.getSession().then(async ({ data }) => {
+    supabase.auth.getSession().then(({ data }) => {
       if (!isMounted) return;
+
       setSession(data.session);
       setUser(data.session?.user ?? null);
-      await loadProfile(data.session?.user ?? null);
-      if (!isMounted) return;
       setLoading(false);
+      window.setTimeout(() => {
+        if (isMounted) void loadProfile(data.session?.user ?? null);
+      }, 0);
     });
 
     return () => {

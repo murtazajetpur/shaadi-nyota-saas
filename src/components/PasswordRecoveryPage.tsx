@@ -114,7 +114,7 @@ export default function PasswordRecoveryPage({ mode }: PasswordRecoveryPageProps
       );
     }
 
-    if (loading) {
+    if (loading && (!session || !isPasswordRecovery)) {
       return <div className="auth-message warning">Validating your password reset link...</div>;
     }
 
