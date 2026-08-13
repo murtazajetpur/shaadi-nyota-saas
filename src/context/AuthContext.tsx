@@ -126,28 +126,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string): Promise<AuthResult> => {
     if (!supabase) return { error: 'Supabase is not configured for this environment.' };
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      return { error: error?.message ?? null };
+    } catch (error) {
+      return { error: getFriendlyError(error) };
+    }
   };
 
   const signUp = async (fullName: string, email: string, password: string): Promise<AuthResult> => {
     if (!supabase) return { error: 'Supabase is not configured for this environment.' };
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
         },
-      },
-    });
-    if (error) return { error: error.message };
+      });
+      if (error) return { error: error.message };
 
-    return {
-      error: null,
-      needsEmailConfirmation: Boolean(data.user && !data.session),
-    };
+      return {
+        error: null,
+        needsEmailConfirmation: Boolean(data.user && !data.session),
+      };
+    } catch (error) {
+      return { error: getFriendlyError(error) };
+    }
   };
 
   const requestPasswordReset = async (email: string): Promise<AuthResult> => {

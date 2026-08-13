@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import './AuthPage.css';
 import { useAuth } from '../context/AuthContext';
-import { getOwnedWeddingForCurrentUser } from '../lib/weddingOnboarding';
 
 interface AuthPageProps {
   mode: 'login' | 'signup';
@@ -27,24 +26,32 @@ export default function AuthPage({ mode }: AuthPageProps) {
     setNotice('');
     setIsSubmitting(true);
 
-    const result = isSignup
-      ? await signUp(fullName.trim(), email.trim(), password)
-      : await signIn(email.trim(), password);
+    try {
+      const result = isSignup
+        ? await signUp(fullName.trim(), email.trim(), password)
+        : await signIn(email.trim(), password);
 
-    setIsSubmitting(false);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.needsEmailConfirmation) {
+        setNotice('Account created. Please confirm your email, then sign in.');
+        return;
+      }
+
+      // DashboardRoute owns the wedding lookup and safely handles accounts
+      // that have not created a wedding yet. Avoid blocking login on a second query.
+      window.location.assign(isSignup ? '/create-wedding' : '/dashboard');
+    } catch (submitError) {
+      console.error('Authentication submission failed', submitError);
+      setError(submitError instanceof Error
+        ? submitError.message
+        : 'Could not sign in. Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (result.needsEmailConfirmation) {
-      setNotice('Account created. Please confirm your email, then sign in.');
-      return;
-    }
-
-    const { wedding } = await getOwnedWeddingForCurrentUser();
-    window.location.href = wedding ? '/dashboard' : '/create-wedding';
   };
 
   return (
