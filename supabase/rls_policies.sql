@@ -2,6 +2,9 @@
 -- Run after schema.sql and before seed.sql.
 
 alter table public.profiles enable row level security;
+alter table public.themes enable row level security;
+alter table public.reveal_variations enable row level security;
+alter table public.music_options enable row level security;
 alter table public.weddings enable row level security;
 alter table public.wedding_settings enable row level security;
 alter table public.wedding_media enable row level security;
@@ -26,18 +29,96 @@ as $$
   );
 $$;
 
+revoke all on function public.is_admin() from public;
 grant execute on function public.is_admin() to anon, authenticated;
-grant select on public.profiles to authenticated;
-grant select on public.weddings to authenticated;
-grant select, insert, update on public.weddings to authenticated;
-grant select, insert, update, delete on public.wedding_settings to authenticated;
-grant select, insert, delete on public.wedding_media to authenticated;
-grant select, insert, update, delete on public.events to authenticated;
-grant select, insert, update, delete on public.guests to authenticated;
-grant select, insert, update, delete on public.guest_event_invites to authenticated;
-grant select, insert, delete on public.guest_message_history to authenticated;
-grant select, insert, update on public.rsvp_responses to authenticated;
 
+create or replace function public.protect_profile_role()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if new.role is distinct from old.role
+    and not public.is_admin()
+    and coalesce(auth.role(), '') <> 'service_role'
+    and current_user not in ('postgres', 'supabase_admin') then
+    raise exception 'Only an administrator can change profile roles.' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.protect_profile_role() from public;
+
+drop trigger if exists profiles_protect_role on public.profiles;
+create trigger profiles_protect_role
+before update of role on public.profiles
+for each row execute function public.protect_profile_role();
+
+revoke create on schema public from public, anon, authenticated;
+grant usage on schema public to anon, authenticated;
+
+revoke all privileges on table public.profiles from public, anon, authenticated;
+grant select on table public.profiles to authenticated;
+grant update (full_name, phone) on table public.profiles to authenticated;
+
+revoke all privileges on table public.themes from public, anon, authenticated;
+revoke all privileges on table public.reveal_variations from public, anon, authenticated;
+revoke all privileges on table public.music_options from public, anon, authenticated;
+grant select on table public.themes to anon, authenticated;
+grant select on table public.reveal_variations to anon, authenticated;
+grant select on table public.music_options to anon, authenticated;
+
+revoke all privileges on table public.weddings from public, anon, authenticated;
+grant select on table public.weddings to anon;
+grant select, insert, update on table public.weddings to authenticated;
+
+revoke all privileges on table public.wedding_settings from public, anon, authenticated;
+grant select on table public.wedding_settings to anon;
+grant select, insert, update, delete on table public.wedding_settings to authenticated;
+
+revoke all privileges on table public.events from public, anon, authenticated;
+grant select on table public.events to anon;
+grant select, insert, update, delete on table public.events to authenticated;
+
+revoke all privileges on table public.guests from public, anon, authenticated;
+grant select, insert, update, delete on table public.guests to authenticated;
+
+revoke all privileges on table public.guest_event_invites from public, anon, authenticated;
+grant select, insert, update, delete on table public.guest_event_invites to authenticated;
+
+revoke all privileges on table public.guest_message_history from public, anon, authenticated;
+grant select, insert, delete on table public.guest_message_history to authenticated;
+
+revoke all privileges on table public.rsvp_responses from public, anon, authenticated;
+grant select, insert, update on table public.rsvp_responses to authenticated;
+
+revoke all privileges on table public.wedding_media from public, anon, authenticated;
+grant select, insert, delete on table public.wedding_media to authenticated;
+
+drop policy if exists "Public can read active themes" on public.themes;
+create policy "Public can read active themes"
+on public.themes for select to anon, authenticated
+using (is_active = true);
+
+drop policy if exists "Public can read active reveal variations" on public.reveal_variations;
+create policy "Public can read active reveal variations"
+on public.reveal_variations for select to anon, authenticated
+using (
+  is_active = true
+  and exists (
+    select 1
+    from public.themes
+    where themes.id = reveal_variations.theme_id
+      and themes.is_active = true
+  )
+);
+
+drop policy if exists "Public can read active music options" on public.music_options;
+create policy "Public can read active music options"
+on public.music_options for select to anon, authenticated
+using (is_active = true);
+drop policy if exists "Users can read own profile or admins can read all" on public.profiles;
 drop policy if exists "Users can read own profile" on public.profiles;
 create policy "Users can read own profile"
 on public.profiles
@@ -152,12 +233,6 @@ with check (
 );
 
 drop policy if exists "Admins can read all wedding settings" on public.wedding_settings;
-create policy "Admins can read all wedding settings"
-on public.wedding_settings
-for select
-to authenticated
-using (public.is_admin());
-
 drop policy if exists "Admins can manage all wedding settings" on public.wedding_settings;
 create policy "Admins can manage all wedding settings"
 on public.wedding_settings
@@ -220,6 +295,10 @@ using (
   )
 );
 
+drop policy if exists "Couples can read own events" on public.events;
+drop policy if exists "Couples can insert own events" on public.events;
+drop policy if exists "Couples can update own events" on public.events;
+drop policy if exists "Couples can delete own events" on public.events;
 drop policy if exists "Couples can manage own events" on public.events;
 create policy "Couples can manage own events"
 on public.events
@@ -240,6 +319,10 @@ with check (
   )
 );
 
+drop policy if exists "Admins can read all events" on public.events;
+drop policy if exists "Admins can insert all events" on public.events;
+drop policy if exists "Admins can update all events" on public.events;
+drop policy if exists "Admins can delete all events" on public.events;
 drop policy if exists "Admins can manage all events" on public.events;
 create policy "Admins can manage all events"
 on public.events
@@ -263,6 +346,10 @@ using (
   )
 );
 
+drop policy if exists "Couples can read own guests" on public.guests;
+drop policy if exists "Couples can insert own guests" on public.guests;
+drop policy if exists "Couples can update own guests" on public.guests;
+drop policy if exists "Couples can delete own guests" on public.guests;
 drop policy if exists "Couples can manage own guests" on public.guests;
 create policy "Couples can manage own guests"
 on public.guests
@@ -283,6 +370,10 @@ with check (
   )
 );
 
+drop policy if exists "Admins can read all guests" on public.guests;
+drop policy if exists "Admins can insert all guests" on public.guests;
+drop policy if exists "Admins can update all guests" on public.guests;
+drop policy if exists "Admins can delete all guests" on public.guests;
 drop policy if exists "Admins can manage all guests" on public.guests;
 create policy "Admins can manage all guests"
 on public.guests
@@ -294,7 +385,13 @@ with check (public.is_admin());
 -- Public guest lookup and meal preference updates go through secure RPCs.
 drop policy if exists "Public can read published invite guests" on public.guests;
 drop policy if exists "Public can update published guest meal preference" on public.guests;
+drop policy if exists "Public invite can read guests" on public.guests;
+drop policy if exists "Public invite can update guest meal preference" on public.guests;
 
+drop policy if exists "Couples can read own guest event invites" on public.guest_event_invites;
+drop policy if exists "Couples can insert own guest event invites" on public.guest_event_invites;
+drop policy if exists "Couples can update own guest event invites" on public.guest_event_invites;
+drop policy if exists "Couples can delete own guest event invites" on public.guest_event_invites;
 drop policy if exists "Couples can manage own guest event invites" on public.guest_event_invites;
 create policy "Couples can manage own guest event invites"
 on public.guest_event_invites
@@ -315,6 +412,10 @@ with check (
   )
 );
 
+drop policy if exists "Admins can read all guest event invites" on public.guest_event_invites;
+drop policy if exists "Admins can insert all guest event invites" on public.guest_event_invites;
+drop policy if exists "Admins can update all guest event invites" on public.guest_event_invites;
+drop policy if exists "Admins can delete all guest event invites" on public.guest_event_invites;
 drop policy if exists "Admins can manage all guest event invites" on public.guest_event_invites;
 create policy "Admins can manage all guest event invites"
 on public.guest_event_invites
@@ -322,7 +423,6 @@ for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
-
 
 drop policy if exists "Couples can manage own guest message history" on public.guest_message_history;
 create policy "Couples can manage own guest message history"
@@ -366,6 +466,7 @@ with check (
 
 -- Public guest-event assignments are returned only by get_public_invite_by_code.
 drop policy if exists "Public can read published guest event invites" on public.guest_event_invites;
+drop policy if exists "Public invite can read guest event invites" on public.guest_event_invites;
 
 drop policy if exists "Couples can read own RSVP responses" on public.rsvp_responses;
 create policy "Couples can read own RSVP responses"
@@ -391,6 +492,9 @@ using (public.is_admin());
 drop policy if exists "Public can read published valid RSVP responses" on public.rsvp_responses;
 drop policy if exists "Public can insert published valid RSVP responses" on public.rsvp_responses;
 drop policy if exists "Public can update published valid RSVP responses" on public.rsvp_responses;
+drop policy if exists "Public invite can read RSVP responses" on public.rsvp_responses;
+drop policy if exists "Public invite can insert RSVP responses" on public.rsvp_responses;
+drop policy if exists "Public invite can update RSVP responses" on public.rsvp_responses;
 
 revoke all privileges on public.guests from anon;
 revoke all privileges on public.guest_message_history from anon;

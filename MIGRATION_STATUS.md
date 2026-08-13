@@ -42,10 +42,15 @@ Running the setup from scratch is a future reproducibility and production-readin
 1. `supabase/schema.sql`
 2. `supabase/rls_policies.sql`
 3. `supabase/seed.sql`
-4. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`
-5. Configure Auth settings, including Confirm Email behavior
-
-For Closing Gallery uploads, also create a public Supabase Storage bucket named `wedding-assets` and run `supabase/storage_policies.sql`.
+4. `supabase/security_hardening_phase_1.sql`
+5. `supabase/data_integrity_phase_2.sql`
+6. Apply the feature migrations required by the deployed frontend.
+7. Create the public `wedding-assets` bucket and run `supabase/storage_policies.sql`.
+8. Run `supabase/add_wedding_media_library.sql` when enabling reusable uploads.
+9. For an existing production project, run `supabase/production_security_hotfix.sql`.
+10. Run `supabase/verify_production_security_hotfix.sql`; all checks must pass and both detail queries must return zero rows.
+11. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`.
+12. Configure Auth settings, including Confirm Email behavior.
 
 ## Guest Capacity Controls
 
@@ -55,6 +60,16 @@ For Closing Gallery uploads, also create a public Supabase Storage bucket named 
 - Admins can override per-wedding limits; couples can view usage but cannot raise limits.
 - Supabase enforces limits for direct writes, CSV imports, and transactional dashboard saves.
 - Apply `supabase/add_guest_limits_and_pagination.sql` after the current Phase 2 and event-field migrations.
+
+## Production Security Hotfix
+
+- `supabase/production_security_hotfix.sql` is the idempotent production repair for the audited role, grant, RLS-policy, and Storage-listing findings.
+- `supabase/verify_production_security_hotfix.sql` is read-only and verifies the expected production state.
+- The SQL files are ready to run manually in the Supabase SQL Editor; committing them does not apply them to the hosted database.
+- Normal public wedding data remains readable only for paid, published weddings.
+- Personalized guest data and RSVP writes remain RPC-only and invite-code validated.
+- Public Storage URLs remain usable, while object metadata and listing require an authenticated wedding owner or admin.
+
 ## Known Limitations
 
 - Theme media and detailed invite copy are still seeded from the existing theme defaults unless edited through current settings.
@@ -72,7 +87,8 @@ For Closing Gallery uploads, also create a public Supabase Storage bucket named 
 ## Required RLS Summary
 
 - `public.is_admin()` checks `profiles.role = 'admin'`.
-- Users can read and update their own `profiles` row.
+- Users can read their own `profiles` row and update only `full_name` and `phone`.
+- Profile role changes require a trusted service-role or SQL session.
 - Admins can read all `profiles`.
 - Couples can create their own `weddings`.
 - Couples can read and update their own `weddings`.
@@ -86,13 +102,14 @@ For Closing Gallery uploads, also create a public Supabase Storage bucket named 
 - Public invite routes can read published `events`.
 - Couples can CRUD `guests` for weddings they own.
 - Admins can CRUD all `guests`.
-- Public invite routes can read published invite guests and update meal preference for published weddings.
+- Public routes cannot directly read or update `guests`; personalized lookup uses `get_public_invite_by_code`.
 - Couples can CRUD `guest_event_invites` for weddings they own.
 - Admins can CRUD all `guest_event_invites`.
-- Public invite routes can read published guest-event invite mappings.
+- Public routes cannot directly read `guest_event_invites`; the validated invite RPC returns only the matching guest assignments.
 - Couples can read `rsvp_responses` for weddings they own.
 - Admins can read all `rsvp_responses`.
-- Public invite routes can read, insert, and update RSVP responses for valid guest-event invite combinations on published weddings.
+- Public routes cannot directly access `rsvp_responses`; `submit_guest_rsvp` validates the wedding, invite code, event assignment, and invited count.
+- Browser roles do not retain `TRUNCATE`, `REFERENCES`, or `TRIGGER` privileges on application tables.
 
 ## Next Recommended Phases
 

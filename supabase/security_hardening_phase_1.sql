@@ -346,6 +346,12 @@ drop policy if exists "Public can read published guest event invites" on public.
 drop policy if exists "Public can read published valid RSVP responses" on public.rsvp_responses;
 drop policy if exists "Public can insert published valid RSVP responses" on public.rsvp_responses;
 drop policy if exists "Public can update published valid RSVP responses" on public.rsvp_responses;
+drop policy if exists "Public invite can read guests" on public.guests;
+drop policy if exists "Public invite can update guest meal preference" on public.guests;
+drop policy if exists "Public invite can read guest event invites" on public.guest_event_invites;
+drop policy if exists "Public invite can read RSVP responses" on public.rsvp_responses;
+drop policy if exists "Public invite can insert RSVP responses" on public.rsvp_responses;
+drop policy if exists "Public invite can update RSVP responses" on public.rsvp_responses;
 
 revoke all privileges on public.guests from anon;
 revoke all privileges on public.guest_event_invites from anon;
