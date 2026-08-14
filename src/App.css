@@ -51,9 +51,12 @@
 
 /* Phone Canvas Wrapper */
 .phone-canvas {
-  width: 100%;
-  max-width: 440px;
-  height: min(92vh, 900px);
+  --invite-canvas-height: min(782.22px, 92vh);
+  --invite-canvas-height: min(782.22px, 92dvh);
+  width: min(440px, 51.75vh);
+  width: min(440px, 51.75dvh);
+  height: var(--invite-canvas-height);
+  aspect-ratio: 9 / 16;
   background-color: var(--color-ivory);
   position: relative;
   overflow-y: auto;
@@ -99,13 +102,15 @@
 }
 
 /* Mobile Overrides (When viewport is narrow) */
-@media (max-width: 600px),
-(max-height: 700px) {
+@media (max-width: 600px) {
   .phone-canvas {
+    --invite-canvas-height: 100dvh;
+    width: 100%;
     max-width: 100%;
     height: 100vh;
     height: 100svh;
     height: 100dvh;
+    aspect-ratio: auto;
     border-radius: 0;
     box-shadow: none;
   }
@@ -175,7 +180,8 @@
 }
 
 @media (min-width: 601px) {
-  .section-wrapper {
-    min-height: min(92vh, 900px);
+  .phone-canvas .section-wrapper,
+  .phone-canvas > .hero-container {
+    min-height: var(--invite-canvas-height);
   }
 }

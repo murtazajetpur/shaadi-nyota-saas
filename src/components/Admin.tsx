@@ -844,6 +844,11 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                                 Delete
                                                             </button>
                                                         </div>
+                                                        <div className="admin-website-links">
+                                                            <a href={`/${wedding.slug}`} target="_blank" rel="noreferrer">Open Website</a>
+                                                            <a href={`/admin/weddings/${wedding.id}`} target="_blank" rel="noreferrer">View/Edit Wedding</a>
+                                                            <a href="/dashboard" target="_blank" rel="noreferrer">View RSVP</a>
+                                                        </div>
                                                         {wedding.websiteStatus === 'draft' && wedding.paymentStatus !== 'paid' && (
                                                             <p className="admin-helper-text">Mark payment as paid before publishing.</p>
                                                         )}
@@ -873,15 +878,6 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                                 <dd>{wedding.responseCount ?? 0}</dd>
                                                             </div>
                                                         </dl>
-                                                    </div>
-
-                                                    <div className="admin-manage-section">
-                                                        <h3>Links</h3>
-                                                        <div className="admin-link-stack">
-                                                            <a href={`/${wedding.slug}`} target="_blank" rel="noreferrer">Open Website</a>
-                                                            <a href={`/admin/weddings/${wedding.id}`} target="_blank" rel="noreferrer">View/Edit Wedding</a>
-                                                            <a href="/dashboard" target="_blank" rel="noreferrer">View RSVP</a>
-                                                        </div>
                                                     </div>
                                                 </div>
                                             </td>
