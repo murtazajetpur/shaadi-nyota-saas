@@ -21,6 +21,7 @@ import {
     type WeddingStatus,
 } from '../data/sampleWeddingData';
 import { packageDetails, paymentStatusLabels } from '../data/paymentConfig';
+import { deleteAdminWedding } from '../lib/adminWeddingManagement';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 type WebsiteStatus = 'draft' | 'published' | 'suspended';
@@ -251,6 +252,10 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
     const [planFilter, setPlanFilter] = useState<'all' | PackageType>('all');
     const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
     const [websiteStatusFilter, setWebsiteStatusFilter] = useState<WebsiteStatusFilter>('all');
+    const [weddingPendingDeletion, setWeddingPendingDeletion] = useState<AdminWeddingRecord | null>(null);
+    const [deleteConfirmation, setDeleteConfirmation] = useState('');
+    const [deleteError, setDeleteError] = useState('');
+    const [isDeletingWedding, setIsDeletingWedding] = useState(false);
 
     const loadSupabaseWeddings = async () => {
         if (!supabase || !isSupabaseConfigured) {
@@ -541,6 +546,55 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
         }));
     };
 
+    const openDeleteWedding = (record: AdminWeddingRecord) => {
+        setWeddingPendingDeletion(record);
+        setDeleteConfirmation('');
+        setDeleteError('');
+    };
+
+    const closeDeleteWedding = () => {
+        if (isDeletingWedding) return;
+        setWeddingPendingDeletion(null);
+        setDeleteConfirmation('');
+        setDeleteError('');
+    };
+
+    const confirmDeleteWedding = async () => {
+        const record = weddingPendingDeletion;
+        if (!record || deleteConfirmation.trim() !== record.slug) return;
+
+        setIsDeletingWedding(true);
+        setDeleteError('');
+
+        if (dataSource === 'mock') {
+            const nextWeddings = mockWeddings.filter((wedding) => wedding.wedding.slug !== record.slug);
+            persistMockWeddings(nextWeddings);
+            setExpandedSlug(null);
+            setWeddingPendingDeletion(null);
+            setDeleteConfirmation('');
+            setSaveStatus('Deleted ' + record.slug + ' from fallback data');
+            setIsDeletingWedding(false);
+            return;
+        }
+
+        const result = await deleteAdminWedding(record.id, deleteConfirmation.trim());
+        if (result.error) {
+            setDeleteError(result.error);
+            setDevWarning(result.detail ? 'Wedding deletion failed: ' + result.detail : '');
+            setIsDeletingWedding(false);
+            return;
+        }
+
+        setAdminWeddings((current) => current.filter((wedding) => wedding.id !== record.id));
+        setExpandedSlug(null);
+        setWeddingPendingDeletion(null);
+        setDeleteConfirmation('');
+        await loadSupabaseWeddings();
+        setSaveStatus('Permanently deleted ' + record.slug);
+        if (result.storageWarning) setDevWarning(result.storageWarning);
+        setIsDeletingWedding(false);
+    };
+
     const refreshData = () => {
         if (dataSource === 'supabase') {
             void loadSupabaseWeddings();
@@ -759,7 +813,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                         )}
                                                     </div>
 
-                                                    <div className="admin-manage-section">
+                                                    <div className="admin-manage-section admin-website-controls">
                                                         <h3>Website Controls</h3>
                                                         <div className="admin-action-grid">
                                                             {wedding.websiteStatus === 'draft' && (
@@ -781,6 +835,14 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                                                             {wedding.websiteStatus === 'suspended' && (
                                                                 <button type="button" onClick={() => restoreWebsite(wedding)}>Restore Website</button>
                                                             )}
+                                                            <button
+                                                                className="admin-delete-action"
+                                                                type="button"
+                                                                title="Permanently delete this wedding"
+                                                                onClick={() => openDeleteWedding(wedding)}
+                                                            >
+                                                                Delete
+                                                            </button>
                                                         </div>
                                                         {wedding.websiteStatus === 'draft' && wedding.paymentStatus !== 'paid' && (
                                                             <p className="admin-helper-text">Mark payment as paid before publishing.</p>
@@ -836,6 +898,51 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                     )}
                 </div>
             </section>
+            {weddingPendingDeletion && (
+                <div className="admin-dialog-backdrop" role="presentation" onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) closeDeleteWedding();
+                }}>
+                    <section
+                        className="admin-delete-dialog"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="admin-delete-wedding-title"
+                    >
+                        <p className="admin-dialog-eyebrow">Permanent action</p>
+                        <h2 id="admin-delete-wedding-title">Delete {weddingPendingDeletion.displayName}?</h2>
+                        <p>
+                            This immediately removes the wedding website and all wedding-owned data. The couple account remains available, but this action cannot be undone.
+                        </p>
+                        <dl className="admin-delete-summary">
+                            <div><dt>Events</dt><dd>{weddingPendingDeletion.eventCount ?? 0}</dd></div>
+                            <div><dt>Families</dt><dd>{weddingPendingDeletion.guestCount ?? 0}</dd></div>
+                            <div><dt>RSVP responses</dt><dd>{weddingPendingDeletion.responseCount ?? 0}</dd></div>
+                        </dl>
+                        <label className="admin-delete-confirmation">
+                            <span>Type <strong>{weddingPendingDeletion.slug}</strong> to confirm</span>
+                            <input
+                                autoFocus
+                                value={deleteConfirmation}
+                                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                                disabled={isDeletingWedding}
+                                autoComplete="off"
+                            />
+                        </label>
+                        {deleteError && <p className="admin-delete-error" role="alert">{deleteError}</p>}
+                        <div className="admin-dialog-actions">
+                            <button type="button" onClick={closeDeleteWedding} disabled={isDeletingWedding}>Cancel</button>
+                            <button
+                                className="admin-danger-button"
+                                type="button"
+                                disabled={isDeletingWedding || deleteConfirmation.trim() !== weddingPendingDeletion.slug}
+                                onClick={() => void confirmDeleteWedding()}
+                            >
+                                {isDeletingWedding ? 'Deleting...' : 'Permanently Delete Wedding'}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
         </main>
     );
 }

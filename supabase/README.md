@@ -17,8 +17,9 @@ The setup order below is for future reproducibility and production-readiness tes
 7. Apply the feature migrations required by the deployed frontend.
 8. Run `supabase/production_security_hotfix.sql` on an existing production project.
 9. Run `supabase/verify_production_security_hotfix.sql` and confirm every check passes.
-10. Add local env vars
-11. Configure Auth settings, including Confirm Email behavior
+10. Run `supabase/add_admin_delete_wedding.sql` to enable the Admin Panel permanent-delete action.
+11. Add local env vars
+12. Configure Auth settings, including Confirm Email behavior
 
 ## 1. Create A Supabase Project
 

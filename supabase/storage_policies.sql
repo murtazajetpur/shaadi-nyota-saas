@@ -81,10 +81,13 @@ to authenticated
 using (
   bucket_id = 'wedding-assets'
   and (storage.foldername(name))[1] = 'weddings'
-  and exists (
-    select 1
-    from public.weddings
-    where weddings.id::text = (storage.foldername(name))[2]
-      and (weddings.owner_id = auth.uid() or public.is_admin())
+  and (
+    public.is_admin()
+    or exists (
+      select 1
+      from public.weddings
+      where weddings.id::text = (storage.foldername(name))[2]
+        and weddings.owner_id = auth.uid()
+    )
   )
 );

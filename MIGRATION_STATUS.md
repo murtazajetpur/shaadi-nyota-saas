@@ -49,8 +49,9 @@ Running the setup from scratch is a future reproducibility and production-readin
 8. Run `supabase/add_wedding_media_library.sql` when enabling reusable uploads.
 9. For an existing production project, run `supabase/production_security_hotfix.sql`.
 10. Run `supabase/verify_production_security_hotfix.sql`; all checks must pass and both detail queries must return zero rows.
-11. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`.
-12. Configure Auth settings, including Confirm Email behavior.
+11. Run `supabase/add_admin_delete_wedding.sql` to enable permanent admin wedding deletion and uploaded-file cleanup.
+12. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`.
+13. Configure Auth settings, including Confirm Email behavior.
 
 ## Guest Capacity Controls
 
@@ -69,6 +70,14 @@ Running the setup from scratch is a future reproducibility and production-readin
 - Normal public wedding data remains readable only for paid, published weddings.
 - Personalized guest data and RSVP writes remain RPC-only and invite-code validated.
 - Public Storage URLs remain usable, while object metadata and listing require an authenticated wedding owner or admin.
+## Admin Wedding Deletion
+
+- Run `supabase/add_admin_delete_wedding.sql` before using the Admin Panel delete action.
+- Only authenticated profiles with `role = 'admin'` can execute `admin_delete_wedding`.
+- Admins must type the wedding slug before the destructive action is enabled.
+- The wedding row is deleted transactionally; foreign-key cascades remove settings, events, guests, invite assignments, message history, RSVP responses, and media metadata.
+- Uploaded `wedding-assets` objects are removed immediately after the database transaction. A cleanup warning is shown if object deletion needs manual attention.
+- The couple authentication/profile record is intentionally retained so the account can create another wedding.
 
 ## Known Limitations
 
