@@ -501,9 +501,11 @@ revoke all privileges on public.guest_message_history from anon;
 revoke all privileges on public.guest_event_invites from anon;
 revoke all privileges on public.rsvp_responses from anon;
 
+revoke all on function public.get_public_wedding_route_status(text) from public;
 revoke all on function public.get_public_invite_by_code(text, text) from public;
 revoke all on function public.submit_guest_rsvp(text, text, jsonb, text) from public;
 revoke all on function public.request_payment_verification(uuid) from public;
+grant execute on function public.get_public_wedding_route_status(text) to anon, authenticated;
 grant execute on function public.get_public_invite_by_code(text, text) to anon, authenticated;
 grant execute on function public.submit_guest_rsvp(text, text, jsonb, text) to anon, authenticated;
 grant execute on function public.request_payment_verification(uuid) to authenticated;

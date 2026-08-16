@@ -33,9 +33,9 @@ export const MAX_GUEST_FAMILY_SIZE = 20;
 export const MAX_GUEST_CSV_BYTES = 5 * 1024 * 1024;
 
 export const packageDisplayLabels: Record<PackageType, string> = {
-  basic: 'Basic Website',
-  rsvp: 'Basic Website + RSVP Management',
-  whatsapp: 'Basic Website + RSVP Management',
+  basic: 'Basic',
+  rsvp: 'Pro',
+  whatsapp: 'Pro',
 };
 
 export const activePackageTypes: PackageType[] = ['basic', 'rsvp'];

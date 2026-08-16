@@ -88,7 +88,7 @@ Running the setup from scratch is a future reproducibility and production-readin
 - A reusable wedding-scoped Supabase media library now supports image uploads for Opening Reveal, Our Story, Events, RSVP backgrounds, Closing Gallery, and WhatsApp link previews. Video and music uploads remain future phases.
 - Additional invitation delivery channels are not implemented yet.
 - Real online payments are not implemented yet; manual payment instructions use a WhatsApp contact link and `manual_pending` as the verification-requested state.
-- Basic Website dashboards lock Guests and RSVP Dashboard behind an upgrade prompt. RSVP plan and admin editing keep full guest/RSVP access.
+- Basic dashboards lock Guests and RSVP Dashboard behind an upgrade prompt. The Pro plan and admin editing keep full guest/RSVP access.
 - Custom domains are not implemented yet.
 - The couple dashboard currently assumes one active wedding per couple account.
 - CSV import validates file size and wedding capacity in the browser and database. A staged server-side import job is still recommended before supporting imports approaching 10,000 rows.
@@ -153,3 +153,12 @@ Running the setup from scratch is a future reproducibility and production-readin
 - Limits are 15 uploaded images and 50 MB of optimized media per wedding, enforced in PostgreSQL as well as the UI.
 - Uploaded images are reusable across image-based editor sections; preset assets and existing saved URLs remain compatible.
 - Removing an in-use image clears every matching section reference and queues the file deletion until the wedding save succeeds.
+
+## Guest Phone Validation
+
+- Run `supabase/add_guest_phone_validation.sql` once on an existing Supabase project.
+- Guest CSV import and manual guest editing share the same international phone validator.
+- The plus sign is optional. Spaces, hyphens, brackets, and spreadsheet-safe apostrophes are removed automatically.
+- Ten-digit Indian mobile numbers default to `+91`; non-Indian numbers must include their country calling code.
+- Valid numbers are stored in canonical E.164 format, while shared family phone numbers produce warnings rather than blocking import.
+- The database trigger validates and normalizes every new guest phone write. Existing rows are not bulk-modified by the migration.

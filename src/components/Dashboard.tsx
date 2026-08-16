@@ -1,4 +1,13 @@
 import { Component, Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import {
+    CheckCircle2,
+    CircleAlert,
+    Clock3,
+    Copy,
+    ExternalLink,
+    Eye,
+    LockKeyhole,
+} from 'lucide-react';
 import InviteExperience from './InviteExperience';
 import OpeningRevealScrollPrompt from './OpeningRevealScrollPrompt';
 import { EventSection as Theme1EventPreviewSection } from './Section3';
@@ -96,9 +105,49 @@ import {
     type WeddingMediaAsset,
     type WeddingMediaSection,
 } from '../lib/weddingMedia';
+import { getGuestPhoneIdentity, validateGuestPhone } from '../lib/guestPhone';
 
 type DashboardTab = 'overview' | 'opening-reveal' | 'our-story' | 'couple' | 'events' | 'guests' | 'whatsapp' | 'rsvp-settings' | 'rsvp' | 'closing-gallery' | 'preview';
+type WebsiteActivationState = 'unpaid' | 'verification-pending' | 'publishing-pending' | 'live' | 'suspended';
 type CsvImportMode = 'append' | 'replace';
+type GuestCsvIssueLevel = 'error' | 'warning';
+type GuestCsvIssue = {
+    level: GuestCsvIssueLevel;
+    message: string;
+    row?: number;
+    column?: string;
+    value?: string;
+};
+type GuestCsvAnalysis = {
+    fileName: string;
+    guests: WeddingGuest[];
+    issues: GuestCsvIssue[];
+    totalRows: number;
+    validRows: number;
+    resultingGuestEntries: number;
+    resultingPeople: number;
+    preservedGuests: number;
+    phoneNormalizations: Array<{ row: number; input: string; canonical: string }>;
+};
+type ParsedCsvResult = {
+    rows: string[][];
+    error: string;
+};
+
+const guestCsvRequiredHeaders = ['guestName', 'phone'];
+const guestCsvGuestNameMaxLength = 120;
+const guestCsvPhoneMaxLength = 40;
+const guestCsvCategoryMaxLength = 80;
+
+const formatGuestCsvIssue = (issue: GuestCsvIssue) => {
+    const location = [issue.row ? `Row ${issue.row}` : '', issue.column ?? ''].filter(Boolean).join(' - ');
+    return `${location ? `${location}: ` : ''}${issue.message}`;
+};
+
+const normalizeGuestMatchValue = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+const getGuestIdentityKey = (guestName: string, phone: string) => (
+    `${normalizeGuestMatchValue(guestName)}|${getGuestPhoneIdentity(phone)}`
+);
 type DashboardMode = 'couple' | 'admin';
 type GuestWhatsAppFilter = 'all' | 'invite-not-sent' | 'invite-sent' | 'no-reminders' | 'reminders-sent';
 type GuestRsvpFilter = 'all' | 'no-response' | 'pending' | 'complete' | 'attending' | 'maybe' | 'declined';
@@ -172,6 +221,23 @@ const dashboardTabGroups: Array<{ label: string; tabs: Array<{ id: DashboardTab;
     },
 ];
 
+const getWebsiteActivationState = (wedding: SampleWeddingData['wedding']): WebsiteActivationState => {
+    if (wedding.status === 'suspended') return 'suspended';
+    if (wedding.paymentStatus === 'manual_pending' || wedding.paymentStatus === 'ref_pending') {
+        return 'verification-pending';
+    }
+    if (wedding.paymentStatus !== 'paid') return 'unpaid';
+    if (wedding.status === 'published') return 'live';
+    return 'publishing-pending';
+};
+
+const websiteActivationLabels: Record<WebsiteActivationState, string> = {
+    unpaid: 'Not live',
+    'verification-pending': 'Verification pending',
+    'publishing-pending': 'Publishing pending',
+    live: 'Live',
+    suspended: 'Unavailable',
+};
 const revealAnimationOptions = getAllOpeningRevealAnimations().map((option) => ({
     key: option.id,
     label: option.label,
@@ -348,15 +414,8 @@ const getGuestEventInviteScope = (guest: WeddingGuest, eventId: string) => (
     getGuestEventInvitedCount(guest, eventId) >= normalizeInvitedCount(guest.invitedCount) ? 'all' : 'number'
 );
 
-const normalizeWhatsAppPhone = (phone: string) => {
-    const digits = phone.replace(/\D/g, '');
-    if (digits.length === 10) return `91${digits}`;
-    if (digits.length >= 11 && digits.length <= 15) return digits;
-    return '';
-};
-
 const buildWhatsAppUrl = (phone: string, message: string) => {
-    const normalizedPhone = normalizeWhatsAppPhone(phone);
+    const normalizedPhone = validateGuestPhone(phone).whatsappDigits;
     if (!normalizedPhone) return '';
 
     // WhatsApp Desktop can corrupt emoji text while handling wa.me deep links.
@@ -378,18 +437,20 @@ const inviteeCountHeader = (eventName: string) => `${eventName} Invitees`;
 
 const csvEscape = (value: string | number) => {
     const text = String(value ?? '');
-    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    const spreadsheetSafeText = /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;
+    return /[",\r\n]/.test(spreadsheetSafeText) ? `"${spreadsheetSafeText.replace(/"/g, '""')}"` : spreadsheetSafeText;
 };
 
-const parseCsv = (text: string) => {
+const parseCsv = (text: string): ParsedCsvResult => {
+    const sourceText = text.replace(/^\uFEFF/, '');
     const rows: string[][] = [];
     let row: string[] = [];
     let field = '';
     let inQuotes = false;
 
-    for (let index = 0; index < text.length; index += 1) {
-        const char = text[index];
-        const nextChar = text[index + 1];
+    for (let index = 0; index < sourceText.length; index += 1) {
+        const char = sourceText[index];
+        const nextChar = sourceText[index + 1];
 
         if (char === '"' && inQuotes && nextChar === '"') {
             field += '"';
@@ -415,7 +476,14 @@ const parseCsv = (text: string) => {
         rows.push(row);
     }
 
-    return rows.filter((csvRow) => csvRow.some((cell) => cell.trim()));
+    if (inQuotes) {
+        return { rows: [], error: 'The CSV contains an unclosed quoted value. Export it again and retry.' };
+    }
+
+    return {
+        rows: rows.filter((csvRow) => csvRow.some((cell) => cell.trim())),
+        error: '',
+    };
 };
 
 const downloadCsv = (filename: string, rows: Array<Array<string | number>>) => {
@@ -731,11 +799,17 @@ export default function Dashboard({
     const [guestRsvpFilter, setGuestRsvpFilter] = useState<GuestRsvpFilter>('all');
     const [guestActivityFilter, setGuestActivityFilter] = useState<GuestActivityFilter>('all');
     const [guestPhoneFilter, setGuestPhoneFilter] = useState<GuestPhoneFilter>('all');
+    const [areGuestFiltersOpen, setAreGuestFiltersOpen] = useState(false);
     const [guestPage, setGuestPage] = useState(1);
-    const [guestPageSize, setGuestPageSize] = useState<(typeof guestPageSizeOptions)[number]>(50);
+    const [guestPageSize, setGuestPageSize] = useState<(typeof guestPageSizeOptions)[number]>(25);
     const [guestImportMode, setGuestImportMode] = useState<CsvImportMode>('append');
     const [selectedGuestCsvFile, setSelectedGuestCsvFile] = useState<File | null>(null);
+    const [guestCsvAnalysis, setGuestCsvAnalysis] = useState<GuestCsvAnalysis | null>(null);
     const [guestImportWarnings, setGuestImportWarnings] = useState<string[]>([]);
+    const [isGuestCsvAnalyzing, setIsGuestCsvAnalyzing] = useState(false);
+    const [isGuestCsvImporting, setIsGuestCsvImporting] = useState(false);
+    const [guestCsvImportMessage, setGuestCsvImportMessage] = useState('');
+    const guestCsvImportInFlightRef = useRef(false);
     const [closingImagePickerTarget, setClosingImagePickerTarget] = useState<number | 'add' | null>(null);
     const [isClosingImageUploading, setIsClosingImageUploading] = useState(false);
     const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
@@ -810,6 +884,8 @@ export default function Dashboard({
     const hasDashboardRsvpAccess = isAdminMode || canViewRsvpDashboard(weddingData);
     const showPlanUpgrade = !isAdminMode && canUpgradePlan(weddingData);
     const weddingWebsiteUrl = `${window.location.origin}/${weddingData.wedding.slug}`;
+    const websiteActivationState = getWebsiteActivationState(weddingData.wedding);
+    const isWeddingWebsiteLive = websiteActivationState === 'live';
     const paymentWhatsAppContext: PaymentWhatsAppContext = {
         email: user?.email,
         slug: weddingData.wedding.slug,
@@ -1024,7 +1100,7 @@ export default function Dashboard({
     const validation = useMemo(() => {
         return {
             slug: !weddingData.wedding.slug.trim()
-                ? 'Slug is required.'
+                ? 'Website address is required.'
                 : /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(weddingData.wedding.slug)
                     ? ''
                     : 'Use lowercase letters, numbers, and hyphens only.',
@@ -1038,7 +1114,7 @@ export default function Dashboard({
             })),
             guests: weddingData.rsvp.guests.map((guest) => ({
                 guestName: guest.guestName.trim() ? '' : 'Guest name is required.',
-                phone: guest.phone.trim() ? '' : 'Phone is required.',
+                phone: validateGuestPhone(guest.phone).error,
                 invitedCount: guest.invitedCount < 1
                     ? 'Family size must be at least 1.'
                     : guest.invitedCount > MAX_GUEST_FAMILY_SIZE
@@ -1049,16 +1125,28 @@ export default function Dashboard({
         };
     }, [weddingData]);
 
-    const validationCount = useMemo(() => {
-        const coupleAndSlugWarnings = [validation.slug, validation.brideName, validation.groomName].filter(Boolean).length;
-        const eventWarnings = validation.events.reduce((count, event) => (
-            count + Object.values(event).filter(Boolean).length
-        ), 0);
-        const guestWarnings = validation.guests.reduce((count, guest) => (
-            count + Object.values(guest).filter(Boolean).length
-        ), 0);
-        return coupleAndSlugWarnings + eventWarnings + guestWarnings;
-    }, [validation]);
+    const validationDetails = useMemo(() => {
+        const details: string[] = [];
+        if (validation.slug) details.push(`Website address: ${validation.slug}`);
+        if (validation.brideName) details.push(`Couple details: ${validation.brideName}`);
+        if (validation.groomName) details.push(`Couple details: ${validation.groomName}`);
+        validation.events.forEach((eventValidation, index) => {
+            const eventLabel = weddingData.events[index]?.eventName.trim() || `Event ${index + 1}`;
+            if (eventValidation.eventName) details.push(`${eventLabel}: ${eventValidation.eventName}`);
+            if (eventValidation.date) details.push(`${eventLabel}: ${eventValidation.date}`);
+            if (eventValidation.startTime) details.push(`${eventLabel}: ${eventValidation.startTime}`);
+            if (eventValidation.venueName) details.push(`${eventLabel}: ${eventValidation.venueName}`);
+        });
+        validation.guests.forEach((guestValidation, index) => {
+            const guestLabel = weddingData.rsvp.guests[index]?.guestName.trim() || `Guest ${index + 1}`;
+            if (guestValidation.guestName) details.push(`${guestLabel}: ${guestValidation.guestName}`);
+            if (guestValidation.phone) details.push(`${guestLabel}: ${guestValidation.phone}`);
+            if (guestValidation.invitedCount) details.push(`${guestLabel}: ${guestValidation.invitedCount}`);
+            if (guestValidation.invitedEventIds) details.push(`${guestLabel}: ${guestValidation.invitedEventIds}`);
+        });
+        return details;
+    }, [validation, weddingData.events, weddingData.rsvp.guests]);
+    const validationCount = validationDetails.length;
 
     const previewKey = useMemo(() => `${previewRefreshNonce}:${JSON.stringify(weddingData)}`, [previewRefreshNonce, weddingData]);
     const previewGuest = useMemo<WeddingGuest>(() => ({
@@ -1371,7 +1459,7 @@ export default function Dashboard({
                 setSaveStatus('');
                 setSaveErrorDetail(result.error);
                 setSaveError(result.error.toLowerCase().includes('duplicate') || result.error.toLowerCase().includes('unique')
-                    ? 'This slug is already in use. Please choose another slug.'
+                    ? 'This website address is already in use. Please choose a different address.'
                     : result.error);
                 return;
             }
@@ -1776,6 +1864,13 @@ export default function Dashboard({
         }));
     };
 
+    const normalizeGuestPhoneAtIndex = (index: number) => {
+        const guest = weddingData.rsvp.guests[index];
+        if (!guest) return;
+        const { canonicalPhone } = validateGuestPhone(guest.phone);
+        if (canonicalPhone && canonicalPhone !== guest.phone) updateGuest(index, 'phone', canonicalPhone);
+    };
+
     const updateGuestFamilySize = (index: number, value: number) => {
         const familySize = normalizeInvitedCount(value);
         const currentGuest = weddingData.rsvp.guests[index];
@@ -2095,6 +2190,11 @@ export default function Dashboard({
         await window.navigator.clipboard?.writeText(weddingWebsiteUrl);
         setSaveStatus('Copied website URL');
     };
+    const openDashboardPreview = () => {
+        writeDashboardActiveTab(dashboardActiveTabStorageKey, 'preview');
+        setActiveTab('preview');
+    };
+
 
     const previewGuestInvite = async (guest: WeddingGuest) => {
         await handleSaveDraft();
@@ -2140,14 +2240,326 @@ export default function Dashboard({
         downloadCsv(`${weddingData.wedding.slug}-guests.csv`, rows);
     };
 
+    const buildGuestCsvAnalysis = async (file: File, mode: CsvImportMode): Promise<GuestCsvAnalysis> => {
+        const issues: GuestCsvIssue[] = [];
+        const addIssue = (
+            level: GuestCsvIssueLevel,
+            message: string,
+            row?: number,
+            column?: string,
+            value?: string
+        ) => issues.push({ level, message, row, column, value });
+        const emptyAnalysis = (): GuestCsvAnalysis => ({
+            fileName: file.name,
+            guests: [],
+            issues,
+            totalRows: 0,
+            validRows: 0,
+            resultingGuestEntries: weddingData.rsvp.guests.length,
+            resultingPeople: guestSummary.totalPeople,
+            preservedGuests: 0,
+            phoneNormalizations: [],
+        });
+
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            addIssue('error', 'Choose a file with a .csv extension.');
+            return emptyAnalysis();
+        }
+        if (file.size === 0) {
+            addIssue('error', 'The selected CSV file is empty.');
+            return emptyAnalysis();
+        }
+        if (file.size > MAX_GUEST_CSV_BYTES) {
+            addIssue('error', `CSV files must be 5 MB or smaller. This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB.`);
+            return emptyAnalysis();
+        }
+
+        const parsedCsv = parseCsv(await file.text());
+        if (parsedCsv.error) {
+            addIssue('error', parsedCsv.error);
+            return emptyAnalysis();
+        }
+        if (parsedCsv.rows.length < 2) {
+            addIssue('error', 'CSV must include a header row and at least one guest row.');
+            return emptyAnalysis();
+        }
+
+        const [headers, ...dataRows] = parsedCsv.rows;
+        const normalizedHeaders = headers.map(normalizeCsvHeader);
+        const duplicateHeaders = Array.from(new Set(normalizedHeaders.filter((header, index) => (
+            header && normalizedHeaders.indexOf(header) !== index
+        ))));
+        duplicateHeaders.forEach((header) => addIssue('error', `The column "${header}" appears more than once.`));
+
+        const headerIndex = (name: string) => normalizedHeaders.indexOf(normalizeCsvHeader(name));
+        guestCsvRequiredHeaders.forEach((header) => {
+            if (headerIndex(header) < 0) addIssue('error', `Required column "${header}" is missing.`, 1, header);
+        });
+        const familySizeIndex = headerIndex('familySize') >= 0 ? headerIndex('familySize') : headerIndex('invitedCount');
+        if (familySizeIndex < 0) addIssue('error', 'Required column "familySize" is missing.', 1, 'familySize');
+
+        const normalizedEventNames = weddingData.events.map((event) => normalizeCsvHeader(event.eventName));
+        const duplicateEventNames = Array.from(new Set(normalizedEventNames.filter((name, index) => (
+            name && normalizedEventNames.indexOf(name) !== index
+        ))));
+        duplicateEventNames.forEach((name) => addIssue(
+            'error',
+            `Two current events normalize to "${name}". Rename one event before importing so assignments are unambiguous.`
+        ));
+
+        if (issues.some((issue) => issue.level === 'error')) return {
+            ...emptyAnalysis(),
+            totalRows: dataRows.length,
+        };
+
+        const ignoredHeaderKeys = new Set([...guestCsvBaseHeaders, ...guestCsvMetadataHeaders, ...guestCsvLegacyHeaders].map(normalizeCsvHeader));
+        const usedEventColumnIndexes = new Set<number>();
+        const findHeaderIndex = (candidates: string[]) => normalizedHeaders.findIndex((header) => (
+            candidates.some((candidate) => normalizeCsvHeader(candidate) === header)
+        ));
+        const eventColumns = weddingData.events
+            .map((event) => {
+                const statusIndex = findHeaderIndex([event.eventName, event.id]);
+                const inviteeIndex = findHeaderIndex([
+                    inviteeCountHeader(event.eventName),
+                    `${event.eventName} Count`,
+                    `${event.eventName} Invited Count`,
+                    inviteeCountHeader(event.id),
+                ]);
+                if (statusIndex >= 0) usedEventColumnIndexes.add(statusIndex);
+                if (inviteeIndex >= 0) usedEventColumnIndexes.add(inviteeIndex);
+                if (statusIndex < 0 && inviteeIndex < 0) return null;
+                return { statusIndex, inviteeIndex, eventId: event.id, eventName: event.eventName };
+            })
+            .filter((column): column is { statusIndex: number; inviteeIndex: number; eventId: string; eventName: string } => Boolean(column));
+
+        if (!eventColumns.length) {
+            addIssue('error', 'No CSV column matches a current wedding event. Download a fresh template and try again.');
+        }
+        headers.forEach((header, index) => {
+            const normalizedHeader = normalizedHeaders[index];
+            if (!header.trim() || ignoredHeaderKeys.has(normalizedHeader) || usedEventColumnIndexes.has(index)) return;
+            addIssue('warning', `Column "${header}" is not a supported guest field or current event and will be ignored.`, 1, header);
+        });
+        if (issues.some((issue) => issue.level === 'error')) return {
+            ...emptyAnalysis(),
+            totalRows: dataRows.length,
+        };
+
+        const existingCodes = new Set(weddingData.rsvp.guests.map((guest) => guest.inviteCode));
+        const existingIds = new Set(weddingData.rsvp.guests.map((guest) => guest.id));
+        const existingByInviteCode = new Map(weddingData.rsvp.guests.map((guest) => [guest.inviteCode.toLowerCase(), guest]));
+        const existingByIdentity = new Map<string, WeddingGuest[]>();
+        const existingByPhone = new Map<string, WeddingGuest[]>();
+        weddingData.rsvp.guests.forEach((guest) => {
+            const key = getGuestIdentityKey(guest.guestName, guest.phone);
+            existingByIdentity.set(key, [...(existingByIdentity.get(key) ?? []), guest]);
+            const phoneKey = getGuestPhoneIdentity(guest.phone);
+            if (phoneKey) existingByPhone.set(phoneKey, [...(existingByPhone.get(phoneKey) ?? []), guest]);
+        });
+        const importedIdentityRows = new Map<string, number>();
+        const importedPhoneRows = new Map<string, number>();
+        const importedInviteCodeRows = new Map<string, number>();
+        const guests: WeddingGuest[] = [];
+        const phoneNormalizations: Array<{ row: number; input: string; canonical: string }> = [];
+        let preservedGuests = 0;
+
+        dataRows.forEach((row, rowIndex) => {
+            const displayRow = rowIndex + 2;
+            let rowHasError = false;
+            const addRowIssue = (level: GuestCsvIssueLevel, message: string, column?: string, value?: string) => {
+                if (level === 'error') rowHasError = true;
+                addIssue(level, message, displayRow, column, value);
+            };
+            if (row.length > headers.length) {
+                addRowIssue('error', `This row has ${row.length} values but the header has ${headers.length} columns.`);
+            }
+
+            const guestName = row[headerIndex('guestName')]?.trim() ?? '';
+            const rawPhone = row[headerIndex('phone')]?.trim() ?? '';
+            const category = row[headerIndex('category')]?.trim() ?? '';
+            const familySizeValue = row[familySizeIndex]?.trim() ?? '';
+            const parsedFamilySize = Number(familySizeValue);
+            const familySize = Number.isInteger(parsedFamilySize) ? parsedFamilySize : 0;
+            const phoneValidation = validateGuestPhone(rawPhone);
+
+            if (!guestName) addRowIssue('error', 'Guest or family name is required.', 'guestName', guestName);
+            else if (guestName.length > guestCsvGuestNameMaxLength) addRowIssue('error', `Keep the guest name within ${guestCsvGuestNameMaxLength} characters.`, 'guestName', guestName);
+            if (!rawPhone) addRowIssue('error', 'Phone is required.', 'phone');
+            else if (rawPhone.length > guestCsvPhoneMaxLength) addRowIssue('error', `Keep the phone value within ${guestCsvPhoneMaxLength} characters.`, 'phone', rawPhone);
+            else if (phoneValidation.error) addRowIssue('error', phoneValidation.error, 'phone', rawPhone);
+            if (category.length > guestCsvCategoryMaxLength) addRowIssue('error', `Keep category within ${guestCsvCategoryMaxLength} characters.`, 'category', category);
+            if (!familySizeValue || familySize < 1 || familySize > MAX_GUEST_FAMILY_SIZE) {
+                addRowIssue('error', `Family Size must be a whole number between 1 and ${MAX_GUEST_FAMILY_SIZE}.`, 'familySize', familySizeValue);
+            }
+
+            const usableFamilySize = familySize >= 1 && familySize <= MAX_GUEST_FAMILY_SIZE ? familySize : 1;
+            const parsedEventSelections = eventColumns.map((column) => {
+                const eventValue = column.statusIndex >= 0 ? (row[column.statusIndex] ?? '').trim() : '';
+                const inviteeValue = column.inviteeIndex >= 0 ? (row[column.inviteeIndex] ?? '').trim() : '';
+                const normalizedEventValue = eventValue.toLowerCase();
+                const normalizedInviteeValue = inviteeValue.toLowerCase();
+                const isLegacyTwoColumnFormat = column.inviteeIndex >= 0;
+                const isAllValue = (value: string) => ['all', 'everyone', 'family', 'full', 'yes', 'y', 'true'].includes(value);
+                const parseInviteeCount = (value: string) => {
+                    if (!value || notInvitedCsvValues.has(value)) return 0;
+                    if (isAllValue(value)) return usableFamilySize;
+                    const parsedCount = Number(value);
+                    if (!Number.isInteger(parsedCount) || parsedCount < 0 || parsedCount > usableFamilySize) {
+                        addRowIssue('error', `Use 0, All, or a whole number between 1 and ${usableFamilySize}.`, column.eventName, value);
+                        return 0;
+                    }
+                    return parsedCount;
+                };
+
+                let eventInvitees = 0;
+                if (isLegacyTwoColumnFormat) {
+                    const hasStatusYes = invitedCsvValues.has(normalizedEventValue);
+                    const hasStatusNo = notInvitedCsvValues.has(normalizedEventValue);
+                    const inviteeValueSelectsEvent = Boolean(inviteeValue) && !notInvitedCsvValues.has(normalizedInviteeValue);
+                    if (!hasStatusYes && (hasStatusNo || !inviteeValueSelectsEvent)) return null;
+                    eventInvitees = inviteeValue ? parseInviteeCount(normalizedInviteeValue) : usableFamilySize;
+                } else {
+                    eventInvitees = parseInviteeCount(normalizedEventValue);
+                }
+                return eventInvitees > 0 ? { eventId: column.eventId, invitedCount: eventInvitees } : null;
+            }).filter((selection): selection is { eventId: string; invitedCount: number } => Boolean(selection));
+
+            if (!parsedEventSelections.length) addRowIssue('error', 'Select at least one invited event using All or an invitee number.', 'events');
+
+            const canonicalPhone = phoneValidation.canonicalPhone || rawPhone;
+            if (phoneValidation.canonicalPhone && phoneValidation.canonicalPhone !== rawPhone) {
+                phoneNormalizations.push({ row: displayRow, input: rawPhone, canonical: phoneValidation.canonicalPhone });
+            }
+            const identityKey = getGuestIdentityKey(guestName, canonicalPhone);
+            const previousIdentityRow = importedIdentityRows.get(identityKey);
+            if (previousIdentityRow) addRowIssue('error', `Duplicates row ${previousIdentityRow} with the same guest name and phone.`, 'guestName', guestName);
+            else importedIdentityRows.set(identityKey, displayRow);
+            const phoneKey = getGuestPhoneIdentity(canonicalPhone);
+            const previousPhoneRow = importedPhoneRows.get(phoneKey);
+            if (phoneKey && previousPhoneRow && !previousIdentityRow) {
+                addRowIssue('warning', `Uses the same normalized phone as row ${previousPhoneRow}. Shared family numbers are allowed, but verify this is intentional.`, 'phone', canonicalPhone);
+            } else if (phoneKey) {
+                importedPhoneRows.set(phoneKey, displayRow);
+            }
+
+            const suppliedInviteCode = row[headerIndex('inviteCode')]?.trim() ?? '';
+            if (suppliedInviteCode) {
+                const normalizedCode = suppliedInviteCode.toLowerCase();
+                const previousCodeRow = importedInviteCodeRows.get(normalizedCode);
+                if (previousCodeRow) addRowIssue('error', `Invite code duplicates row ${previousCodeRow}.`, 'inviteCode', suppliedInviteCode);
+                else importedInviteCodeRows.set(normalizedCode, displayRow);
+            }
+
+            const codeMatch = suppliedInviteCode ? existingByInviteCode.get(suppliedInviteCode.toLowerCase()) : undefined;
+            const identityMatches = existingByIdentity.get(identityKey) ?? [];
+            const identityMatch = identityMatches.length === 1 ? identityMatches[0] : undefined;
+            const matchedGuest = codeMatch ?? identityMatch;
+            const phoneMatches = existingByPhone.get(phoneKey) ?? [];
+            if (mode === 'append' && matchedGuest) {
+                addRowIssue('error', 'This guest already exists. Remove the row or use Replace mode to update the existing guest.', 'guestName', guestName);
+            }
+            if (mode === 'append' && !matchedGuest && phoneMatches.length > 0) {
+                addRowIssue('warning', `This phone is already used by ${phoneMatches[0].guestName || 'another guest'}. Shared family numbers are allowed, but verify this is intentional.`, 'phone', canonicalPhone);
+            }
+            if (mode === 'replace' && !codeMatch && suppliedInviteCode) {
+                addRowIssue('warning', 'This invite code is not part of the current wedding, so a new personalized link will be generated.', 'inviteCode', suppliedInviteCode);
+            }
+            if (mode === 'replace' && !codeMatch && identityMatches.length > 1) {
+                addRowIssue('warning', 'Multiple existing guests share this name and phone, so their existing personalized link cannot be matched safely.', 'guestName', guestName);
+            }
+
+            if (rowHasError) return;
+            let guestId = matchedGuest?.id ?? `guest-${Date.now()}-${rowIndex + 1}`;
+            while (existingIds.has(guestId) && guestId !== matchedGuest?.id) {
+                guestId = `guest-${Date.now()}-${rowIndex + 1}-${Math.random().toString(36).slice(2, 5)}`;
+            }
+            existingIds.add(guestId);
+            const inviteCode = matchedGuest?.inviteCode ?? createUniqueInviteCode(existingCodes);
+            if (matchedGuest) preservedGuests += 1;
+            guests.push({
+                id: guestId,
+                guestName,
+                phone: canonicalPhone,
+                invitedCount: usableFamilySize,
+                category,
+                inviteCode,
+                invitedEventIds: parsedEventSelections.map((selection) => selection.eventId),
+                invitedEventCounts: Object.fromEntries(parsedEventSelections.map((selection) => [selection.eventId, selection.invitedCount])),
+            });
+        });
+
+        const importedPeople = guests.reduce((total, guest) => total + guest.invitedCount, 0);
+        const resultingGuestEntries = mode === 'replace' ? guests.length : weddingData.rsvp.guests.length + guests.length;
+        const resultingPeople = mode === 'replace' ? importedPeople : guestSummary.totalPeople + importedPeople;
+        if (resultingGuestEntries > guestRecordLimit) addIssue('error', `This import would create ${resultingGuestEntries.toLocaleString()} guest entries, above the ${guestRecordLimit.toLocaleString()} limit.`);
+        if (resultingPeople > inviteeLimit) addIssue('error', `This import would create ${resultingPeople.toLocaleString()} people, above the ${inviteeLimit.toLocaleString()} limit.`);
+
+        return {
+            fileName: file.name,
+            guests,
+            issues,
+            totalRows: dataRows.length,
+            validRows: guests.length,
+            resultingGuestEntries,
+            resultingPeople,
+            preservedGuests,
+            phoneNormalizations,
+        };
+    };
+
+    const analyzeGuestCsvFile = async (file: File, mode: CsvImportMode = guestImportMode) => {
+        setIsGuestCsvAnalyzing(true);
+        setGuestCsvAnalysis(null);
+        setGuestCsvImportMessage('');
+        setGuestImportWarnings([]);
+        try {
+            setGuestCsvAnalysis(await buildGuestCsvAnalysis(file, mode));
+        } catch (error) {
+            setGuestCsvAnalysis({
+                fileName: file.name,
+                guests: [],
+                issues: [{ level: 'error', message: error instanceof Error ? error.message : 'The CSV could not be read.' }],
+                totalRows: 0,
+                validRows: 0,
+                resultingGuestEntries: weddingData.rsvp.guests.length,
+                resultingPeople: guestSummary.totalPeople,
+                preservedGuests: 0,
+                phoneNormalizations: [],
+            });
+        } finally {
+            setIsGuestCsvAnalyzing(false);
+        }
+    };
+
     const importGuestCsvFile = async (file: File) => {
-        if (!file) return;
+        if (!file || guestCsvImportInFlightRef.current) return;
+        const activeAnalysis = guestCsvAnalysis?.fileName === file.name ? guestCsvAnalysis : null;
+        const blockingIssueCount = activeAnalysis?.issues.filter((issue) => issue.level === 'error').length ?? 0;
+        if (!activeAnalysis || blockingIssueCount > 0) {
+            setGuestImportWarnings(['Validate the selected CSV and resolve all blocking errors before importing.']);
+            return;
+        }
+        if (guestImportMode === 'replace') {
+            const guestsRemoved = Math.max(0, weddingData.rsvp.guests.length - activeAnalysis.preservedGuests);
+            const confirmed = window.confirm(
+                `Replace ${weddingData.rsvp.guests.length.toLocaleString()} current guest entries with ${activeAnalysis.validRows.toLocaleString()} validated rows? `
+                + `${activeAnalysis.preservedGuests.toLocaleString()} existing guest link${activeAnalysis.preservedGuests === 1 ? '' : 's'} will be preserved. `
+                + `${guestsRemoved.toLocaleString()} unmatched current guest${guestsRemoved === 1 ? '' : 's'} and their RSVP history may be removed.`
+            );
+            if (!confirmed) return;
+        }
         if (file.size > MAX_GUEST_CSV_BYTES) {
             setGuestImportWarnings([`CSV files must be 5 MB or smaller. This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB.`]);
             return;
         }
 
-        const rows = parseCsv(await file.text());
+        const parsedCsv = parseCsv(await file.text());
+        if (parsedCsv.error) {
+            setGuestImportWarnings([parsedCsv.error]);
+            return;
+        }
+        const rows = parsedCsv.rows;
         if (rows.length < 2) {
             setGuestImportWarnings(['CSV must include a header row and at least one guest row.']);
             return;
@@ -2187,7 +2599,7 @@ export default function Dashboard({
         const existingCodes = new Set(weddingData.rsvp.guests.map((guest) => guest.inviteCode));
         const existingIds = new Set(weddingData.rsvp.guests.map((guest) => guest.id));
 
-        const importedGuests = dataRows.map((row, rowIndex) => {
+        dataRows.forEach((row, rowIndex) => {
             const displayRow = rowIndex + 2;
             const guestName = row[headerIndex('guestName')]?.trim() ?? '';
             const phone = row[headerIndex('phone')]?.trim() ?? '';
@@ -2258,6 +2670,7 @@ export default function Dashboard({
             };
         });
 
+        const importedGuests = activeAnalysis.guests;
         const importedPeople = importedGuests.reduce((total, guest) => total + normalizeInvitedCount(guest.invitedCount), 0);
         const resultingGuestEntries = guestImportMode === 'replace'
             ? importedGuests.length
@@ -2283,6 +2696,11 @@ export default function Dashboard({
             setGuestImportWarnings([...capacityErrors, ...warnings]);
             return;
         }
+        guestCsvImportInFlightRef.current = true;
+        setIsGuestCsvImporting(true);
+        setGuestCsvImportMessage('');
+        setGuestImportWarnings([]);
+        try {
         if (supabaseWeddingId) {
             const result = await importSupabaseGuests(supabaseWeddingId, importedGuests, guestImportMode, weddingData.events);
             if (result.error) {
@@ -2300,8 +2718,10 @@ export default function Dashboard({
                 setSaveStatus('');
                 setSaveError('');
             }
-            setGuestImportWarnings(warnings);
+            setGuestImportWarnings([]);
             setSelectedGuestCsvFile(null);
+            setGuestCsvAnalysis(null);
+            setGuestCsvImportMessage(`${importedGuests.length.toLocaleString()} guest row${importedGuests.length === 1 ? '' : 's'} imported successfully.`);
             return;
         }
 
@@ -2314,17 +2734,51 @@ export default function Dashboard({
                     : [...current.rsvp.guests, ...importedGuests],
             },
         }));
-        setGuestImportWarnings(warnings);
+        setGuestImportWarnings([]);
         setSelectedGuestCsvFile(null);
+        setGuestCsvAnalysis(null);
+        setGuestCsvImportMessage(`${importedGuests.length.toLocaleString()} guest row${importedGuests.length === 1 ? '' : 's'} imported successfully.`);
+        } catch (error) {
+            console.warn('Could not import CSV', error);
+            setGuestImportWarnings([error instanceof Error ? error.message : 'The CSV import could not be completed. No guest data was changed.']);
+        } finally {
+            guestCsvImportInFlightRef.current = false;
+            setIsGuestCsvImporting(false);
+        }
     };
 
     const handleGuestCsvImport = (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0] ?? null;
         event.target.value = '';
         setSelectedGuestCsvFile(file);
+        setGuestCsvAnalysis(null);
+        setGuestCsvImportMessage('');
+        setGuestImportWarnings([]);
         if (file) {
-            setGuestImportWarnings([]);
+            void analyzeGuestCsvFile(file);
         }
+    };
+
+    const handleGuestImportModeChange = (mode: CsvImportMode) => {
+        setGuestImportMode(mode);
+        setGuestCsvAnalysis(null);
+        setGuestCsvImportMessage('');
+        setGuestImportWarnings([]);
+        if (selectedGuestCsvFile) void analyzeGuestCsvFile(selectedGuestCsvFile, mode);
+    };
+
+    const downloadGuestCsvIssues = () => {
+        if (!guestCsvAnalysis?.issues.length) return;
+        downloadCsv(`${weddingData.wedding.slug}-guest-import-issues.csv`, [
+            ['severity', 'row', 'column', 'submittedValue', 'message'],
+            ...guestCsvAnalysis.issues.map((issue) => [
+                issue.level,
+                issue.row ?? '',
+                issue.column ?? '',
+                issue.value ?? '',
+                issue.message,
+            ]),
+        ]);
     };
 
     const exportRsvpCsv = () => {
@@ -2546,6 +3000,10 @@ export default function Dashboard({
                     <p className="dashboard-eyebrow">{eyebrow}</p>
                     <h1>{title}</h1>
                     {user?.email && <p className="dashboard-auth-user">{user.email}</p>}
+                    <span className={`dashboard-live-status status-${websiteActivationState}`}>
+                        <WebsiteActivationIcon state={websiteActivationState} size={15} />
+                        {websiteActivationLabels[websiteActivationState]}
+                    </span>
                 </div>
                 {authNotice && <p className="dashboard-auth-notice">{authNotice}</p>}
                 <div className="dashboard-draft-bar">
@@ -2575,8 +3033,11 @@ export default function Dashboard({
                                             setActiveTab(tab.id);
                                         }}
                                         type="button"
+                                        aria-label={`${tab.label}${isLockedTab ? ', available on the Pro plan' : ''}`}
+                                        title={isLockedTab ? 'Available on the Pro plan' : undefined}
                                     >
-                                        {tab.label}{isLockedTab ? ' Locked' : ''}
+                                        <span className="dashboard-tab-label">{tab.label}</span>
+                                        {isLockedTab && <LockKeyhole className="dashboard-tab-lock" size={16} strokeWidth={2} aria-hidden="true" />}
                                     </button>
                                 );
                             })}
@@ -2597,6 +3058,12 @@ export default function Dashboard({
                                 {saveAllChangesLabel}
                             </button>
                         </div>
+                        <WebsiteActivationBanner
+                            state={websiteActivationState}
+                            websiteUrl={weddingWebsiteUrl}
+                            onCopy={copyWeddingWebsiteUrl}
+                            onPreview={openDashboardPreview}
+                        />
                         <div className="overview-grid">
                             <ReadOnlyBadgeCard
                                 label="Plan"
@@ -2604,9 +3071,11 @@ export default function Dashboard({
                                 helperText={packageDetails[weddingData.wedding.packageType].summary}
                             />
                             <ReadOnlyBadgeCard
-                                label="Status"
-                                value={weddingData.wedding.status}
-                                helperText="Publishing is handled after payment/admin verification."
+                                label="Website status"
+                                value={websiteActivationLabels[websiteActivationState]}
+                                helperText={isWeddingWebsiteLive
+                                    ? 'Guests can open the public wedding link.'
+                                    : 'Your dashboard preview remains available while the public website is private.'}
                             />
                             <InfoBlock label="Payment" value={paymentStatusLabels[weddingData.wedding.paymentStatus]} />
                         </div>
@@ -2619,11 +3088,13 @@ export default function Dashboard({
                         {showPlanUpgrade && <RsvpUpgradeCard whatsAppContext={paymentWhatsAppContext} />}
                         <WebsiteUrlCard
                             url={weddingWebsiteUrl}
+                            isLive={isWeddingWebsiteLive}
                             onCopy={copyWeddingWebsiteUrl}
+                            onPreview={openDashboardPreview}
                         />
                         <div className="form-grid dashboard-shell-fields">
                             <TextField
-                                label="Slug"
+                                label="Website address"
                                 value={weddingData.wedding.slug}
                                 error={validation.slug}
                                 onChange={(value) => updateWeddingShellField('slug', value.toLowerCase())}
@@ -2635,7 +3106,15 @@ export default function Dashboard({
                             />
                         </div>
                         {validationCount > 0 && (
-                            <p className="validation-summary">{validationCount} validation warning{validationCount === 1 ? '' : 's'} need attention.</p>
+                            <div className="validation-summary" role="alert">
+                                <strong>{validationCount} validation warning{validationCount === 1 ? '' : 's'} need attention.</strong>
+                                <ul>
+                                    {validationDetails.slice(0, 8).map((detail) => <li key={detail}>{detail}</li>)}
+                                </ul>
+                                {validationDetails.length > 8 && (
+                                    <p>{validationDetails.length - 8} additional warning{validationDetails.length - 8 === 1 ? '' : 's'} appear in the related editor fields.</p>
+                                )}
+                            </div>
                         )}
                         <p className="dashboard-note">
                             {supabaseWeddingId
@@ -2690,11 +3169,13 @@ export default function Dashboard({
                                             optionLabels={musicOptionLabels}
                                             onChange={applyMusic}
                                         />
-                                        <CheckboxField
-                                            label="Skip reveal image after video"
-                                            checked={weddingData.hero.skipRevealImage === true}
-                                            helperText="When enabled, guests go from the opening video directly to Our Story/content."
-                                            onChange={(checked) => updateHero('skipRevealImage', checked)}
+                                        <ToggleField
+                                            label="Reveal image after video"
+                                            checked={weddingData.hero.skipRevealImage !== true}
+                                            onLabel="Visible"
+                                            offLabel="Skipped"
+                                            helperText="When skipped, guests go from the opening video directly to Our Story/content."
+                                            onChange={(checked) => updateHero('skipRevealImage', !checked)}
                                         />
                                     </div>
                                 </section>
@@ -2763,14 +3244,13 @@ export default function Dashboard({
                         <div className="our-story-layout">
                             <div className="our-story-editor-groups">
                                 <section className="our-story-group">
-                                    <label className="dashboard-check">
-                                        <input
-                                            type="checkbox"
-                                            checked={weddingData.couple.enabled}
-                                            onChange={(event) => updateCouple('enabled', event.target.checked)}
-                                        />
-                                        Show Our Story
-                                    </label>
+                                    <ToggleField
+                                        label="Our Story section"
+                                        checked={weddingData.couple.enabled}
+                                        onLabel="Visible"
+                                        offLabel="Hidden"
+                                        onChange={(checked) => updateCouple('enabled', checked)}
+                                    />
                                     <div className="form-grid">
                                         <TextField label="Couple Display Name" value={weddingData.couple.displayName} multiline rows={2} onChange={(value) => updateCouple('displayName', value)} />
                                         <TextField label="Subtitle" value={weddingData.couple.introLine} multiline rows={2} onChange={(value) => updateCouple('introLine', value)} />
@@ -2837,14 +3317,13 @@ export default function Dashboard({
                                 {saveAllChangesLabel}
                             </button>
                         </div>
-                        <label className="dashboard-check">
-                            <input
-                                type="checkbox"
-                                checked={weddingData.couple.enabled}
-                                onChange={(event) => updateCouple('enabled', event.target.checked)}
-                            />
-                            Show couple section
-                        </label>
+                        <ToggleField
+                            label="Couple section"
+                            checked={weddingData.couple.enabled}
+                            onLabel="Visible"
+                            offLabel="Hidden"
+                            onChange={(checked) => updateCouple('enabled', checked)}
+                        />
                         <div className="form-grid">
                             <TextField label="Bride name" value={weddingData.couple.brideName} error={validation.brideName} onChange={(value) => updateCouple('brideName', value)} />
                             <TextField label="Groom name" value={weddingData.couple.groomName} error={validation.groomName} onChange={(value) => updateCouple('groomName', value)} />
@@ -2942,14 +3421,18 @@ export default function Dashboard({
                                                     />
                                                 </div>
                                                 <div className="event-toggle-grid">
-                                                    <CheckboxField
-                                                        label="Show Add to Calendar"
+                                                    <ToggleField
+                                                        label="Add to Calendar button"
                                                         checked={event.eventShowCalendar !== false}
+                                                        onLabel="Visible"
+                                                        offLabel="Hidden"
                                                         onChange={(checked) => updateEvent(index, 'eventShowCalendar', checked)}
                                                     />
-                                                    <CheckboxField
-                                                        label="Show invited count"
+                                                    <ToggleField
+                                                        label="Invitee count"
                                                         checked={event.eventShowInvitedCount === true}
+                                                        onLabel="Visible"
+                                                        offLabel="Hidden"
                                                         helperText="Shows each guest/family their invited count for this event."
                                                         onChange={(checked) => updateEvent(index, 'eventShowInvitedCount', checked)}
                                                     />
@@ -2984,7 +3467,7 @@ export default function Dashboard({
                 )}
 
                 {activeTab === 'guests' && (hasDashboardGuestAccess ? (
-                    <div className="dashboard-panel">
+                    <div className="dashboard-panel guest-list-panel">
                         <div className="dashboard-panel-header dashboard-panel-header-row">
                             <div>
                                 <p className="dashboard-eyebrow">Guest List</p>
@@ -3024,8 +3507,8 @@ export default function Dashboard({
                         <div className="guest-csv-panel">
                             <div className="guest-csv-panel-header">
                                 <div>
-                                    <h3>Guest CSV Tools</h3>
-                                    <p>Use the template to prepare your guest list. You can append new guests or replace the current guest list after validation.</p>
+                                    <h3>Guest list import</h3>
+                                    <p>Upload a CSV, review every issue, and import only after the file passes validation.</p>
                                 </div>
                             </div>
                             <div className="guest-csv-toolbar">
@@ -3037,14 +3520,15 @@ export default function Dashboard({
                                 </button>
                             </div>
                             <p className="guest-csv-helper">
-                                Each event column accepts 0, All, or a number capped by Family Size. CSV files can contain up to the remaining guest capacity and must be 5 MB or smaller.
+                                Required columns are guestName, phone, and familySize. Each event column accepts 0, All, or a whole number capped by Family Size. Maximum file size is 5 MB.
                             </p>
                             <div className="guest-csv-import-row">
                                 <label className="csv-mode-select">
                                     <span>Import Mode</span>
                                     <select
                                         value={guestImportMode}
-                                        onChange={(event) => setGuestImportMode(event.target.value as CsvImportMode)}
+                                        onChange={(event) => handleGuestImportModeChange(event.target.value as CsvImportMode)}
+                                        disabled={isGuestCsvAnalyzing || isGuestCsvImporting}
                                     >
                                         <option value="append">Append new guests</option>
                                         <option value="replace">Replace existing guests</option>
@@ -3052,32 +3536,53 @@ export default function Dashboard({
                                 </label>
                                 <label className="csv-file-control">
                                     <span>Choose CSV File</span>
-                                    <input type="file" accept=".csv,text/csv" onChange={handleGuestCsvImport} />
+                                    <input
+                                        type="file"
+                                        accept=".csv,text/csv"
+                                        disabled={isGuestCsvAnalyzing || isGuestCsvImporting}
+                                        onChange={handleGuestCsvImport}
+                                    />
                                 </label>
                                 <button
                                     className="dashboard-primary-btn secondary"
                                     type="button"
-                                    disabled={!selectedGuestCsvFile}
+                                    disabled={!selectedGuestCsvFile || !guestCsvAnalysis || guestCsvAnalysis.issues.some((issue) => issue.level === 'error') || isGuestCsvAnalyzing || isGuestCsvImporting}
                                     onClick={() => {
                                         if (selectedGuestCsvFile) void importGuestCsvFile(selectedGuestCsvFile);
                                     }}
                                 >
-                                    Import CSV
+                                    {isGuestCsvImporting
+                                        ? 'Importing...'
+                                        : guestImportMode === 'replace'
+                                            ? 'Replace validated guest list'
+                                            : 'Import validated guests'}
                                 </button>
                                 {selectedGuestCsvFile && <span className="csv-selected-file">{selectedGuestCsvFile.name}</span>}
                             </div>
                         </div>
+                            {isGuestCsvAnalyzing && (
+                                <div className="csv-analysis-loading" role="status" aria-live="polite">
+                                    Checking file structure, guest details, event assignments, and capacity...
+                                </div>
+                            )}
+                            {guestCsvAnalysis && !isGuestCsvAnalyzing && (
+                                <GuestCsvValidationPanel
+                                    analysis={guestCsvAnalysis}
+                                    mode={guestImportMode}
+                                    currentGuestCount={weddingData.rsvp.guests.length}
+                                    onDownloadIssues={downloadGuestCsvIssues}
+                                />
+                            )}
+                            {guestCsvImportMessage && <div className="csv-import-success" role="status">{guestCsvImportMessage}</div>}
                         {guestImportWarnings.length > 0 && (
-                            <div className="csv-warning-box">
-                                <strong>Import warnings</strong>
+                            <div className="csv-warning-box csv-import-failure" role="alert">
+                                <strong>Import could not be completed</strong>
                                 <ul>
-                                    {guestImportWarnings.slice(0, 10).map((warning) => (
+                                    {guestImportWarnings.map((warning) => (
                                         <li key={warning}>{warning}</li>
                                     ))}
                                 </ul>
-                                {guestImportWarnings.length > 10 && (
-                                    <p>{guestImportWarnings.length - 10} more warnings hidden.</p>
-                                )}
+                                <p>The selected file and validation results have been kept so you can correct the issue and retry.</p>
                             </div>
                         )}
                         <div className="guest-filter-bar">
@@ -3094,7 +3599,68 @@ export default function Dashboard({
                                     </button>
                                 )}
                             </div>
-                            <div className="guest-filter-grid">
+                            <div className="guest-mobile-filter-actions">
+                                <label className="guest-mobile-search">
+                                    <span>Search guests</span>
+                                    <input
+                                        value={guestSearchQuery}
+                                        onChange={(event) => {
+                                            setGuestSearchQuery(event.target.value);
+                                            setGuestPage(1);
+                                        }}
+                                        placeholder="Name, phone, category, or RSVP"
+                                        type="search"
+                                    />
+                                </label>
+                                <div className="guest-mobile-quick-filters" aria-label="Quick guest filters">
+                                    <button
+                                        className={activeGuestFilterCount === 0 ? 'active' : ''}
+                                        type="button"
+                                        onClick={clearGuestFilters}
+                                    >
+                                        All
+                                    </button>
+                                    <button
+                                        className={guestWhatsAppFilter === 'invite-not-sent' ? 'active' : ''}
+                                        type="button"
+                                        onClick={() => {
+                                            setGuestWhatsAppFilter(guestWhatsAppFilter === 'invite-not-sent' ? 'all' : 'invite-not-sent');
+                                            setGuestPage(1);
+                                        }}
+                                    >
+                                        Not sent
+                                    </button>
+                                    <button
+                                        className={guestRsvpFilter === 'no-response' ? 'active' : ''}
+                                        type="button"
+                                        onClick={() => {
+                                            setGuestRsvpFilter(guestRsvpFilter === 'no-response' ? 'all' : 'no-response');
+                                            setGuestPage(1);
+                                        }}
+                                    >
+                                        No RSVP
+                                    </button>
+                                    <button
+                                        className={guestPhoneFilter === 'missing' ? 'active' : ''}
+                                        type="button"
+                                        onClick={() => {
+                                            setGuestPhoneFilter(guestPhoneFilter === 'missing' ? 'all' : 'missing');
+                                            setGuestPage(1);
+                                        }}
+                                    >
+                                        Missing phone
+                                    </button>
+                                </div>
+                                <button
+                                    className="guest-filter-toggle"
+                                    type="button"
+                                    aria-expanded={areGuestFiltersOpen}
+                                    onClick={() => setAreGuestFiltersOpen((current) => !current)}
+                                >
+                                    {areGuestFiltersOpen ? 'Hide filters' : `More filters${activeGuestFilterCount ? ` (${activeGuestFilterCount})` : ''}`}
+                                </button>
+                            </div>
+                            <div className={`guest-filter-grid${areGuestFiltersOpen ? ' mobile-open' : ''}`}>
                                 <label className="guest-filter-field guest-filter-search">
                                     <span>Search</span>
                                     <input
@@ -3189,7 +3755,293 @@ export default function Dashboard({
                                 </label>
                             </div>
                         </div>
-                        <div className="guest-table-wrap">
+                        <div className="guest-mobile-list" aria-label="Guest list">
+                            {paginatedGuestRows.map(({ guest, guestIndex }) => {
+                                const guestRsvpSummary = rsvpAnalytics.guestSummaryById.get(guest.id);
+                                const messageHistory = guestMessageHistoryByGuestId.get(guest.id) ?? [];
+                                const invitationHistory = messageHistory.filter((entry) => entry.messageType === 'invitation');
+                                const reminderHistory = messageHistory.filter((entry) => entry.messageType === 'reminder');
+                                const firstInvitation = invitationHistory[invitationHistory.length - 1];
+                                const lastReminder = reminderHistory[0];
+                                const pendingMessageType = pendingGuestMessageConfirmation?.guestId === guest.id
+                                    ? pendingGuestMessageConfirmation.messageType
+                                    : null;
+                                const inviteWhatsAppUrl = getGuestWhatsAppUrl(guest, 'invitation');
+                                const reminderWhatsAppUrl = getGuestWhatsAppUrl(guest, 'reminder');
+                                const primaryMessageType: GuestMessageType = firstInvitation ? 'reminder' : 'invitation';
+                                const primaryWhatsAppUrl = firstInvitation ? reminderWhatsAppUrl : inviteWhatsAppUrl;
+                                const isExpanded = expandedGuestId === guest.id;
+
+                                return (
+                                    <article className="guest-mobile-card" key={guest.id}>
+                                        <div className="guest-mobile-card-header">
+                                            <input
+                                                aria-label={`Select ${guest.guestName || 'guest'}`}
+                                                className="guest-select-checkbox"
+                                                type="checkbox"
+                                                checked={selectedGuestIds.includes(guest.id)}
+                                                onChange={() => toggleGuestSelection(guest.id)}
+                                            />
+                                            <div>
+                                                <strong>{guest.guestName || 'Unnamed guest'}</strong>
+                                                <span>
+                                                    {guest.category.trim() || 'Uncategorized'}
+                                                    {' - '}
+                                                    {normalizeInvitedCount(guest.invitedCount)} {normalizeInvitedCount(guest.invitedCount) === 1 ? 'person' : 'people'}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="guest-mobile-card-summary">
+                                            <span>
+                                                <strong>Phone</strong>
+                                                {guest.phone.trim() || 'Missing phone'}
+                                            </span>
+                                            <span>
+                                                <strong>Category</strong>
+                                                {guest.category.trim() || 'Uncategorized'}
+                                            </span>
+                                            <span>
+                                                <strong>Family Size</strong>
+                                                {normalizeInvitedCount(guest.invitedCount)}
+                                            </span>
+                                            <span>
+                                                <strong>Invited Events</strong>
+                                                {weddingData.events
+                                                    .filter((event) => guest.invitedEventIds.includes(event.id))
+                                                    .map((event) => event.eventName)
+                                                    .join(', ') || 'No events selected'}
+                                            </span>
+                                            <div className="guest-mobile-rsvp-detail">
+                                                <strong>RSVP Summary</strong>
+                                                <div>
+                                                    {guestRsvpSummary?.eventStatuses.length ? (
+                                                        guestRsvpSummary.eventStatuses.map((item) => (
+                                                            <span key={item.eventId}>
+                                                                <span>{item.eventName}</span>
+                                                                <b>{item.label}</b>
+                                                            </span>
+                                                        ))
+                                                    ) : (
+                                                        <span><span>Status</span><b>No response yet</b></span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <span>
+                                                <strong>Invitation</strong>
+                                                {isGuestMessageHistoryLoading
+                                                    ? 'Loading...'
+                                                    : firstInvitation
+                                                        ? `Sent ${new Date(firstInvitation.sentAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+                                                        : 'Not sent'}
+                                            </span>
+                                            <span>
+                                                <strong>Reminders</strong>
+                                                {isGuestMessageHistoryLoading
+                                                    ? 'Loading...'
+                                                    : reminderHistory.length
+                                                        ? `${reminderHistory.length} sent - Last ${new Date(lastReminder.sentAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+                                                        : 'None sent'}
+                                            </span>
+                                            <span>
+                                                <strong>Last Updated</strong>
+                                                {guestRsvpSummary?.lastUpdated ? new Date(guestRsvpSummary.lastUpdated).toLocaleString() : 'Not submitted'}
+                                            </span>
+                                            <div className="guest-mobile-link-detail">
+                                                <strong>Invite Link</strong>
+                                                <code>{getGuestInviteUrl(guest)}</code>
+                                                <div>
+                                                    <button type="button" onClick={() => copyGuestInviteLink(guest)}>Copy link</button>
+                                                    <button type="button" onClick={() => previewGuestInvite(guest)}>Preview</button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {primaryWhatsAppUrl ? (
+                                            <a
+                                                className="guest-mobile-whatsapp-action"
+                                                href={primaryWhatsAppUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                onClick={() => handleGuestWhatsAppOpened(guest.id, primaryMessageType)}
+                                            >
+                                                {primaryMessageType === 'invitation' ? 'Send Invite' : 'Send Reminder'}
+                                            </a>
+                                        ) : (
+                                            <button className="guest-mobile-whatsapp-action disabled" type="button" disabled>
+                                                Add a phone number to send
+                                            </button>
+                                        )}
+
+                                        {pendingMessageType && (
+                                            <div className="guest-whatsapp-confirmation">
+                                                <span>Did you send it in WhatsApp?</span>
+                                                <button
+                                                    type="button"
+                                                    disabled={guestMessageHistorySavingKey === `${guest.id}:${pendingMessageType}`}
+                                                    onClick={() => confirmGuestMessageSent(guest, pendingMessageType)}
+                                                >
+                                                    Mark as sent
+                                                </button>
+                                                <button type="button" onClick={() => setPendingGuestMessageConfirmation(null)}>
+                                                    Not yet
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        <button
+                                            className="guest-mobile-manage-toggle"
+                                            type="button"
+                                            aria-expanded={isExpanded}
+                                            onClick={() => setExpandedGuestId(isExpanded ? null : guest.id)}
+                                        >
+                                            {isExpanded ? 'Close guest details' : 'Manage guest'}
+                                        </button>
+
+                                        {isExpanded && (
+                                            <div className="guest-mobile-editor">
+                                                <label>
+                                                    <span>Guest / Family Name</span>
+                                                    <input
+                                                        className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
+                                                        value={guest.guestName}
+                                                        onChange={(event) => updateGuest(guestIndex, 'guestName', event.target.value)}
+                                                        placeholder="Guest / family"
+                                                    />
+                                                    {validation.guests[guestIndex]?.guestName && <em>{validation.guests[guestIndex]?.guestName}</em>}
+                                                </label>
+                                                <div className="guest-mobile-editor-row">
+                                                    <label>
+                                                        <span>Phone</span>
+                                                        <input
+                                                            className={validation.guests[guestIndex]?.phone ? 'cell-error' : ''}
+                                                            value={guest.phone}
+                                                            onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
+                                                            placeholder="+91..."
+                                                            inputMode="tel"
+                                                            autoComplete="tel"
+                                                            onBlur={() => normalizeGuestPhoneAtIndex(guestIndex)}
+                                                        />
+                                                        {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
+                                                    </label>
+                                                    <label>
+                                                        <span>Family Size</span>
+                                                        <input
+                                                            className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
+                                                            type="number"
+                                                            min="1"
+                                                            max={MAX_GUEST_FAMILY_SIZE}
+                                                            value={guest.invitedCount}
+                                                            onChange={(event) => updateGuestFamilySize(guestIndex, Number(event.target.value))}
+                                                        />
+                                                        {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
+                                                    </label>
+                                                </div>
+                                                <label>
+                                                    <span>Category</span>
+                                                    <input
+                                                        value={guest.category}
+                                                        onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
+                                                        placeholder="Category"
+                                                    />
+                                                </label>
+
+                                                <div className="guest-mobile-event-editor">
+                                                    <strong>Invited events</strong>
+                                                    <div className="guest-event-options compact">
+                                                        {weddingData.events.map((event) => (
+                                                            <label key={event.id} className="guest-event-count-option">
+                                                                <span className="guest-event-count-check">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={guest.invitedEventIds.includes(event.id)}
+                                                                        onChange={() => toggleGuestEvent(guestIndex, event.id)}
+                                                                    />
+                                                                    {event.eventName}
+                                                                </span>
+                                                                {guest.invitedEventIds.includes(event.id) && (
+                                                                    <span className="guest-event-scope-input">
+                                                                        <span>Invitees</span>
+                                                                        <select
+                                                                            aria-label={`${event.eventName} invitee scope`}
+                                                                            value={getGuestEventInviteScope(guest, event.id)}
+                                                                            onChange={(inputEvent) => updateGuestEventInviteScope(guestIndex, event.id, inputEvent.target.value as 'all' | 'number')}
+                                                                        >
+                                                                            <option value="all">All</option>
+                                                                            <option value="number" disabled={normalizeInvitedCount(guest.invitedCount) <= 1}>Specific number</option>
+                                                                        </select>
+                                                                        {getGuestEventInviteScope(guest, event.id) === 'number' && (
+                                                                            <input
+                                                                                aria-label={`${event.eventName} invitee count`}
+                                                                                type="number"
+                                                                                min="1"
+                                                                                max={Math.max(1, normalizeInvitedCount(guest.invitedCount) - 1)}
+                                                                                value={getGuestEventInvitedCount(guest, event.id)}
+                                                                                onChange={(inputEvent) => updateGuestEventInvitedCount(guestIndex, event.id, Number(inputEvent.target.value))}
+                                                                            />
+                                                                        )}
+                                                                    </span>
+                                                                )}
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                    {validation.guests[guestIndex]?.invitedEventIds && <em>{validation.guests[guestIndex]?.invitedEventIds}</em>}
+                                                </div>
+
+                                                <div className="guest-mobile-secondary-actions">
+                                                    <button type="button" onClick={() => copyGuestInviteLink(guest)}>Copy invite link</button>
+                                                    <button type="button" onClick={() => previewGuestInvite(guest)}>Preview invite</button>
+                                                    {firstInvitation && inviteWhatsAppUrl && (
+                                                        <a
+                                                            href={inviteWhatsAppUrl}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            onClick={() => handleGuestWhatsAppOpened(guest.id, 'invitation')}
+                                                        >
+                                                            Resend invitation
+                                                        </a>
+                                                    )}
+                                                </div>
+
+                                                {messageHistory.length > 0 && (
+                                                    <details className="guest-whatsapp-history">
+                                                        <summary>Message history ({messageHistory.length})</summary>
+                                                        <div>
+                                                            {messageHistory.map((entry) => (
+                                                                <span key={entry.id}>
+                                                                    <span>
+                                                                        <strong>{entry.messageType === 'invitation' ? 'Invitation' : 'Reminder'}</strong>
+                                                                        <time dateTime={entry.sentAt}>{new Date(entry.sentAt).toLocaleString()}</time>
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={guestMessageHistorySavingKey === entry.id}
+                                                                        onClick={() => removeGuestMessageRecord(entry)}
+                                                                    >
+                                                                        Remove
+                                                                    </button>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </details>
+                                                )}
+                                                <p className="guest-mobile-last-updated">
+                                                    Last RSVP update: {guestRsvpSummary?.lastUpdated ? new Date(guestRsvpSummary.lastUpdated).toLocaleString() : 'Not submitted'}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </article>
+                                );
+                            })}
+                            {filteredGuestRows.length === 0 && (
+                                <p className="dashboard-note">
+                                    {weddingData.rsvp.guests.length === 0
+                                        ? 'No guests yet. Add guests manually or import CSV.'
+                                        : 'No guests match the current filters.'}
+                                </p>
+                            )}
+                        </div>
+                        <div className="guest-table-wrap guest-roster-table-wrap">
                             <table className="guest-table">
                                 <thead>
                                     <tr>
@@ -3202,14 +4054,10 @@ export default function Dashboard({
                                                 onChange={toggleAllVisibleGuests}
                                             />
                                         </th>
-                                        <th>Guest / Family Name</th>
-                                        <th>Phone</th>
-                                        <th>Category</th>
+                                        <th>Guest Details</th>
                                         <th>Invited Events</th>
-                                        <th>RSVP Summary</th>
-                                        <th>Invite Link</th>
-                                        <th>WhatsApp</th>
-                                        <th>Last Updated</th>
+                                        <th>RSVP & Activity</th>
+                                        <th>Invitation Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -3228,7 +4076,7 @@ export default function Dashboard({
 
                                         return (
                                             <Fragment key={guest.id}>
-                                                <tr>
+                                                <tr className="guest-roster-row">
                                                     <td className="guest-select-column">
                                                         <input
                                                             aria-label={`Select ${guest.guestName || 'guest'}`}
@@ -3238,7 +4086,7 @@ export default function Dashboard({
                                                             onChange={() => toggleGuestSelection(guest.id)}
                                                         />
                                                     </td>
-                                                    <td>
+                                                    <td className="guest-identity-cell">
                                                         <input
                                                             className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
                                                             value={guest.guestName}
@@ -3246,6 +4094,29 @@ export default function Dashboard({
                                                             placeholder="Guest / family"
                                                         />
                                                         {validation.guests[guestIndex]?.guestName && <em>{validation.guests[guestIndex]?.guestName}</em>}
+                                                        <div className="guest-identity-grid">
+                                                            <label className="guest-compact-field">
+                                                                <span>Phone</span>
+                                                                <input
+                                                                    className={validation.guests[guestIndex]?.phone ? 'cell-error' : ''}
+                                                                    value={guest.phone}
+                                                                    onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
+                                                                    placeholder="+91..."
+                                                                    inputMode="tel"
+                                                                    autoComplete="tel"
+                                                                    onBlur={() => normalizeGuestPhoneAtIndex(guestIndex)}
+                                                                />
+                                                                {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
+                                                            </label>
+                                                            <label className="guest-compact-field">
+                                                                <span>Category</span>
+                                                                <input
+                                                                    value={guest.category}
+                                                                    onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
+                                                                    placeholder="Category"
+                                                                />
+                                                            </label>
+                                                        </div>
                                                         <label className="guest-family-size-field">
                                                             <span>Family Size</span>
                                                             <input
@@ -3259,24 +4130,7 @@ export default function Dashboard({
                                                         </label>
                                                         {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
                                                     </td>
-                                                    <td>
-                                                        <input
-                                                            className={validation.guests[guestIndex]?.phone ? 'cell-error' : ''}
-                                                            value={guest.phone}
-                                                            onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
-                                                            placeholder="+91..."
-                                                        />
-                                                        {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
-                                                    </td>
-
-                                                    <td>
-                                                        <input
-                                                            value={guest.category}
-                                                            onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
-                                                            placeholder="Category"
-                                                        />
-                                                    </td>
-                                                    <td>
+                                                    <td className="guest-events-cell">
                                                         <button
                                                             className="guest-events-toggle"
                                                             type="button"
@@ -3284,9 +4138,14 @@ export default function Dashboard({
                                                         >
                                                             {guest.invitedEventIds.length} selected
                                                         </button>
+                                                        <div className="guest-event-name-list">
+                                                            {weddingData.events
+                                                                .filter((event) => guest.invitedEventIds.includes(event.id))
+                                                                .map((event) => <span key={event.id}>{event.eventName}</span>)}
+                                                        </div>
                                                         {validation.guests[guestIndex]?.invitedEventIds && <em>{validation.guests[guestIndex]?.invitedEventIds}</em>}
                                                     </td>
-                                                    <td>
+                                                    <td className="guest-rsvp-activity-cell">
                                                         <div className="guest-rsvp-events">
                                                             {guestRsvpSummary?.eventStatuses.length ? (
                                                                 guestRsvpSummary.eventStatuses.map((item) => (
@@ -3296,15 +4155,19 @@ export default function Dashboard({
                                                                 <span>No events selected</span>
                                                             )}
                                                         </div>
+                                                        <p>
+                                                            <strong>Last updated</strong>
+                                                            {guestRsvpSummary?.lastUpdated ? new Date(guestRsvpSummary.lastUpdated).toLocaleString() : 'Not submitted'}
+                                                        </p>
                                                     </td>
-                                                    <td>
-                                                        <code>{getGuestInviteUrl(guest)}</code>
-                                                        <div className="guest-link-actions compact">
-                                                            <button type="button" onClick={() => copyGuestInviteLink(guest)}>Copy</button>
-                                                            <button type="button" onClick={() => previewGuestInvite(guest)}>Preview</button>
+                                                    <td className="guest-invitation-actions-cell">
+                                                        <div className="guest-invite-link-block">
+                                                            <code>{getGuestInviteUrl(guest)}</code>
+                                                            <div className="guest-link-actions compact">
+                                                                <button type="button" onClick={() => copyGuestInviteLink(guest)}>Copy</button>
+                                                                <button type="button" onClick={() => previewGuestInvite(guest)}>Preview</button>
+                                                            </div>
                                                         </div>
-                                                    </td>
-                                                    <td className="guest-whatsapp-cell">
                                                         {inviteWhatsAppUrl ? (
                                                             <>
                                                                 <div className="guest-whatsapp-status">
@@ -3385,11 +4248,10 @@ export default function Dashboard({
                                                             <button className="guest-missing-phone-btn" type="button" disabled>Missing phone</button>
                                                         )}
                                                     </td>
-                                                    <td>{guestRsvpSummary?.lastUpdated ? new Date(guestRsvpSummary.lastUpdated).toLocaleString() : 'Not submitted'}</td>
                                                 </tr>
                                                 {expandedGuestId === guest.id && (
                                                     <tr className="guest-events-row" key={`${guest.id}-events`}>
-                                                        <td colSpan={9}>
+                                                        <td colSpan={5}>
                                                             <div className="guest-event-options compact">
                                                                 {weddingData.events.map((event) => (
                                                                     <label key={event.id} className="guest-event-count-option">
@@ -3734,15 +4596,19 @@ export default function Dashboard({
                                     <p>Control what guests see when they submit RSVP from their personalized invite.</p>
                                 </div>
                                 <div className="dashboard-check-stack">
-                                    <CheckboxField
-                                        label="Ask Attending Count"
+                                    <ToggleField
+                                        label="Attending count question"
                                         checked={weddingData.rsvp.attendingCountEnabled}
+                                        onLabel="Enabled"
+                                        offLabel="Disabled"
                                         helperText="When guests select Yes, ask how many invitees will attend. The number is capped by their event invitee limit."
                                         onChange={(checked) => updateRsvp('attendingCountEnabled', checked)}
                                     />
-                                    <CheckboxField
-                                        label="Show Meal Preference"
+                                    <ToggleField
+                                        label="Meal preference question"
                                         checked={weddingData.rsvp.mealPreferenceEnabled}
+                                        onLabel="Enabled"
+                                        offLabel="Disabled"
                                         helperText="When hidden, guests can RSVP without selecting Veg, Non-Veg, or Jain."
                                         onChange={(checked) => updateRsvp('mealPreferenceEnabled', checked)}
                                     />
@@ -3876,14 +4742,13 @@ export default function Dashboard({
                         <div className="closing-gallery-layout">
                             <div className="closing-gallery-editor-groups">
                                 <section className="closing-gallery-group">
-                                    <label className="dashboard-check">
-                                        <input
-                                            type="checkbox"
-                                            checked={weddingData.closing.includePhotos}
-                                            onChange={(event) => updateClosing('includePhotos', event.target.checked)}
-                                        />
-                                        Include Couple Photos
-                                    </label>
+                                    <ToggleField
+                                        label="Couple photos"
+                                        checked={weddingData.closing.includePhotos}
+                                        onLabel="Included"
+                                        offLabel="Hidden"
+                                        onChange={(checked) => updateClosing('includePhotos', checked)}
+                                    />
                                     <div className="form-grid">
                                         <TextField label="Closing Line" value={weddingData.closing.closingLine} multiline rows={2} onChange={(value) => updateClosing('closingLine', value)} />
                                         <TextField label="Couple Display Name" value={weddingData.closing.coupleDisplayName} multiline rows={2} onChange={(value) => updateClosing('coupleDisplayName', value)} />
@@ -4462,6 +5327,107 @@ function InfoBlock({ label, value }: { label: string; value: string }) {
     );
 }
 
+function WebsiteActivationIcon({
+    state,
+    size = 20,
+}: {
+    state: WebsiteActivationState;
+    size?: number;
+}) {
+    if (state === 'live') return <CheckCircle2 size={size} strokeWidth={2} aria-hidden="true" />;
+    if (state === 'verification-pending' || state === 'publishing-pending') {
+        return <Clock3 size={size} strokeWidth={2} aria-hidden="true" />;
+    }
+    return <CircleAlert size={size} strokeWidth={2} aria-hidden="true" />;
+}
+
+function WebsiteActivationBanner({
+    state,
+    websiteUrl,
+    onCopy,
+    onPreview,
+}: {
+    state: WebsiteActivationState;
+    websiteUrl: string;
+    onCopy: () => void;
+    onPreview: () => void;
+}) {
+    const content: Record<WebsiteActivationState, { title: string; message: string }> = {
+        unpaid: {
+            title: 'Your website is not live yet',
+            message: 'Complete payment and request verification to activate your public wedding invitation.',
+        },
+        'verification-pending': {
+            title: 'Payment verification is in progress',
+            message: 'Your website remains private while the Shaadi Nyota team reviews your payment.',
+        },
+        'publishing-pending': {
+            title: 'Payment verified. Publishing is pending',
+            message: 'Your website is ready for final review and remains private until it is published.',
+        },
+        live: {
+            title: 'Your wedding website is live',
+            message: 'Guests can now open and share your public wedding invitation.',
+        },
+        suspended: {
+            title: 'Your website is temporarily unavailable',
+            message: 'The public invitation is currently unavailable. Contact Shaadi Nyota for assistance.',
+        },
+    };
+    const current = content[state];
+    const paymentComplete = state === 'publishing-pending' || state === 'live' || state === 'suspended';
+    const verificationComplete = state === 'publishing-pending' || state === 'live' || state === 'suspended';
+
+    return (
+        <section className={`website-activation-banner status-${state}`} aria-live="polite">
+            <div className="website-activation-summary">
+                <span className="website-activation-icon">
+                    <WebsiteActivationIcon state={state} size={22} />
+                </span>
+                <div>
+                    <span className="website-activation-kicker">Website activation</span>
+                    <h3>{current.title}</h3>
+                    <p>{current.message}</p>
+                </div>
+            </div>
+
+            <ol className="website-activation-steps" aria-label="Website activation progress">
+                <li className="complete"><span>1</span>Build website</li>
+                <li className={paymentComplete ? 'complete' : state === 'unpaid' ? 'current' : 'complete'}><span>2</span>Complete payment</li>
+                <li className={verificationComplete ? 'complete' : state === 'verification-pending' ? 'current' : ''}><span>3</span>Verification</li>
+                <li className={state === 'live' ? 'complete current' : state === 'publishing-pending' ? 'current' : ''}><span>4</span>Website live</li>
+            </ol>
+
+            <div className="website-activation-actions">
+                {state === 'live' ? (
+                    <>
+                        <a className="dashboard-primary-btn" href={websiteUrl} target="_blank" rel="noreferrer">
+                            <ExternalLink size={16} aria-hidden="true" />
+                            Open website
+                        </a>
+                        <button className="dashboard-primary-btn secondary" type="button" onClick={onCopy}>
+                            <Copy size={16} aria-hidden="true" />
+                            Copy link
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <button className="dashboard-primary-btn" type="button" onClick={onPreview}>
+                            <Eye size={16} aria-hidden="true" />
+                            Preview website
+                        </button>
+                        {state === 'unpaid' && (
+                            <a className="dashboard-primary-btn secondary" href="#manual-payment-details">
+                                View payment details
+                            </a>
+                        )}
+                    </>
+                )}
+            </div>
+        </section>
+    );
+}
+
 function ManualPaymentCard({
     packageType,
     paymentStatus,
@@ -4479,7 +5445,7 @@ function ManualPaymentCard({
     const manualPaymentWhatsAppUrl = buildManualPaymentWhatsAppUrl(whatsAppContext);
 
     return (
-        <section className={`manual-payment-card ${paymentStatus}`}>
+        <section className={`manual-payment-card ${paymentStatus}`} id="manual-payment-details">
             <div className="manual-payment-header">
                 <div>
                     <span className="manual-payment-eyebrow">Manual payment</span>
@@ -4531,7 +5497,7 @@ function RsvpUpgradeCard({ whatsAppContext }: { whatsAppContext: PaymentWhatsApp
     return (
         <section className="dashboard-upgrade-card">
             <p className="dashboard-eyebrow">Upgrade</p>
-            <h3>Unlock RSVP Management</h3>
+            <h3>Upgrade to Pro</h3>
             <p>
                 Manage guests, event-wise invitations, RSVP responses, and meal preferences.
             </p>
@@ -4558,9 +5524,9 @@ function RsvpPlanLockedPanel({
             <div>
                 <p className="dashboard-eyebrow">Plan Locked</p>
                 <h2>{title}</h2>
-                <p>RSVP Management is not included in your current plan.</p>
+                <p>RSVP management is included in the Pro plan.</p>
                 <p>
-                    Upgrade to Basic Website + RSVP Management to manage guest lists, event-wise invites,
+                    Upgrade to Pro to manage guest lists, event-wise invites,
                     RSVP responses, and meal preferences.
                 </p>
             </div>
@@ -4571,24 +5537,37 @@ function RsvpPlanLockedPanel({
 
 function WebsiteUrlCard({
     url,
+    isLive,
     onCopy,
+    onPreview,
 }: {
     url: string;
+    isLive: boolean;
     onCopy: () => void;
+    onPreview: () => void;
 }) {
     return (
         <section className="website-url-card">
             <div>
-                <p className="dashboard-eyebrow">Website URL</p>
-                <a href={url} target="_blank" rel="noreferrer">{url}</a>
+                <p className="dashboard-eyebrow">{isLive ? 'Live website URL' : 'Reserved website URL'}</p>
+                {isLive
+                    ? <a href={url} target="_blank" rel="noreferrer">{url}</a>
+                    : <span className="website-url-value">{url}</span>}
+                {!isLive && <small>Your public link is reserved but remains private until activation.</small>}
             </div>
             <div className="website-url-actions">
                 <button className="dashboard-primary-btn secondary" type="button" onClick={onCopy}>
                     Copy URL
                 </button>
-                <a className="dashboard-primary-btn" href={url} target="_blank" rel="noreferrer">
-                    Open Website
-                </a>
+                {isLive ? (
+                    <a className="dashboard-primary-btn" href={url} target="_blank" rel="noreferrer">
+                        Open Website
+                    </a>
+                ) : (
+                    <button className="dashboard-primary-btn" type="button" onClick={onPreview}>
+                        Preview Website
+                    </button>
+                )}
             </div>
         </section>
     );
@@ -4690,6 +5669,16 @@ function EventVisualPicker({
         venueName: event.venueName || 'Venue name',
         city: event.city || 'City',
     };
+    const previewGuest: WeddingGuest = {
+        id: 'event-editor-preview-guest',
+        guestName: 'Preview Guest',
+        phone: '',
+        invitedCount: 1,
+        category: 'Preview',
+        inviteCode: 'preview',
+        invitedEventIds: [previewEvent.id],
+        invitedEventCounts: { [previewEvent.id]: 1 },
+    };
 
     useEffect(() => {
         setCategoryFilter('all');
@@ -4704,6 +5693,7 @@ function EventVisualPicker({
                     <div className="event-live-preview-surface phone-canvas">
                         <Theme1EventPreviewSection
                             event={previewEvent}
+                            guest={previewGuest}
                             showParticles={false}
                         />
                     </div>
@@ -4898,6 +5888,110 @@ function ReadOnlyBadgeCard({
     );
 }
 
+function GuestCsvValidationPanel({
+    analysis,
+    mode,
+    currentGuestCount,
+    onDownloadIssues,
+}: {
+    analysis: GuestCsvAnalysis;
+    mode: CsvImportMode;
+    currentGuestCount: number;
+    onDownloadIssues: () => void;
+}) {
+    const errors = analysis.issues.filter((issue) => issue.level === 'error');
+    const warnings = analysis.issues.filter((issue) => issue.level === 'warning');
+    const hasErrors = errors.length > 0;
+    const renderIssueList = (issues: GuestCsvIssue[]) => (
+        <>
+            <ul>
+                {issues.slice(0, 25).map((issue, index) => (
+                    <li key={`${issue.level}-${issue.row ?? 'file'}-${issue.column ?? 'general'}-${index}`}>
+                        <span>{formatGuestCsvIssue(issue)}</span>
+                        {issue.value && <code>{issue.value.slice(0, 100)}</code>}
+                    </li>
+                ))}
+            </ul>
+            {issues.length > 25 && (
+                <p>{(issues.length - 25).toLocaleString()} additional issue{issues.length - 25 === 1 ? '' : 's'} are included in the downloadable report.</p>
+            )}
+        </>
+    );
+
+    return (
+        <section className={`csv-validation-panel${hasErrors ? ' has-errors' : ' is-ready'}`} aria-live="polite">
+            <div className="csv-validation-header">
+                <div>
+                    <span>{hasErrors ? 'Needs attention' : 'Ready to import'}</span>
+                    <strong>
+                        {hasErrors
+                            ? `${errors.length.toLocaleString()} blocking error${errors.length === 1 ? '' : 's'} found`
+                            : `${analysis.validRows.toLocaleString()} guest row${analysis.validRows === 1 ? '' : 's'} validated`}
+                    </strong>
+                </div>
+                {analysis.issues.length > 0 && (
+                    <button className="dashboard-primary-btn secondary" type="button" onClick={onDownloadIssues}>
+                        Download issue report
+                    </button>
+                )}
+            </div>
+
+            <div className="csv-validation-metrics">
+                <span><strong>{analysis.totalRows.toLocaleString()}</strong>Rows checked</span>
+                <span><strong>{analysis.validRows.toLocaleString()}</strong>Valid rows</span>
+                <span><strong>{analysis.phoneNormalizations.length.toLocaleString()}</strong>Phones normalized</span>
+                <span><strong>{errors.length.toLocaleString()}</strong>Errors</span>
+                <span><strong>{warnings.length.toLocaleString()}</strong>Warnings</span>
+                <span><strong>{analysis.resultingGuestEntries.toLocaleString()}</strong>Resulting guests</span>
+                <span><strong>{analysis.resultingPeople.toLocaleString()}</strong>Resulting people</span>
+            </div>
+
+            {analysis.phoneNormalizations.length > 0 && (
+                <details className="csv-issue-group csv-phone-normalizations">
+                    <summary>Phone formatting changes ({analysis.phoneNormalizations.length.toLocaleString()})</summary>
+                    <ul>
+                        {analysis.phoneNormalizations.slice(0, 10).map((item) => (
+                            <li key={`phone-normalization-${item.row}`}>
+                                <span>Row {item.row}: {item.input}</span>
+                                <code>{item.canonical}</code>
+                            </li>
+                        ))}
+                    </ul>
+                    {analysis.phoneNormalizations.length > 10 && (
+                        <p>{(analysis.phoneNormalizations.length - 10).toLocaleString()} additional phone number{analysis.phoneNormalizations.length - 10 === 1 ? '' : 's'} will also be normalized.</p>
+                    )}
+                </details>
+            )}
+
+            {mode === 'replace' && !hasErrors && (
+                <div className="csv-replace-notice">
+                    <strong>Replace mode changes the complete guest list.</strong>
+                    <p>
+                        {analysis.preservedGuests.toLocaleString()} of {currentGuestCount.toLocaleString()} existing personalized link{currentGuestCount === 1 ? '' : 's'} matched safely.
+                        {' '}Guests missing from this file will be deleted with their event assignments and RSVP responses after confirmation.
+                    </p>
+                </div>
+            )}
+
+            {errors.length > 0 && (
+                <details className="csv-issue-group" open>
+                    <summary>Blocking errors ({errors.length.toLocaleString()})</summary>
+                    {renderIssueList(errors)}
+                </details>
+            )}
+            {warnings.length > 0 && (
+                <details className="csv-issue-group csv-issue-warnings" open={!hasErrors}>
+                    <summary>Warnings ({warnings.length.toLocaleString()})</summary>
+                    {renderIssueList(warnings)}
+                </details>
+            )}
+            {!hasErrors && warnings.length === 0 && (
+                <p className="csv-validation-clear">No data problems were found. The import will still be applied through the transactional save.</p>
+            )}
+        </section>
+    );
+}
+
 function TextField({
     label,
     value,
@@ -4926,28 +6020,44 @@ function TextField({
     );
 }
 
-function CheckboxField({
+function ToggleField({
     label,
     checked,
     helperText,
+    onLabel = 'On',
+    offLabel = 'Off',
     onChange,
 }: {
     label: string;
     checked: boolean;
     helperText?: string;
+    onLabel?: string;
+    offLabel?: string;
     onChange: (checked: boolean) => void;
 }) {
+    const stateLabel = checked ? onLabel : offLabel;
+
     return (
-        <label className="dashboard-field dashboard-checkbox-field">
-            <span>
-                <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(event) => onChange(event.target.checked)}
-                />
-                {label}
+        <label className={`dashboard-toggle-field${checked ? ' is-enabled' : ''}`}>
+            <span className="dashboard-toggle-copy">
+                <strong>{label}</strong>
+                {helperText && <small>{helperText}</small>}
             </span>
-            {helperText && <em>{helperText}</em>}
+            <span className="dashboard-toggle-control">
+                <span className="dashboard-toggle-status" aria-hidden="true">{stateLabel}</span>
+                <span className="dashboard-toggle-switch">
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        aria-label={`${label}: ${stateLabel}`}
+                        checked={checked}
+                        onChange={(event) => onChange(event.target.checked)}
+                    />
+                    <span className="dashboard-toggle-track" aria-hidden="true">
+                        <span className="dashboard-toggle-thumb" />
+                    </span>
+                </span>
+            </span>
         </label>
     );
 }

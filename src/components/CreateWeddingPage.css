@@ -83,7 +83,46 @@
     color: #666666;
 }
 
+.create-wedding-address-field {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.create-wedding-address-field > span {
+    flex: 0 0 auto;
+    padding: 0 0 0 12px;
+    color: #777069;
+    font-size: 0.9rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.create-wedding-address-field input {
+    min-width: 0;
+    border: 0;
+    border-radius: 0;
+    padding-left: 3px;
+    outline: none;
+}
+
+.create-wedding-address-field:focus-within {
+    border-color: #7a1f1f;
+    box-shadow: 0 0 0 3px rgba(122, 31, 31, 0.1);
+}
+
+.create-wedding-field-help {
+    color: #777069;
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
 .package-selection {
+
     display: grid;
     gap: 10px;
 }
@@ -107,10 +146,6 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
-}
-
-.theme-options {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .package-option {
@@ -185,5 +220,18 @@
     .create-wedding-grid,
     .package-options {
         grid-template-columns: 1fr;
+    }
+
+    .create-wedding-address-field {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .create-wedding-address-field > span {
+        padding: 9px 12px 0;
+    }
+
+    .create-wedding-address-field input {
+        padding: 5px 12px 11px;
     }
 }

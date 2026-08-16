@@ -22,8 +22,10 @@ import {
 } from '../data/whatsappInviteMessages';
 import { normalizeEventAnimationKey } from '../data/eventAnimations';
 import { supabase } from './supabaseClient';
+import { normalizeGuestPhone } from './guestPhone';
 
 export type WebsiteStatus = 'draft' | 'published' | 'suspended';
+export type PublicWeddingRouteStatus = 'live' | 'not_live' | 'not_found' | 'unknown';
 
 export interface SupabaseWeddingRow {
   id: string;
@@ -376,7 +378,7 @@ const mapGuestRows = (
   return {
     id: guest.id,
     guestName: guest.guest_name,
-    phone: guest.phone ?? '',
+    phone: normalizeGuestPhone(guest.phone ?? '') || guest.phone || '',
     invitedCount: normalizeInvitedCount(guest.invited_count),
     category: guest.category ?? '',
     inviteCode: guest.invite_code,
@@ -527,6 +529,32 @@ export async function loadSupabaseWeddingBundle(
   };
 }
 
+
+export async function getSupabasePublicWeddingRouteStatus(slug: string) {
+  if (!supabase) {
+    return { status: 'unknown' as PublicWeddingRouteStatus, error: '', migrationRequired: false };
+  }
+
+  const { data, error } = await supabase.rpc('get_public_wedding_route_status', {
+    wedding_slug: slug,
+  });
+
+  if (error) {
+    const normalizedError = error.message.toLowerCase();
+    const migrationRequired = normalizedError.includes('get_public_wedding_route_status')
+      && (normalizedError.includes('schema cache') || normalizedError.includes('could not find'));
+    return {
+      status: 'unknown' as PublicWeddingRouteStatus,
+      error: migrationRequired ? '' : error.message,
+      migrationRequired,
+    };
+  }
+
+  const status = data === 'live' || data === 'not_live' || data === 'not_found'
+    ? data
+    : 'unknown';
+  return { status: status as PublicWeddingRouteStatus, error: '', migrationRequired: false };
+}
 export async function loadSupabaseWeddingBySlug(slug: string, options: { includeGuests?: boolean } = {}) {
   if (!supabase) return { wedding: null, weddingId: '', error: 'Supabase is not configured.' };
 
@@ -871,7 +899,7 @@ const guestToRow = (weddingId: string, guest: WeddingGuest) => ({
   id: guest.id,
   wedding_id: weddingId,
   guest_name: guest.guestName.trim() || 'Unnamed Guest',
-  phone: guest.phone,
+  phone: normalizeGuestPhone(guest.phone) || guest.phone.trim() || null,
   invited_count: normalizeInvitedCount(guest.invitedCount),
   category: guest.category,
   invite_code: guest.inviteCode,
@@ -904,7 +932,7 @@ const eventToTransactionalRow = (event: WeddingEvent, sortOrder: number, useLega
 const guestToTransactionalRow = (guest: WeddingGuest) => ({
   id: guest.id,
   guest_name: guest.guestName.trim() || 'Unnamed Guest',
-  phone: guest.phone,
+  phone: normalizeGuestPhone(guest.phone) || guest.phone.trim() || null,
   invited_count: normalizeInvitedCount(guest.invitedCount),
   category: guest.category,
   invite_code: guest.inviteCode,
@@ -999,6 +1027,9 @@ const transactionalSaveError = (message?: string | null) => {
   }
   if (normalized.includes('does not belong') || normalized.includes('do not match') || normalized.includes('access denied')) {
     return 'Some saved selections no longer belong to this wedding. Refresh the page and try again.';
+  }
+  if (normalized.includes('guest phone') || normalized.includes('phone number')) {
+    return 'One or more guest phone numbers are invalid. Use a valid mobile number and include the country code for non-Indian numbers.';
   }
   if (normalized.includes('requires') || normalized.includes('must be') || normalized.includes('invalid')) {
     return message || 'Some submitted data is invalid. Please review it and try again.';

@@ -17,7 +17,7 @@ Use Supabase as the MVP backend because it gives the product Auth, Postgres, row
 For MVP:
 
 - Keep internal package values as `basic`, `rsvp`, and `whatsapp`.
-- Keep user-facing labels aligned to active packages: Basic Website and Basic Website + RSVP Management.
+- Keep user-facing labels aligned to active packages: Basic and Pro.
 - Use `payment_status = 'unpaid' | 'manual_pending' | 'ref_pending' | 'paid'`; `manual_pending` is displayed as Verification Requested.
 - Keep website status separate from payment status.
 - Keep date/time labels for current invite display.

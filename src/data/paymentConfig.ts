@@ -16,7 +16,7 @@ export type PackageDetail = {
 
 export const packageDetails: Record<PackageType, PackageDetail> = {
   basic: {
-    priceLabel: '₹3,000',
+    priceLabel: '₹1,000',
     summary: 'Wedding website with template-based design, editable sections, and a public shareable invite link.',
     features: [
       'Wedding website',
@@ -34,7 +34,7 @@ export const packageDetails: Record<PackageType, PackageDetail> = {
     priceLabel: '₹5,000',
     summary: 'Wedding website plus RSVP management, guest lists, personalized links, and response tracking.',
     features: [
-      'Everything in Basic Website',
+      'Everything in Basic',
       'RSVP form',
       'Guest list management',
       'Personalized invite links',
@@ -47,7 +47,7 @@ export const packageDetails: Record<PackageType, PackageDetail> = {
     priceLabel: '₹5,000',
     summary: 'Wedding website plus RSVP management, guest lists, personalized links, and response tracking.',
     features: [
-      'Everything in Basic Website',
+      'Everything in Basic',
       'RSVP form',
       'Guest list management',
       'Personalized invite links',
@@ -108,7 +108,7 @@ const formatContextLine = (label: string, value?: string | null) => {
 
 const buildWeddingContextLines = (context: PaymentWhatsAppContext = {}) => ([
   formatContextLine('Email', context.email),
-  formatContextLine('Website slug', context.slug),
+  formatContextLine('Website address', context.slug),
   formatContextLine('Website URL', context.websiteUrl),
   formatContextLine('Couple display name', context.coupleDisplayName),
   formatContextLine('Bride name', context.brideName),
@@ -126,7 +126,7 @@ export const buildManualPaymentWhatsAppUrl = (context?: PaymentWhatsAppContext) 
 
 export const buildRsvpUpgradeWhatsAppUrl = (context?: PaymentWhatsAppContext) => buildPaymentWhatsAppUrl(
   [
-    'Hi Shaadi Nyota team, I want to upgrade my wedding website to Basic Website + RSVP Management.',
+    'Hi Shaadi Nyota team, I want to upgrade my wedding website to the Pro plan.',
     '',
     ...buildWeddingContextLines(context),
   ].join('\n')

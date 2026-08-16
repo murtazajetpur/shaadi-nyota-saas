@@ -303,6 +303,95 @@ create table if not exists public.guests (
   unique (wedding_id, invite_code)
 );
 
+
+create or replace function public.normalize_guest_phone_e164(input_phone text)
+returns text
+language plpgsql
+immutable
+set search_path = public, pg_temp
+as $$
+declare
+  cleaned text := btrim(coalesce(input_phone, ''));
+  digits text;
+  canonical text;
+begin
+  -- Spreadsheet-safe CSV exports may prefix a plus value with an apostrophe.
+  cleaned := regexp_replace(cleaned, '^''+\s*', '');
+  digits := regexp_replace(cleaned, '[^0-9]', '', 'g');
+
+  if digits = '' then
+    return null;
+  end if;
+
+  if cleaned ~ '^\s*00' then
+    canonical := '+' || substring(digits from 3);
+  elsif cleaned ~ '^\s*\+' then
+    canonical := '+' || digits;
+  elsif length(digits) = 10 and digits ~ '^[6-9][0-9]{9}$' then
+    canonical := '+91' || digits;
+  elsif length(digits) = 11 and digits ~ '^0[6-9][0-9]{9}$' then
+    canonical := '+91' || substring(digits from 2);
+  else
+    canonical := '+' || digits;
+  end if;
+
+  if canonical !~ '^\+[1-9][0-9]{7,14}$' then
+    raise exception 'Guest phone number is invalid. Use E.164 format or a 10-digit Indian mobile number.';
+  end if;
+
+  if canonical like '+91%' and canonical !~ '^\+91[6-9][0-9]{9}$' then
+    raise exception 'Guest phone number is invalid. Indian mobile numbers must start with 6, 7, 8, or 9.';
+  end if;
+
+  if regexp_replace(canonical, '[^0-9]', '', 'g') ~ '^([0-9])\1+$' then
+    raise exception 'Guest phone number is invalid.';
+  end if;
+
+  return canonical;
+end;
+$$;
+
+create or replace function public.validate_and_normalize_guest_phone()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  normalized_phone text;
+begin
+  normalized_phone := public.normalize_guest_phone_e164(new.phone);
+
+  if normalized_phone is null then
+    -- Preserve legacy rows that already have no phone, but do not allow new missing
+    -- phones or removal of a previously saved phone number.
+    if tg_op = 'INSERT' then
+      raise exception 'Guest phone number is required.';
+    end if;
+    if btrim(coalesce(old.phone, '')) <> '' then
+      raise exception 'Guest phone number is required.';
+    end if;
+    return new;
+  end if;
+
+  new.phone := normalized_phone;
+  return new;
+end;
+$$;
+
+drop trigger if exists guests_validate_phone on public.guests;
+create trigger guests_validate_phone
+before insert or update of phone on public.guests
+for each row execute function public.validate_and_normalize_guest_phone();
+
+comment on function public.normalize_guest_phone_e164(text) is
+  'Normalizes guest phone input to E.164-compatible text. Ten-digit local values default to India.';
+comment on function public.validate_and_normalize_guest_phone() is
+  'Validates and canonicalizes guests.phone for every write path.';
+
+revoke all on function public.normalize_guest_phone_e164(text) from public;
+revoke all on function public.validate_and_normalize_guest_phone() from public;
+grant execute on function public.normalize_guest_phone_e164(text) to authenticated;
+
 comment on table public.guests is 'Guest/family records and personalized invite codes.';
 comment on column public.guests.meal_preference is 'Stored once per guest/family, not per event.';
 
@@ -463,6 +552,33 @@ begin
   return jsonb_build_object('success', true, 'payment_status', 'manual_pending');
 end;
 $$;
+
+create or replace function public.get_public_wedding_route_status(wedding_slug text)
+returns text
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select case
+    when not exists (
+      select 1
+      from public.weddings as wedding
+      where wedding.slug = btrim(coalesce(wedding_slug, ''))
+    ) then 'not_found'
+    when exists (
+      select 1
+      from public.weddings as wedding
+      where wedding.slug = btrim(coalesce(wedding_slug, ''))
+        and wedding.status = 'published'
+        and wedding.payment_status = 'paid'
+    ) then 'live'
+    else 'not_live'
+  end;
+$$;
+
+comment on function public.get_public_wedding_route_status(text) is
+  'Returns live, not_live, or not_found for guest-facing route messaging without exposing wedding metadata.';
 
 create or replace function public.get_public_invite_by_code(wedding_slug text, invite_code text)
 returns jsonb

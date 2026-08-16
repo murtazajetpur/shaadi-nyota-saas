@@ -51,7 +51,7 @@ const builderItems = [
 
 const faqItems = [
   ['Can guests RSVP per event?', 'Yes. Each guest can see only the events they are invited to and respond event by event.'],
-  ['Can invites be sent on WhatsApp?', 'Yes. The RSVP plan is built around WhatsApp sharing, reminders, and personalized invite links.'],
+  ['Can invites be sent on WhatsApp?', 'Yes. The Pro plan is built around WhatsApp sharing, reminders, and personalized invite links.'],
   ['Can I edit after publishing?', 'Yes. You can update sections from the dashboard and preview before sharing again.'],
   ['Can different guests see different functions?', 'Yes. Family, friends, and office guests can each receive the right event list.'],
 ];
@@ -237,16 +237,16 @@ function PricingMarketingSection() {
       </div>
       <div className="marketing-plan-list">
         <article>
-          <p>Basic Website</p>
-          <strong>Rs. 1,000</strong>
+          <p>Basic</p>
+          <strong>₹1,000</strong>
           <small>Opening reveal, story, event details, closing section, and a shareable wedding website link.</small>
-          <a href="/create-wedding?plan=basic">Start basic</a>
+          <a href="/create-wedding?plan=basic">Choose Basic</a>
         </article>
         <article className="featured">
-          <p>Website + RSVP + WhatsApp</p>
-          <strong>Rs. 5,000</strong>
+          <p>Pro</p>
+          <strong>₹5,000</strong>
           <small>Everything in Basic, plus guests, personalized links, WhatsApp invites, RSVP tracking, and reminders.</small>
-          <a href="/create-wedding?plan=rsvp">Start with RSVP</a>
+          <a href="/create-wedding?plan=rsvp">Choose Pro</a>
         </article>
       </div>
     </section>

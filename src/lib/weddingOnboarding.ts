@@ -104,7 +104,7 @@ const getTemplateCreationDefaults = (templateKey: string) => {
 };
 
 export const createSlugFromNames = (brideName: string, groomName: string) => {
-  return [groomName, brideName]
+  return [brideName, groomName]
     .join(' ')
     .toLowerCase()
     .normalize('NFKD')
@@ -193,7 +193,7 @@ export const updateWeddingShell = async (input: UpdateWeddingShellInput) => {
 
     return {
       error: error.code === '23505'
-        ? 'This slug is already taken. Please choose another.'
+        ? 'This website address is already in use. Please choose a different address.'
         : error.message,
     };
   }
@@ -256,7 +256,7 @@ export const createWeddingShell = async (input: CreateWeddingInput) => {
     return {
       wedding: null,
       error: weddingError?.code === '23505'
-        ? 'This slug is already taken. Please choose another.'
+        ? 'This website address is already in use. Please choose a different address.'
         : weddingError?.message ?? 'Unable to create wedding.',
     };
   }

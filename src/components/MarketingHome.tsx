@@ -163,9 +163,9 @@ const features = [
 const faqs = [
   ['Can I customize sections?', 'Yes. You can edit opening reveal, story, events, music, closing content, and visuals from the dashboard.'],
   ['Can I choose different opening styles?', 'Yes. Start with Classic Envelope, Scroll Opening, or Palace Door Opening, then customize the rest of the invite.'],
-  ['Can guests RSVP online?', 'Yes. RSVP is included in the RSVP Management plan with event-wise responses, guest list management, and dashboard tracking.'],
-  ['Can I invite different guests to different events?', 'Yes. With the RSVP Management plan, each guest or family can be invited to the exact events you choose.'],
-  ['Can I manage guests from the dashboard?', 'Yes. The RSVP Management plan includes guest list management, personalized links, RSVP summaries, and export-ready data.'],
+  ['Can guests RSVP online?', 'Yes. RSVP is included in the Pro plan with event-wise responses, guest list management, and dashboard tracking.'],
+  ['Can I invite different guests to different events?', 'Yes. With the Pro plan, each guest or family can be invited to the exact events you choose.'],
+  ['Can I manage guests from the dashboard?', 'Yes. The Pro plan includes guest list management, personalized links, RSVP summaries, and export-ready data.'],
   ['Can I see a preview before paying?', 'Yes. You can build and review your wedding website before requesting payment verification.'],
   ['Can I use my own photos or visuals?', 'Yes. You can choose from presets and use supported upload flows where available in the builder.'],
   ['Can I update details later?', 'Yes. You can update event details and content from the dashboard, then save the latest version.'],
@@ -613,7 +613,7 @@ export default function MarketingHome() {
           {[
             ['Choose your starting style', 'Start with a cinematic opening that matches the mood of your celebration.'],
             ['Customize each section', 'Edit story visuals, functions, timings, venues, music, and closing content.'],
-            ['Share guest-wise links', 'Send one public link or personalized links for RSVP plans.'],
+            ['Share guest-wise links', 'Send one public link or personalized links with the Pro plan.'],
             ['Track RSVPs and responses', 'Review attendance, event visibility, and response status.'],
           ].map(([title, copy], index) => (
             <article className="step-card" key={title}>
@@ -632,8 +632,8 @@ export default function MarketingHome() {
         </div>
         <div className="pricing-grid">
           <article className="pricing-card">
-            <p>Basic Website</p>
-            <h3>Basic Website</h3>
+            <p>Wedding website</p>
+            <h3>Basic</h3>
             <strong>{packageDetails.basic.priceLabel}</strong>
             <ul>
               <li>Cinematic wedding website</li>
@@ -644,21 +644,21 @@ export default function MarketingHome() {
               <li>Mobile-first guest experience</li>
               <li>Manual payment verification</li>
             </ul>
-            <a className="marketing-btn secondary" href="/create-wedding?plan=basic">Start with Basic Website</a>
+            <a className="marketing-btn secondary" href="/create-wedding?plan=basic">Choose Basic</a>
           </article>
           <article className="pricing-card featured">
-            <p>Website + RSVP Management</p>
-            <h3>Basic Website + RSVP Management</h3>
+            <p>Website + RSVP management</p>
+            <h3>Pro</h3>
             <strong>{packageDetails.rsvp.priceLabel}</strong>
             <ul>
-              <li>Everything in Basic Website</li>
+              <li>Everything in Basic</li>
               <li>Guest list management</li>
               <li>Personalized invite links</li>
               <li>Event-wise guest visibility</li>
               <li>RSVP dashboard</li>
               <li>RSVP response tracking</li>
             </ul>
-            <a className="marketing-btn primary" href="/create-wedding?plan=rsvp">Start with RSVP Management</a>
+            <a className="marketing-btn primary" href="/create-wedding?plan=rsvp">Choose Pro</a>
           </article>
         </div>
         <p className="pricing-note">

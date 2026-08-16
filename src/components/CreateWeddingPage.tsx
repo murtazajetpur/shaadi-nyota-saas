@@ -6,7 +6,6 @@ import {
   type PackageType,
 } from '../data/sampleWeddingData';
 import { activePackageOptions } from '../data/paymentConfig';
-import { normalizeTemplateKey, templatePresets, type TemplateKey } from '../data/templatePresets';
 import {
   createSlugFromNames,
   createWeddingShell,
@@ -14,12 +13,9 @@ import {
   getOwnedWeddingForUser,
 } from '../lib/weddingOnboarding';
 
-const templateOptions: TemplateKey[] = ['envelope-opening', 'scroll-opening', 'palace-door-opening'];
-
 export default function CreateWeddingPage() {
   const { user, loading, isConfigured } = useAuth();
   const searchParams = new URLSearchParams(window.location.search);
-  const initialThemeKey = normalizeTemplateKey(searchParams.get('theme') ?? undefined);
   const initialPackageType: PackageType = searchParams.get('plan') === 'rsvp' ? 'rsvp' : 'basic';
   const [brideName, setBrideName] = useState('');
   const [groomName, setGroomName] = useState('');
@@ -27,17 +23,14 @@ export default function CreateWeddingPage() {
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
   const [displayNameEdited, setDisplayNameEdited] = useState(false);
-  const [themeKey, setThemeKey] = useState<string>(initialThemeKey || defaultThemeKey);
   const [packageType, setPackageType] = useState<PackageType>(initialPackageType);
-  const [pageTitle, setPageTitle] = useState('');
-  const [pageTitleEdited, setPageTitleEdited] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingWedding, setIsCheckingWedding] = useState(true);
   const [error, setError] = useState('');
 
   const suggestedDisplayName = useMemo(() => {
     if (!brideName.trim() && !groomName.trim()) return '';
-    return [groomName.trim(), brideName.trim()].filter(Boolean).join(' & ');
+    return [brideName.trim(), groomName.trim()].filter(Boolean).join(' & ');
   }, [brideName, groomName]);
 
   useEffect(() => {
@@ -82,12 +75,6 @@ export default function CreateWeddingPage() {
     }
   }, [brideName, groomName, slugEdited]);
 
-  useEffect(() => {
-    if (!pageTitleEdited) {
-      setPageTitle(suggestedDisplayName ? `${suggestedDisplayName} | Shaadi Nyota` : '');
-    }
-  }, [pageTitleEdited, suggestedDisplayName]);
-
   const handleSlugChange = (value: string) => {
     setSlugEdited(true);
     setSlug(createSlugFromNames(value, ''));
@@ -114,7 +101,7 @@ export default function CreateWeddingPage() {
       return;
     }
     if (!slug.trim()) {
-      setError('Slug is required.');
+      setError('Website address is required.');
       return;
     }
     if (!packageType) {
@@ -130,8 +117,8 @@ export default function CreateWeddingPage() {
       displayName: displayName.trim() || suggestedDisplayName,
       slug: slug.trim(),
       packageType,
-      themeKey: themeKey.trim() || defaultThemeKey,
-      pageTitle: pageTitle.trim() || `${displayName.trim() || suggestedDisplayName} | Shaadi Nyota`,
+      themeKey: defaultThemeKey,
+      pageTitle: `${displayName.trim() || suggestedDisplayName} | Shaadi Nyota`,
     });
     setIsSubmitting(false);
 
@@ -161,7 +148,8 @@ export default function CreateWeddingPage() {
         <p className="create-wedding-eyebrow">Shaadi Nyota</p>
         <h1>Create your wedding website</h1>
         <p className="create-wedding-copy">
-          Start with the basic wedding details. You can add events, guests, and RSVP settings from your dashboard.
+          Start with the basic wedding details. Your website is created as a private draft that you can preview,
+          and its public link goes live after payment verification and publishing.
         </p>
 
         {!isConfigured && (
@@ -195,13 +183,20 @@ export default function CreateWeddingPage() {
           </label>
 
           <label>
-            <span>Slug</span>
-            <input
-              value={slug}
-              onChange={(event) => handleSlugChange(event.target.value)}
-              required
-              placeholder="ali-sara"
-            />
+            <span>Website address</span>
+            <div className="create-wedding-address-field">
+              <span aria-hidden="true">shaadinyota.com/</span>
+              <input
+                value={slug}
+                onChange={(event) => handleSlugChange(event.target.value)}
+                required
+                placeholder="bride-groom"
+                aria-describedby="website-address-help"
+              />
+            </div>
+            <small id="website-address-help" className="create-wedding-field-help">
+              This will be the shareable link for your wedding website.
+            </small>
           </label>
 
           <div className="package-selection">
@@ -229,45 +224,6 @@ export default function CreateWeddingPage() {
               ))}
             </div>
           </div>
-
-          <div className="package-selection">
-            <div>
-              <span>Template</span>
-              <p>Choose a starting point. You can customize sections, visuals, music, and events later.</p>
-            </div>
-            <div className="package-options theme-options">
-              {templateOptions.map((option) => {
-                const preset = templatePresets[option];
-                return (
-                <label
-                  className={`package-option ${themeKey === option ? 'selected' : ''}`}
-                  key={option}
-                >
-                  <input
-                    type="radio"
-                    name="themeKey"
-                    value={option}
-                    checked={themeKey === option}
-                    onChange={() => setThemeKey(option)}
-                  />
-                  <strong>{preset.displayName}</strong>
-                  <small>{preset.description}</small>
-                </label>
-              )})}
-            </div>
-          </div>
-
-          <label>
-            <span>Page title</span>
-            <input
-              value={pageTitle}
-              onChange={(event) => {
-                setPageTitleEdited(true);
-                setPageTitle(event.target.value);
-              }}
-              placeholder="Ali & Sara | Shaadi Nyota"
-            />
-          </label>
 
           {error && <div className="create-wedding-message error">{error}</div>}
 

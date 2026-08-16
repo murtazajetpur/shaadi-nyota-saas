@@ -185,3 +185,110 @@
     min-height: var(--invite-canvas-height);
   }
 }
+.not-found-section {
+  overflow: hidden;
+  padding: clamp(2rem, 8vw, 4rem);
+  background:
+    radial-gradient(circle at 50% 12%, rgba(183, 144, 71, 0.12), transparent 32%),
+    linear-gradient(180deg, #fffdf8 0%, #f8f1e6 100%);
+}
+
+.not-found-section::before,
+.not-found-section::after {
+  position: absolute;
+  width: 11rem;
+  height: 11rem;
+  border: 1px solid rgba(127, 91, 39, 0.14);
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
+}
+
+.not-found-section::before {
+  top: -6rem;
+  right: -5rem;
+}
+
+.not-found-section::after {
+  bottom: -7rem;
+  left: -5rem;
+}
+
+.invite-status-brand {
+  position: relative;
+  z-index: 1;
+  color: #8a6728;
+  font-family: var(--font-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.invite-status-icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0.5rem 0 0.25rem;
+  place-items: center;
+  border: 1px solid rgba(111, 76, 30, 0.22);
+  border-radius: 50%;
+  color: #7b5926;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 12px 28px rgba(94, 66, 27, 0.1);
+}
+
+.not-found-section.status-not-live .invite-status-icon {
+  color: #8a5a16;
+  background: rgba(255, 248, 226, 0.9);
+}
+
+.not-found-section.status-unavailable .invite-status-icon {
+  color: #7b2e2e;
+  background: rgba(255, 243, 239, 0.9);
+}
+
+.not-found-section h1,
+.not-found-section p,
+.invite-status-link {
+  position: relative;
+  z-index: 1;
+}
+
+.not-found-section h1 {
+  max-width: 24rem;
+  margin: 0.25rem 0 0;
+  line-height: 1.2;
+}
+
+.not-found-section p {
+  max-width: 24rem;
+  margin: 0;
+  line-height: 1.65;
+}
+
+.invite-status-link {
+  display: inline-flex;
+  min-height: 2.75rem;
+  margin-top: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(111, 76, 30, 0.28);
+  border-radius: 4px;
+  color: #603f1d;
+  background: rgba(255, 255, 255, 0.7);
+  font-family: var(--font-secondary);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-decoration: none;
+}
+
+.invite-status-link:hover,
+.invite-status-link:focus-visible {
+  border-color: rgba(111, 76, 30, 0.5);
+  background: #ffffff;
+}

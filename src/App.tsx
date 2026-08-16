@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Clock3, Link2Off, ShieldAlert } from 'lucide-react';
 import './App.css';
 import Admin from './components/Admin';
 import AuthPage from './components/AuthPage';
@@ -28,6 +29,8 @@ import {
   type OwnedWeddingRow,
 } from './lib/weddingOnboarding';
 import {
+  getSupabasePublicWeddingRouteStatus,
+  type PublicWeddingRouteStatus,
   loadSupabasePersonalizedInvite,
   loadSupabaseWeddingBundle,
   loadSupabaseWeddingBySlug,
@@ -52,10 +55,23 @@ const templateDemoRoutes: Record<string, { slug: string; inviteCode: string; tit
   },
 };
 
-function NotFound({ title = 'Wedding invite not found', message = 'Please check the invitation link and try again.' }) {
-  useEffect(() => {
-    document.title = 'Wedding Not Found | Shaadi Nyota';
-  }, []);
+type PublicInviteStatusType = 'not-found' | 'not-live' | 'unavailable';
+
+function NotFound({
+  title = 'Invitation link not found',
+  message = 'This link may be incorrect or incomplete. Please check the link shared with you.',
+  statusType = 'not-found',
+}: {
+  title?: string;
+  message?: string;
+  statusType?: PublicInviteStatusType;
+}) {
+  useNoindexPage(title);
+  const StatusIcon = statusType === 'not-live'
+    ? Clock3
+    : statusType === 'unavailable'
+      ? ShieldAlert
+      : Link2Off;
 
   return (
     <>
@@ -63,9 +79,16 @@ function NotFound({ title = 'Wedding invite not found', message = 'Please check 
       <div className="desktop-vignette" />
       <div className="app-container">
         <div className="phone-canvas">
-          <section className="section-wrapper not-found-section">
+          <section className={`section-wrapper not-found-section status-${statusType}`}>
+            <span className="invite-status-brand">Shaadi Nyota</span>
+            <span className="invite-status-icon" aria-hidden="true">
+              <StatusIcon size={28} strokeWidth={1.8} />
+            </span>
             <h1>{title}</h1>
             <p>{message}</p>
+            {statusType === 'not-found' && (
+              <a className="invite-status-link" href="/">Visit Shaadi Nyota</a>
+            )}
           </section>
         </div>
       </div>
@@ -392,6 +415,7 @@ function PublicInviteRoute({
     visibleEvents?: WeddingEvent[];
   } | null>(null);
   const [supabaseError, setSupabaseError] = useState('');
+  const [routeStatus, setRouteStatus] = useState<PublicWeddingRouteStatus>('unknown');
 
   const savedDraft = window.localStorage.getItem(mockDashboardDraftStorageKey);
   const savedAdminWeddings = window.localStorage.getItem(mockAdminWeddingsStorageKey);
@@ -424,6 +448,22 @@ function PublicInviteRoute({
       }
 
       setIsLoadingInvite(true);
+      setSupabaseError('');
+
+      const availability = await getSupabasePublicWeddingRouteStatus(slug);
+      if (!mounted) return;
+
+      if (availability.error) {
+        console.error('Public wedding route status check failed:', availability.error);
+      }
+
+      setRouteStatus(availability.status);
+      if (availability.status === 'not_found' || availability.status === 'not_live') {
+        setSupabaseData(null);
+        setIsLoadingInvite(false);
+        return;
+      }
+
       const result = isPersonalizedInvite && inviteCode
         ? await loadSupabasePersonalizedInvite(slug, inviteCode)
         : await loadSupabaseWeddingBySlug(slug, { includeGuests: false });
@@ -494,19 +534,54 @@ function PublicInviteRoute({
     return <AccessMessage title="Loading invitation" message="Please wait while we load this wedding website." />;
   }
 
+  if (routeStatus === 'not_live') {
+    return (
+      <NotFound
+        statusType="not-live"
+        title="This wedding website is not live yet"
+        message="The couple is still preparing this invitation. Please try again later or ask the sender for an updated link."
+      />
+    );
+  }
+
+  if (routeStatus === 'not_found') {
+    return (
+      <NotFound
+        title="Invitation link not found"
+        message="This wedding link does not match an invitation. Please check the address shared with you."
+      />
+    );
+  }
+
   if (supabaseError && !fallbackData) {
-    return <NotFound title="Unable to load invitation" message={supabaseError} />;
+    return (
+      <NotFound
+        statusType="unavailable"
+        title="Unable to load invitation"
+        message="We could not load this invitation right now. Please try again shortly."
+      />
+    );
   }
 
   if (!data) {
+    if (isPersonalizedInvite && routeStatus === 'live') {
+      return (
+        <NotFound
+          title="Personalized invitation not found"
+          message="This guest invitation link is invalid or no longer available. Please ask the sender for the correct link."
+        />
+      );
+    }
+
     return <NotFound />;
   }
 
   if (data.wedding.status === 'suspended') {
     return (
       <NotFound
+        statusType="unavailable"
         title="Wedding website unavailable"
-        message="This wedding website is currently unavailable."
+        message="This wedding website is currently unavailable. Please contact the couple if you need help."
       />
     );
   }
@@ -514,8 +589,9 @@ function PublicInviteRoute({
   if (data.wedding.status !== 'published') {
     return (
       <NotFound
-        title="Wedding website not live yet"
-        message="This wedding website is not live yet."
+        statusType="not-live"
+        title="This wedding website is not live yet"
+        message="The couple is still preparing this invitation. Please try again later."
       />
     );
   }
@@ -523,8 +599,9 @@ function PublicInviteRoute({
   if (data.wedding.paymentStatus !== 'paid') {
     return (
       <NotFound
-        title="Wedding website not live yet"
-        message="This wedding website is not live yet."
+        statusType="not-live"
+        title="This wedding website is not live yet"
+        message="The couple is still preparing this invitation. Please try again later."
       />
     );
   }

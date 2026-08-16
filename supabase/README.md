@@ -127,10 +127,15 @@ Do not commit `.env`. It is ignored by git.
 
 ## 8. Runtime Notes
 
-- Active purchasable plans are `basic` (Basic Website, ₹3,000) and `rsvp` (Basic Website + RSVP Management, ₹5,000).
+- Active purchasable plans are `basic` (Basic, ₹1,000) and `rsvp` (Pro, ₹5,000).
 - A legacy package value remains in the schema only for existing records and is not shown as an active purchasable plan.
 - Public invites require both `weddings.status = 'published'` and
   `weddings.payment_status = 'paid'`.
+- Run `supabase/add_public_wedding_route_status.sql` on existing projects so
+  public routes can distinguish a reserved/private wedding slug from an invalid
+  URL without exposing wedding or payment data. Until the RPC is installed, the
+  frontend safely falls back to the existing invite loader and shows a generic
+  unavailable message when the route cannot be resolved.
 - Personalized invite lookup uses `public.get_public_invite_by_code(slug, code)`.
   Anonymous users cannot directly select guests, guest-event assignments, or
   RSVP responses.
@@ -142,7 +147,7 @@ Do not commit `.env`. It is ignored by git.
   couples from directly changing package, payment, publication, or ownership
   fields while preserving admin controls.
 - Manual payment verification requests use `weddings.payment_status = 'manual_pending'`. The dashboard labels this as "Verification Requested". If an older database still only allows `unpaid` and `paid`, run `supabase/add_manual_payment_status.sql`.
-- Basic Website dashboards show Guests and RSVP Dashboard as locked upgrade panels. Admin editing remains unrestricted.
+- Basic dashboards show Guests and RSVP Dashboard as locked upgrade panels. Admin editing remains unrestricted.
 - Dashboard section save buttons say "Save All Changes" because every save button persists the full builder payload: wedding shell, settings, events, guests, and guest-event assignments.
 - "Discard Unsaved Changes" clears the local draft and reloads the last saved Supabase version. It does not delete saved wedding data.
 - Event reordering uses existing `events.sort_order`; the dashboard updates local order immediately and persists the order on Save All Changes.
@@ -329,3 +334,12 @@ Before testing production recovery emails, configure Supabase Dashboard > Authen
 - Local Redirect URL: `http://localhost:5173/reset-password`
 
 The login page links to `/forgot-password`. Supabase sends the recovery email back to `/reset-password`, where the recovery session is validated before a new password can be submitted. Configure custom SMTP before launch for reliable branded email delivery.
+
+## Guest Phone Validation
+
+- Run `supabase/add_guest_phone_validation.sql` once on an existing Supabase project.
+- Guest CSV import and manual guest editing share the same international phone validator.
+- The plus sign is optional. Spaces, hyphens, brackets, and spreadsheet-safe apostrophes are removed automatically.
+- Ten-digit Indian mobile numbers default to `+91`; non-Indian numbers must include their country calling code.
+- Valid numbers are stored in canonical E.164 format, while shared family phone numbers produce warnings rather than blocking import.
+- The database trigger validates and normalizes every new guest phone write. Existing rows are not bulk-modified by the migration.

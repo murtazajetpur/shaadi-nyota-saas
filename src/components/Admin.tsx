@@ -666,7 +666,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                         <input
                             value={searchQuery}
                             onChange={(event) => setSearchQuery(event.target.value)}
-                            placeholder="Couple name or slug"
+                            placeholder="Couple name or website address"
                         />
                     </label>
                     <label>
@@ -707,7 +707,7 @@ export default function Admin({ authNotice }: { authNotice?: string }) {
                         <thead>
                             <tr>
                                 <th>Couple</th>
-                                <th>Slug</th>
+                                <th>Website Address</th>
                                 <th>Plan</th>
                                 <th>Payment</th>
                                 <th>Website Status</th>
