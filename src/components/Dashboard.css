@@ -70,6 +70,10 @@
     gap: 22px;
 }
 
+.dashboard-mobile-section-nav {
+    display: none;
+}
+
 .dashboard-tab-group {
     display: flex;
     flex-direction: column;
@@ -4023,14 +4027,79 @@
         overflow-wrap: anywhere;
     }
 
-    .dashboard-tabs {
+    .dashboard-mobile-section-nav {
+        display: grid;
+        gap: 8px;
+        width: 100%;
+        padding: 12px;
+        border-block: 1px solid rgba(0, 0, 0, 0.09);
+        background: #fbfaf8;
+        box-sizing: border-box;
+    }
+
+    .dashboard-mobile-section-nav > label {
+        color: #5f554f;
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    .dashboard-mobile-section-control {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr) 44px;
+        align-items: stretch;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .dashboard-mobile-section-control select {
         width: 100%;
         min-width: 0;
-        max-width: 100%;
-        gap: 8px;
-        padding-bottom: 6px;
-        overflow-x: auto;
-        overscroll-behavior-x: contain;
+        min-height: 46px;
+        border: 1px solid rgba(62, 45, 37, 0.22);
+        border-radius: 8px;
+        padding: 10px 34px 10px 12px;
+        background: #ffffff;
+        color: #231f1c;
+        font: inherit;
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    .dashboard-mobile-section-control select:focus-visible,
+    .dashboard-mobile-section-step:focus-visible {
+        outline: 3px solid rgba(122, 31, 31, 0.18);
+        outline-offset: 2px;
+        border-color: #7a1f1f;
+    }
+
+    .dashboard-mobile-section-step {
+        display: inline-grid;
+        place-items: center;
+        width: 44px;
+        min-height: 44px;
+        border: 1px solid rgba(62, 45, 37, 0.18);
+        border-radius: 8px;
+        background: #ffffff;
+        color: #7a1f1f;
+        cursor: pointer;
+    }
+
+    .dashboard-mobile-section-step:disabled {
+        color: #a49c97;
+        background: #f1eeeb;
+        cursor: not-allowed;
+        opacity: 0.62;
+    }
+
+    .dashboard-mobile-section-nav > p {
+        margin: 0;
+        color: #756b65;
+        font-size: 0.75rem;
+        line-height: 1.35;
+    }
+
+    .dashboard-tabs {
+        display: none;
     }
 
     .dashboard-tab-group {

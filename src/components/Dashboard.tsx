@@ -4,6 +4,8 @@ import {
     CircleAlert,
     Clock3,
     Copy,
+    ChevronLeft,
+    ChevronRight,
     ExternalLink,
     Eye,
     LockKeyhole,
@@ -19,7 +21,6 @@ import { useAuth } from '../context/AuthContext';
 import { updateWeddingPaymentStatus, updateWeddingShell } from '../lib/weddingOnboarding';
 import {
     createSupabaseEvent,
-    createSupabaseGuest,
     deleteSupabaseEvent,
     deleteSupabaseGuests,
     importSupabaseGuests,
@@ -220,6 +221,10 @@ const dashboardTabGroups: Array<{ label: string; tabs: Array<{ id: DashboardTab;
         tabs: [{ id: 'preview', label: 'Preview' }],
     },
 ];
+
+const dashboardTabs = dashboardTabGroups.flatMap((group) => (
+    group.tabs.map((tab) => ({ ...tab, groupLabel: group.label }))
+));
 
 const getWebsiteActivationState = (wedding: SampleWeddingData['wedding']): WebsiteActivationState => {
     if (wedding.status === 'suspended') return 'suspended';
@@ -1978,14 +1983,13 @@ export default function Dashboard({
             },
         }));
     };
-    const addGuest = async () => {
+    const addGuest = () => {
         if (cannotAddGuest) {
             setSaveError(hasReachedGuestEntryLimit
                 ? `This wedding already has the maximum ${guestRecordLimit.toLocaleString()} guest entries.`
                 : `This wedding already has the maximum ${inviteeLimit.toLocaleString()} people.`);
             return;
         }
-        const newGuestPage = Math.ceil((weddingData.rsvp.guests.length + 1) / guestPageSize);
         const newGuest: WeddingGuest = {
             id: `guest-${Date.now()}`,
             guestName: '',
@@ -1997,35 +2001,24 @@ export default function Dashboard({
             invitedEventCounts: {},
         };
 
-        if (supabaseWeddingId) {
-            const result = await createSupabaseGuest(supabaseWeddingId, newGuest);
-            if (result.error || !result.guest) {
-                console.warn('Could not add guest', result.error);
-                setSaveErrorDetail(result.error ?? '');
-                setSaveError(result.error || `Could not add guest.${isAdminMode ? adminRlsHint : ''}`);
-                return;
-            }
-            updateWeddingData((current) => ({
-                ...current,
-                rsvp: {
-                    ...current.rsvp,
-                    guests: [...current.rsvp.guests, result.guest],
-                },
-            }));
-            setGuestSearchQuery('');
-            setGuestPage(newGuestPage);
-            return;
-        }
-
         updateWeddingData((current) => ({
             ...current,
             rsvp: {
                 ...current.rsvp,
-                guests: [...current.rsvp.guests, newGuest],
+                guests: [newGuest, ...current.rsvp.guests],
             },
-        }));        setGuestSearchQuery('');
-        setGuestPage(newGuestPage);
-
+        }));
+        setGuestSearchQuery('');
+        setGuestCategoryFilter('all');
+        setGuestWhatsAppFilter('all');
+        setGuestRsvpFilter('all');
+        setGuestActivityFilter('all');
+        setGuestPhoneFilter('all');
+        setGuestPage(1);
+        setExpandedGuestId(newGuest.id);
+        setSaveError('');
+        setSaveErrorDetail('');
+        setSaveStatus('New guest added. Complete the details and save your changes.');
     };
 
     const getGuestInviteLink = (guest: WeddingGuest) => {
@@ -2190,10 +2183,17 @@ export default function Dashboard({
         await window.navigator.clipboard?.writeText(weddingWebsiteUrl);
         setSaveStatus('Copied website URL');
     };
-    const openDashboardPreview = () => {
-        writeDashboardActiveTab(dashboardActiveTabStorageKey, 'preview');
-        setActiveTab('preview');
+    const navigateToDashboardTab = (tab: DashboardTab) => {
+        writeDashboardActiveTab(dashboardActiveTabStorageKey, tab);
+        setActiveTab(tab);
     };
+    const activeDashboardTabIndex = Math.max(0, dashboardTabs.findIndex((tab) => tab.id === activeTab));
+    const activeDashboardTab = dashboardTabs[activeDashboardTabIndex];
+    const navigateToAdjacentDashboardTab = (direction: -1 | 1) => {
+        const nextTab = dashboardTabs[activeDashboardTabIndex + direction];
+        if (nextTab) navigateToDashboardTab(nextTab.id);
+    };
+    const openDashboardPreview = () => navigateToDashboardTab('preview');
 
 
     const previewGuestInvite = async (guest: WeddingGuest) => {
@@ -3016,6 +3016,55 @@ export default function Dashboard({
                     <button type="button" onClick={handleResetDraft}>{discardUnsavedChangesLabel}</button>
                     {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                 </div>
+                <div className="dashboard-mobile-section-nav">
+                    <label htmlFor="dashboard-mobile-section-select">Dashboard section</label>
+                    <div className="dashboard-mobile-section-control">
+                        <button
+                            type="button"
+                            className="dashboard-mobile-section-step"
+                            onClick={() => navigateToAdjacentDashboardTab(-1)}
+                            disabled={activeDashboardTabIndex === 0}
+                            aria-label="Previous dashboard section"
+                            title="Previous section"
+                        >
+                            <ChevronLeft size={20} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                        <select
+                            id="dashboard-mobile-section-select"
+                            value={activeTab}
+                            onChange={(event) => navigateToDashboardTab(event.target.value as DashboardTab)}
+                            aria-describedby="dashboard-mobile-section-position"
+                        >
+                            {dashboardTabGroups.map((group) => (
+                                <optgroup label={group.label} key={group.label}>
+                                    {group.tabs.map((tab) => {
+                                        const isLockedTab = ((tab.id === 'guests' || tab.id === 'whatsapp') && !hasDashboardGuestAccess)
+                                            || ((tab.id === 'rsvp' || tab.id === 'rsvp-settings') && !hasDashboardRsvpAccess);
+
+                                        return (
+                                            <option value={tab.id} key={tab.id}>
+                                                {tab.label}{isLockedTab ? ' (Pro)' : ''}
+                                            </option>
+                                        );
+                                    })}
+                                </optgroup>
+                            ))}
+                        </select>
+                        <button
+                            type="button"
+                            className="dashboard-mobile-section-step"
+                            onClick={() => navigateToAdjacentDashboardTab(1)}
+                            disabled={activeDashboardTabIndex === dashboardTabs.length - 1}
+                            aria-label="Next dashboard section"
+                            title="Next section"
+                        >
+                            <ChevronRight size={20} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                    </div>
+                    <p id="dashboard-mobile-section-position">
+                        {activeDashboardTab.groupLabel} · {activeDashboardTabIndex + 1} of {dashboardTabs.length}
+                    </p>
+                </div>
                 <nav className="dashboard-tabs" aria-label="Dashboard sections">
                     {dashboardTabGroups.map((group) => (
                         <div className="dashboard-tab-group" key={group.label}>
@@ -3028,10 +3077,7 @@ export default function Dashboard({
                                     <button
                                         key={tab.id}
                                         className={`${activeTab === tab.id ? 'active' : ''}${isLockedTab ? ' locked' : ''}`}
-                                        onClick={() => {
-                                            writeDashboardActiveTab(dashboardActiveTabStorageKey, tab.id);
-                                            setActiveTab(tab.id);
-                                        }}
+                                        onClick={() => navigateToDashboardTab(tab.id)}
                                         type="button"
                                         aria-label={`${tab.label}${isLockedTab ? ', available on the Pro plan' : ''}`}
                                         title={isLockedTab ? 'Available on the Pro plan' : undefined}
