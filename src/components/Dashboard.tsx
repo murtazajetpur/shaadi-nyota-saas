@@ -1,5 +1,6 @@
 import { Component, Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import {
+    Check,
     CheckCircle2,
     CircleAlert,
     Clock3,
@@ -9,6 +10,7 @@ import {
     ExternalLink,
     Eye,
     LockKeyhole,
+    Pencil,
 } from 'lucide-react';
 import InviteExperience from './InviteExperience';
 import OpeningRevealScrollPrompt from './OpeningRevealScrollPrompt';
@@ -152,12 +154,9 @@ const getGuestIdentityKey = (guestName: string, phone: string) => (
 type DashboardMode = 'couple' | 'admin';
 type GuestWhatsAppFilter = 'all' | 'invite-not-sent' | 'invite-sent' | 'no-reminders' | 'reminders-sent';
 type GuestRsvpFilter = 'all' | 'no-response' | 'pending' | 'complete' | 'attending' | 'maybe' | 'declined';
+type GuestEditableField = 'guestName' | 'phone' | 'category' | 'invitedCount';
 type GuestActivityFilter = 'all' | 'never' | 'last-7-days' | 'older-than-7-days';
 type GuestPhoneFilter = 'all' | 'available' | 'missing';
-type PendingGuestMessageConfirmation = {
-    guestId: string;
-    messageType: GuestMessageType;
-} | null;
 
 class DashboardPreviewErrorBoundary extends Component<{
     children: ReactNode;
@@ -391,6 +390,61 @@ const guestPageSizeOptions = [25, 50, 100] as const;
 const normalizeInvitedCount = (value: unknown) => (
     Math.max(1, Math.floor(Number(value) || 1))
 );
+
+function GuestFamilySizeInput({
+    value,
+    onCommit,
+    onFinish,
+    className = '',
+    ariaLabel = 'Family Size',
+    autoFocus = false,
+}: {
+    value: number;
+    onCommit: (value: number) => boolean;
+    onFinish?: () => void;
+    className?: string;
+    ariaLabel?: string;
+    autoFocus?: boolean;
+}) {
+    const [draftValue, setDraftValue] = useState(String(value));
+
+    const commitValue = () => {
+        const parsedValue = Number(draftValue);
+        if (!draftValue.trim() || !Number.isInteger(parsedValue) || parsedValue < 1) {
+            setDraftValue(String(value));
+            onFinish?.();
+            return;
+        }
+
+        const didCommit = onCommit(parsedValue);
+        setDraftValue(String(didCommit ? parsedValue : value));
+        onFinish?.();
+    };
+
+    return (
+        <input
+            aria-label={ariaLabel}
+            autoFocus={autoFocus}
+            className={className}
+            type="number"
+            inputMode="numeric"
+            min="1"
+            max={MAX_GUEST_FAMILY_SIZE}
+            value={draftValue}
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => setDraftValue(event.target.value)}
+            onBlur={commitValue}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+                if (event.key === 'Escape') {
+                    setDraftValue(String(value));
+                    event.currentTarget.blur();
+                }
+            }}
+        />
+    );
+}
+
 const getGuestCapacityError = (wedding: SampleWeddingData) => {
     const guestRecordLimit = wedding.wedding.guestRecordLimit ?? DEFAULT_GUEST_RECORD_LIMIT;
     const inviteeLimit = wedding.wedding.inviteeLimit ?? DEFAULT_INVITEE_LIMIT;
@@ -764,8 +818,8 @@ const loadStoredGuestMessageHistory = (weddingSlug: string) => {
     }
 };
 
-const persistStoredGuestMessageHistory = (weddingSlug: string, entries: GuestMessageHistoryEntry[]) => {
-    window.localStorage.setItem(getMockGuestMessageHistoryStorageKey(weddingSlug), JSON.stringify(entries));
+const persistStoredGuestMessageHistory = (storageScope: string, entries: GuestMessageHistoryEntry[]) => {
+    window.localStorage.setItem(getMockGuestMessageHistoryStorageKey(storageScope), JSON.stringify(entries));
 };
 
 export default function Dashboard({
@@ -798,6 +852,7 @@ export default function Dashboard({
     const [weddingData, setWeddingData] = useState<SampleWeddingData>(() => (
         restoredDashboardDraft ?? (initialWedding ? normalizeWedding(initialWedding) : loadInitialWedding())
     ));
+    const guestMessageHistoryStorageScope = supabaseWeddingId ?? weddingData.wedding.slug;
     const [guestSearchQuery, setGuestSearchQuery] = useState('');
     const [guestCategoryFilter, setGuestCategoryFilter] = useState('all');
     const [guestWhatsAppFilter, setGuestWhatsAppFilter] = useState<GuestWhatsAppFilter>('all');
@@ -818,12 +873,12 @@ export default function Dashboard({
     const [closingImagePickerTarget, setClosingImagePickerTarget] = useState<number | 'add' | null>(null);
     const [isClosingImageUploading, setIsClosingImageUploading] = useState(false);
     const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
+    const [editingGuestField, setEditingGuestField] = useState<{ guestId: string; field: GuestEditableField } | null>(null);
     const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
     const [rsvpResponses, setRsvpResponses] = useState<StoredRsvpResponse[]>(loadStoredRsvpResponses);
     const [isRsvpLoading, setIsRsvpLoading] = useState(false);
     const [guestMessageHistory, setGuestMessageHistory] = useState<GuestMessageHistoryEntry[]>([]);
     const [isGuestMessageHistoryLoading, setIsGuestMessageHistoryLoading] = useState(false);
-    const [pendingGuestMessageConfirmation, setPendingGuestMessageConfirmation] = useState<PendingGuestMessageConfirmation>(null);
     const [whatsAppMessageMode, setWhatsAppMessageMode] = useState<GuestMessageType>('invitation');
     const [isWhatsAppPreviewImagePickerOpen, setIsWhatsAppPreviewImagePickerOpen] = useState(false);
     const [isWhatsAppPreviewImageUploading, setIsWhatsAppPreviewImageUploading] = useState(false);
@@ -1050,29 +1105,28 @@ export default function Dashboard({
         if (activeTab !== 'guests' || !hasDashboardGuestAccess) return;
 
         let cancelled = false;
-        setIsGuestMessageHistoryLoading(true);
+        const cachedHistory = loadStoredGuestMessageHistory(guestMessageHistoryStorageScope);
+        setGuestMessageHistory(cachedHistory);
+        setIsGuestMessageHistoryLoading(Boolean(supabaseWeddingId));
 
         if (supabaseWeddingId) {
             loadGuestMessageHistory(supabaseWeddingId).then((result) => {
                 if (cancelled) return;
                 setIsGuestMessageHistoryLoading(false);
                 if (result.error) {
-                    setGuestMessageHistory([]);
                     setSaveError(result.error);
                     setSaveErrorDetail(result.detail);
                     return;
                 }
                 setGuestMessageHistory(result.entries);
+                persistStoredGuestMessageHistory(guestMessageHistoryStorageScope, result.entries);
             });
-        } else {
-            setGuestMessageHistory(loadStoredGuestMessageHistory(weddingData.wedding.slug));
-            setIsGuestMessageHistoryLoading(false);
         }
 
         return () => {
             cancelled = true;
         };
-    }, [activeTab, hasDashboardGuestAccess, supabaseWeddingId, weddingData.wedding.slug]);
+    }, [activeTab, guestMessageHistoryStorageScope, hasDashboardGuestAccess, supabaseWeddingId]);
     useEffect(() => {
         setSelectedGuestIds((current) => current.filter((id) => (
             weddingData.rsvp.guests.some((guest) => guest.id === id)
@@ -1882,11 +1936,11 @@ export default function Dashboard({
         const nextPeopleTotal = guestSummary.totalPeople - normalizeInvitedCount(currentGuest?.invitedCount) + familySize;
         if (familySize > MAX_GUEST_FAMILY_SIZE) {
             setSaveError(`Family Size cannot be more than ${MAX_GUEST_FAMILY_SIZE}. Split larger groups into separate guest entries.`);
-            return;
+            return false;
         }
         if (nextPeopleTotal > inviteeLimit) {
             setSaveError(`This wedding supports up to ${inviteeLimit.toLocaleString()} people. Reduce another Family Size before increasing this one.`);
-            return;
+            return false;
         }
         updateWeddingData((current) => ({
             ...current,
@@ -1905,6 +1959,7 @@ export default function Dashboard({
                 }),
             },
         }));
+        return true;
     };
     const toggleGuestEvent = (guestIndex: number, eventId: string) => {
         const currentGuest = weddingData.rsvp.guests[guestIndex];
@@ -2092,9 +2147,6 @@ export default function Dashboard({
         buildWhatsAppUrl(guest.phone, getGuestWhatsAppMessage(guest, messageType))
     );
 
-    const handleGuestWhatsAppOpened = (guestId: string, messageType: GuestMessageType) => {
-        setPendingGuestMessageConfirmation({ guestId, messageType });
-    };
 
     const confirmGuestMessageSent = async (guest: WeddingGuest, messageType: GuestMessageType) => {
         const savingKey = `${guest.id}:${messageType}`;
@@ -2133,10 +2185,9 @@ export default function Dashboard({
 
         setGuestMessageHistory((current) => {
             const next = [entry, ...current];
-            if (!supabaseWeddingId) persistStoredGuestMessageHistory(weddingData.wedding.slug, next);
+            persistStoredGuestMessageHistory(guestMessageHistoryStorageScope, next);
             return next;
         });
-        setPendingGuestMessageConfirmation(null);
         setGuestMessageHistorySavingKey('');
         setSaveStatus(messageType === 'invitation' ? 'Invitation marked as sent' : 'Reminder marked as sent');
     };
@@ -2157,7 +2208,7 @@ export default function Dashboard({
 
         setGuestMessageHistory((current) => {
             const next = current.filter((item) => item.id !== entry.id);
-            if (!supabaseWeddingId) persistStoredGuestMessageHistory(weddingData.wedding.slug, next);
+            persistStoredGuestMessageHistory(guestMessageHistoryStorageScope, next);
             return next;
         });
         setGuestMessageHistorySavingKey('');
@@ -3809,14 +3860,13 @@ export default function Dashboard({
                                 const reminderHistory = messageHistory.filter((entry) => entry.messageType === 'reminder');
                                 const firstInvitation = invitationHistory[invitationHistory.length - 1];
                                 const lastReminder = reminderHistory[0];
-                                const pendingMessageType = pendingGuestMessageConfirmation?.guestId === guest.id
-                                    ? pendingGuestMessageConfirmation.messageType
-                                    : null;
                                 const inviteWhatsAppUrl = getGuestWhatsAppUrl(guest, 'invitation');
                                 const reminderWhatsAppUrl = getGuestWhatsAppUrl(guest, 'reminder');
                                 const primaryMessageType: GuestMessageType = firstInvitation ? 'reminder' : 'invitation';
                                 const primaryWhatsAppUrl = firstInvitation ? reminderWhatsAppUrl : inviteWhatsAppUrl;
+                                const isGuestMessageHistorySaving = guestMessageHistorySavingKey.startsWith(`${guest.id}:`);
                                 const isExpanded = expandedGuestId === guest.id;
+                                const activeEditField = editingGuestField?.guestId === guest.id ? editingGuestField.field : null;
 
                                 return (
                                     <article className="guest-mobile-card" key={guest.id}>
@@ -3828,36 +3878,151 @@ export default function Dashboard({
                                                 checked={selectedGuestIds.includes(guest.id)}
                                                 onChange={() => toggleGuestSelection(guest.id)}
                                             />
-                                            <div>
-                                                <strong>{guest.guestName || 'Unnamed guest'}</strong>
+                                            <div className="guest-mobile-card-name">
+                                                {activeEditField === 'guestName' ? (
+                                                    <input
+                                                        autoFocus
+                                                        className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
+                                                        value={guest.guestName}
+                                                        onChange={(event) => updateGuest(guestIndex, 'guestName', event.target.value)}
+                                                        onBlur={() => setEditingGuestField(null)}
+                                                        placeholder="Guest / family"
+                                                    />
+                                                ) : (
+                                                    <strong>{guest.guestName || 'Unnamed guest'}</strong>
+                                                )}
                                                 <span>
                                                     {guest.category.trim() || 'Uncategorized'}
                                                     {' - '}
                                                     {normalizeInvitedCount(guest.invitedCount)} {normalizeInvitedCount(guest.invitedCount) === 1 ? 'person' : 'people'}
                                                 </span>
+                                                {validation.guests[guestIndex]?.guestName && <em>{validation.guests[guestIndex]?.guestName}</em>}
                                             </div>
+                                            <button
+                                                className="guest-mobile-field-edit"
+                                                type="button"
+                                                aria-label={activeEditField === 'guestName' ? 'Finish editing guest name' : 'Edit guest name'}
+                                                title={activeEditField === 'guestName' ? 'Finish editing' : 'Edit guest name'}
+                                                onClick={() => setEditingGuestField(
+                                                    activeEditField === 'guestName' ? null : { guestId: guest.id, field: 'guestName' }
+                                                )}
+                                            >
+                                                {activeEditField === 'guestName' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+                                            </button>
                                         </div>
 
                                         <div className="guest-mobile-card-summary">
-                                            <span>
+                                            <div className="guest-mobile-editable-row">
                                                 <strong>Phone</strong>
-                                                {guest.phone.trim() || 'Missing phone'}
-                                            </span>
-                                            <span>
+                                                <div className="guest-mobile-editable-value">
+                                                    {activeEditField === 'phone' ? (
+                                                        <input
+                                                            autoFocus
+                                                            className={validation.guests[guestIndex]?.phone ? 'cell-error' : ''}
+                                                            value={guest.phone}
+                                                            onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
+                                                            placeholder="+91..."
+                                                            inputMode="tel"
+                                                            autoComplete="tel"
+                                                            onBlur={() => {
+                                                                normalizeGuestPhoneAtIndex(guestIndex);
+                                                                setEditingGuestField(null);
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <span>{guest.phone.trim() || 'Missing phone'}</span>
+                                                    )}
+                                                    <button
+                                                        className="guest-mobile-field-edit"
+                                                        type="button"
+                                                        aria-label={activeEditField === 'phone' ? 'Finish editing phone' : 'Edit phone'}
+                                                        title={activeEditField === 'phone' ? 'Finish editing' : 'Edit phone'}
+                                                        onClick={() => setEditingGuestField(
+                                                            activeEditField === 'phone' ? null : { guestId: guest.id, field: 'phone' }
+                                                        )}
+                                                    >
+                                                        {activeEditField === 'phone' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+                                                    </button>
+                                                </div>
+                                                {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
+                                            </div>
+                                            <div className="guest-mobile-editable-row">
                                                 <strong>Category</strong>
-                                                {guest.category.trim() || 'Uncategorized'}
-                                            </span>
-                                            <span>
+                                                <div className="guest-mobile-editable-value">
+                                                    {activeEditField === 'category' ? (
+                                                        <input
+                                                            autoFocus
+                                                            value={guest.category}
+                                                            onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
+                                                            onBlur={() => setEditingGuestField(null)}
+                                                            placeholder="Category"
+                                                        />
+                                                    ) : (
+                                                        <span>{guest.category.trim() || 'Uncategorized'}</span>
+                                                    )}
+                                                    <button
+                                                        className="guest-mobile-field-edit"
+                                                        type="button"
+                                                        aria-label={activeEditField === 'category' ? 'Finish editing category' : 'Edit category'}
+                                                        title={activeEditField === 'category' ? 'Finish editing' : 'Edit category'}
+                                                        onClick={() => setEditingGuestField(
+                                                            activeEditField === 'category' ? null : { guestId: guest.id, field: 'category' }
+                                                        )}
+                                                    >
+                                                        {activeEditField === 'category' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="guest-mobile-editable-row">
                                                 <strong>Family Size</strong>
-                                                {normalizeInvitedCount(guest.invitedCount)}
-                                            </span>
-                                            <span>
+                                                <div className="guest-mobile-editable-value">
+                                                    {activeEditField === 'invitedCount' ? (
+                                                        <GuestFamilySizeInput
+                                                            key={`${guest.id}:${guest.invitedCount}:mobile`}
+                                                            value={normalizeInvitedCount(guest.invitedCount)}
+                                                            autoFocus
+                                                            className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
+                                                            onCommit={(value) => updateGuestFamilySize(guestIndex, value)}
+                                                            onFinish={() => setEditingGuestField(null)}
+                                                        />
+                                                    ) : (
+                                                        <span>{normalizeInvitedCount(guest.invitedCount)}</span>
+                                                    )}
+                                                    <button
+                                                        className="guest-mobile-field-edit"
+                                                        type="button"
+                                                        aria-label={activeEditField === 'invitedCount' ? 'Finish editing Family Size' : 'Edit Family Size'}
+                                                        title={activeEditField === 'invitedCount' ? 'Finish editing' : 'Edit Family Size'}
+                                                        onClick={() => setEditingGuestField(
+                                                            activeEditField === 'invitedCount' ? null : { guestId: guest.id, field: 'invitedCount' }
+                                                        )}
+                                                    >
+                                                        {activeEditField === 'invitedCount' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+                                                    </button>
+                                                </div>
+                                                {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
+                                            </div>
+                                            <div className="guest-mobile-editable-row">
                                                 <strong>Invited Events</strong>
-                                                {weddingData.events
-                                                    .filter((event) => guest.invitedEventIds.includes(event.id))
-                                                    .map((event) => event.eventName)
-                                                    .join(', ') || 'No events selected'}
-                                            </span>
+                                                <div className="guest-mobile-editable-value">
+                                                    <span>
+                                                        {weddingData.events
+                                                            .filter((event) => guest.invitedEventIds.includes(event.id))
+                                                            .map((event) => event.eventName)
+                                                            .join(', ') || 'No events selected'}
+                                                    </span>
+                                                    <button
+                                                        className="guest-mobile-field-edit"
+                                                        type="button"
+                                                        aria-label={isExpanded ? 'Finish editing invited events' : 'Edit invited events'}
+                                                        title={isExpanded ? 'Finish editing' : 'Edit invited events'}
+                                                        aria-expanded={isExpanded}
+                                                        onClick={() => setExpandedGuestId(isExpanded ? null : guest.id)}
+                                                    >
+                                                        {isExpanded ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+                                                    </button>
+                                                </div>
+                                            </div>
                                             <div className="guest-mobile-rsvp-detail">
                                                 <strong>RSVP Summary</strong>
                                                 <div>
@@ -3909,7 +4074,6 @@ export default function Dashboard({
                                                 href={primaryWhatsAppUrl}
                                                 target="_blank"
                                                 rel="noreferrer"
-                                                onClick={() => handleGuestWhatsAppOpened(guest.id, primaryMessageType)}
                                             >
                                                 {primaryMessageType === 'invitation' ? 'Send Invite' : 'Send Reminder'}
                                             </a>
@@ -3918,79 +4082,32 @@ export default function Dashboard({
                                                 Add a phone number to send
                                             </button>
                                         )}
-
-                                        {pendingMessageType && (
-                                            <div className="guest-whatsapp-confirmation">
-                                                <span>Did you send it in WhatsApp?</span>
+                                        <div className="guest-whatsapp-manual-actions">
+                                            <span>Update send status manually</span>
+                                            <div>
                                                 <button
                                                     type="button"
-                                                    disabled={guestMessageHistorySavingKey === `${guest.id}:${pendingMessageType}`}
-                                                    onClick={() => confirmGuestMessageSent(guest, pendingMessageType)}
+                                                    disabled={isGuestMessageHistorySaving}
+                                                    onClick={() => confirmGuestMessageSent(guest, 'invitation')}
                                                 >
-                                                    Mark as sent
+                                                    <CheckCircle2 aria-hidden="true" />
+                                                    Mark invite sent
                                                 </button>
-                                                <button type="button" onClick={() => setPendingGuestMessageConfirmation(null)}>
-                                                    Not yet
+                                                <button
+                                                    type="button"
+                                                    disabled={isGuestMessageHistorySaving}
+                                                    onClick={() => confirmGuestMessageSent(guest, 'reminder')}
+                                                >
+                                                    <CheckCircle2 aria-hidden="true" />
+                                                    Mark reminder sent
                                                 </button>
                                             </div>
-                                        )}
+                                        </div>
 
-                                        <button
-                                            className="guest-mobile-manage-toggle"
-                                            type="button"
-                                            aria-expanded={isExpanded}
-                                            onClick={() => setExpandedGuestId(isExpanded ? null : guest.id)}
-                                        >
-                                            {isExpanded ? 'Close guest details' : 'Manage guest'}
-                                        </button>
+
 
                                         {isExpanded && (
                                             <div className="guest-mobile-editor">
-                                                <label>
-                                                    <span>Guest / Family Name</span>
-                                                    <input
-                                                        className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
-                                                        value={guest.guestName}
-                                                        onChange={(event) => updateGuest(guestIndex, 'guestName', event.target.value)}
-                                                        placeholder="Guest / family"
-                                                    />
-                                                    {validation.guests[guestIndex]?.guestName && <em>{validation.guests[guestIndex]?.guestName}</em>}
-                                                </label>
-                                                <div className="guest-mobile-editor-row">
-                                                    <label>
-                                                        <span>Phone</span>
-                                                        <input
-                                                            className={validation.guests[guestIndex]?.phone ? 'cell-error' : ''}
-                                                            value={guest.phone}
-                                                            onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
-                                                            placeholder="+91..."
-                                                            inputMode="tel"
-                                                            autoComplete="tel"
-                                                            onBlur={() => normalizeGuestPhoneAtIndex(guestIndex)}
-                                                        />
-                                                        {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
-                                                    </label>
-                                                    <label>
-                                                        <span>Family Size</span>
-                                                        <input
-                                                            className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
-                                                            type="number"
-                                                            min="1"
-                                                            max={MAX_GUEST_FAMILY_SIZE}
-                                                            value={guest.invitedCount}
-                                                            onChange={(event) => updateGuestFamilySize(guestIndex, Number(event.target.value))}
-                                                        />
-                                                        {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
-                                                    </label>
-                                                </div>
-                                                <label>
-                                                    <span>Category</span>
-                                                    <input
-                                                        value={guest.category}
-                                                        onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
-                                                        placeholder="Category"
-                                                    />
-                                                </label>
 
                                                 <div className="guest-mobile-event-editor">
                                                     <strong>Invited events</strong>
@@ -4042,7 +4159,6 @@ export default function Dashboard({
                                                             href={inviteWhatsAppUrl}
                                                             target="_blank"
                                                             rel="noreferrer"
-                                                            onClick={() => handleGuestWhatsAppOpened(guest.id, 'invitation')}
                                                         >
                                                             Resend invitation
                                                         </a>
@@ -4114,9 +4230,7 @@ export default function Dashboard({
                                         const reminderHistory = messageHistory.filter((entry) => entry.messageType === 'reminder');
                                         const firstInvitation = invitationHistory[invitationHistory.length - 1];
                                         const lastReminder = reminderHistory[0];
-                                        const pendingMessageType = pendingGuestMessageConfirmation?.guestId === guest.id
-                                            ? pendingGuestMessageConfirmation.messageType
-                                            : null;
+                                        const isGuestMessageHistorySaving = guestMessageHistorySavingKey.startsWith(`${guest.id}:`);
                                         const inviteWhatsAppUrl = getGuestWhatsAppUrl(guest, 'invitation');
                                         const reminderWhatsAppUrl = getGuestWhatsAppUrl(guest, 'reminder');
 
@@ -4165,13 +4279,11 @@ export default function Dashboard({
                                                         </div>
                                                         <label className="guest-family-size-field">
                                                             <span>Family Size</span>
-                                                            <input
+                                                            <GuestFamilySizeInput
+                                                                key={`${guest.id}:${guest.invitedCount}:desktop`}
+                                                                value={normalizeInvitedCount(guest.invitedCount)}
                                                                 className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
-                                                                type="number"
-                                                                min="1"
-                                                                max={MAX_GUEST_FAMILY_SIZE}
-                                                                value={guest.invitedCount}
-                                                                onChange={(event) => updateGuestFamilySize(guestIndex, Number(event.target.value))}
+                                                                onCommit={(value) => updateGuestFamilySize(guestIndex, value)}
                                                             />
                                                         </label>
                                                         {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
@@ -4239,7 +4351,6 @@ export default function Dashboard({
                                                                         href={inviteWhatsAppUrl}
                                                                         target="_blank"
                                                                         rel="noreferrer"
-                                                                        onClick={() => handleGuestWhatsAppOpened(guest.id, 'invitation')}
                                                                     >
                                                                         {firstInvitation ? 'Resend Invite' : 'Send Invite'}
                                                                     </a>
@@ -4247,26 +4358,10 @@ export default function Dashboard({
                                                                         href={reminderWhatsAppUrl}
                                                                         target="_blank"
                                                                         rel="noreferrer"
-                                                                        onClick={() => handleGuestWhatsAppOpened(guest.id, 'reminder')}
                                                                     >
                                                                         Send Reminder
                                                                     </a>
                                                                 </div>
-                                                                {pendingMessageType && (
-                                                                    <div className="guest-whatsapp-confirmation">
-                                                                        <span>Sent in WhatsApp?</span>
-                                                                        <button
-                                                                            type="button"
-                                                                            disabled={guestMessageHistorySavingKey === `${guest.id}:${pendingMessageType}`}
-                                                                            onClick={() => confirmGuestMessageSent(guest, pendingMessageType)}
-                                                                        >
-                                                                            Mark as sent
-                                                                        </button>
-                                                                        <button type="button" onClick={() => setPendingGuestMessageConfirmation(null)}>
-                                                                            Not yet
-                                                                        </button>
-                                                                    </div>
-                                                                )}
                                                                 {messageHistory.length > 0 && (
                                                                     <details className="guest-whatsapp-history">
                                                                         <summary>History ({messageHistory.length})</summary>
@@ -4293,6 +4388,27 @@ export default function Dashboard({
                                                         ) : (
                                                             <button className="guest-missing-phone-btn" type="button" disabled>Missing phone</button>
                                                         )}
+                                                        <div className="guest-whatsapp-manual-actions">
+                                                            <span>Update send status manually</span>
+                                                            <div>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={isGuestMessageHistorySaving}
+                                                                    onClick={() => confirmGuestMessageSent(guest, 'invitation')}
+                                                                >
+                                                                    <CheckCircle2 aria-hidden="true" />
+                                                                    Mark invite sent
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={isGuestMessageHistorySaving}
+                                                                    onClick={() => confirmGuestMessageSent(guest, 'reminder')}
+                                                                >
+                                                                    <CheckCircle2 aria-hidden="true" />
+                                                                    Mark reminder sent
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                                 {expandedGuestId === guest.id && (

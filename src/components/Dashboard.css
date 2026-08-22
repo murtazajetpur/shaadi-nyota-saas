@@ -2529,26 +2529,6 @@
     font-weight: 700;
 }
 
-.guest-whatsapp-confirmation {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-top: 8px;
-    padding: 8px;
-    border: 1px solid rgba(122, 31, 31, 0.18);
-    border-radius: 6px;
-    background: #fff9f6;
-    font-size: 0.78rem;
-}
-
-.guest-whatsapp-confirmation span {
-    flex-basis: 100%;
-    color: #5d3834;
-    font-weight: 600;
-}
-
-.guest-whatsapp-confirmation button,
 .guest-whatsapp-history button {
     border: 1px solid rgba(0, 0, 0, 0.14);
     border-radius: 5px;
@@ -2559,12 +2539,66 @@
     cursor: pointer;
 }
 
-.guest-whatsapp-confirmation button:disabled,
 .guest-whatsapp-history button:disabled {
     cursor: wait;
     opacity: 0.55;
 }
 
+.guest-whatsapp-manual-actions {
+    display: grid;
+    gap: 7px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.guest-whatsapp-manual-actions > span {
+    color: #6d625c;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.guest-whatsapp-manual-actions > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.guest-whatsapp-manual-actions button {
+    display: inline-flex;
+    flex: 1 1 128px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 38px;
+    border: 1px solid rgba(43, 105, 67, 0.28);
+    border-radius: 6px;
+    padding: 7px 9px;
+    background: #f5fbf6;
+    color: #285e3d;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.guest-whatsapp-manual-actions button:hover,
+.guest-whatsapp-manual-actions button:focus-visible {
+    border-color: rgba(43, 105, 67, 0.58);
+    outline: none;
+    background: #eaf6ed;
+}
+
+.guest-whatsapp-manual-actions button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
+.guest-whatsapp-manual-actions svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
 .guest-whatsapp-history {
     margin-top: 8px;
     color: #5d5751;
@@ -2811,7 +2845,7 @@
 
     .guest-mobile-card-header {
         display: grid;
-        grid-template-columns: 22px minmax(0, 1fr);
+        grid-template-columns: 22px minmax(0, 1fr) 40px;
         align-items: start;
         gap: 10px;
     }
@@ -2847,7 +2881,8 @@
         border-bottom: 1px solid rgba(55, 42, 35, 0.09);
     }
 
-    .guest-mobile-card-summary > span {
+    .guest-mobile-card-summary > span,
+    .guest-mobile-card-summary > .guest-mobile-editable-row {
         display: flex;
         justify-content: space-between;
         gap: 14px;
@@ -2864,6 +2899,84 @@
         text-align: left;
     }
 
+    .guest-mobile-card-name {
+        min-width: 0;
+    }
+
+    .guest-mobile-card-name input,
+    .guest-mobile-editable-value input {
+        width: 100%;
+        min-width: 0;
+        min-height: 40px;
+        border: 1px solid rgba(55, 42, 35, 0.2);
+        border-radius: 6px;
+        padding: 8px 9px;
+        background: #ffffff;
+        color: #2e2723;
+        font: inherit;
+        font-size: 0.95rem;
+    }
+
+    .guest-mobile-card-name input:focus,
+    .guest-mobile-editable-value input:focus {
+        border-color: rgba(122, 31, 31, 0.58);
+        outline: 2px solid rgba(122, 31, 31, 0.1);
+        outline-offset: 1px;
+    }
+
+    .guest-mobile-card-name input.cell-error,
+    .guest-mobile-editable-value input.cell-error {
+        border-color: #b84a42;
+        background: #fffafa;
+    }
+
+    .guest-mobile-card-name em,
+    .guest-mobile-editable-row em {
+        color: #9a332c;
+        font-size: 0.72rem;
+        font-style: normal;
+        line-height: 1.35;
+    }
+
+    .guest-mobile-field-edit {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        border: 1px solid rgba(122, 31, 31, 0.18);
+        border-radius: 50%;
+        padding: 0;
+        background: #fbf7f2;
+        color: #7a1f1f;
+        cursor: pointer;
+    }
+
+    .guest-mobile-field-edit svg {
+        width: 17px;
+        height: 17px;
+    }
+
+    .guest-mobile-editable-row {
+        min-width: 0;
+    }
+
+    .guest-mobile-editable-value {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 40px;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .guest-mobile-editable-value > span {
+        min-width: 0;
+        color: #615852;
+        text-align: right;
+        overflow-wrap: anywhere;
+
+    }
     .guest-mobile-whatsapp-action {
         display: flex;
         align-items: center;
@@ -2887,30 +3000,6 @@
         background: #e9e6e3;
         color: #766e69;
         cursor: not-allowed;
-    }
-
-    .guest-mobile-card .guest-whatsapp-confirmation {
-        margin-top: 10px;
-        padding: 10px;
-    }
-
-    .guest-mobile-card .guest-whatsapp-confirmation button {
-        min-height: 40px;
-        padding-inline: 11px;
-    }
-
-    .guest-mobile-manage-toggle {
-        width: 100%;
-        min-height: 42px;
-        margin-top: 9px;
-        border: 0;
-        border-radius: 6px;
-        background: transparent;
-        color: #7a1f1f;
-        font: inherit;
-        font-size: 0.84rem;
-        font-weight: 700;
-        cursor: pointer;
     }
 
     .guest-mobile-editor {
@@ -4153,7 +4242,8 @@
         min-width: 0;
     }
 
-    .guest-mobile-card-summary > span {
+    .guest-mobile-card-summary > span,
+    .guest-mobile-card-summary > .guest-mobile-editable-row {
         display: grid;
         grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
         align-items: start;
@@ -4161,7 +4251,8 @@
     }
 
 
-    .guest-mobile-card-summary > span {
+    .guest-mobile-card-summary > span,
+    .guest-mobile-card-summary > .guest-mobile-editable-row {
         overflow-wrap: anywhere;
         word-break: break-word;
     }
@@ -4236,8 +4327,7 @@
         cursor: pointer;
     }
 
-    .guest-mobile-whatsapp-action,
-    .guest-mobile-manage-toggle {
+    .guest-mobile-whatsapp-action {
         box-sizing: border-box;
         max-width: 100%;
         white-space: normal;
