@@ -4023,6 +4023,51 @@ export default function Dashboard({
                                                     </button>
                                                 </div>
                                             </div>
+                                            {isExpanded && (
+                                                <div className="guest-mobile-editor guest-mobile-inline-event-editor">
+                                                    <div className="guest-mobile-event-editor">
+                                                        <strong>Choose invited events</strong>
+                                                        <div className="guest-event-options compact">
+                                                            {weddingData.events.map((event) => (
+                                                                <label key={event.id} className="guest-event-count-option">
+                                                                    <span className="guest-event-count-check">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={guest.invitedEventIds.includes(event.id)}
+                                                                            onChange={() => toggleGuestEvent(guestIndex, event.id)}
+                                                                        />
+                                                                        {event.eventName}
+                                                                    </span>
+                                                                    {guest.invitedEventIds.includes(event.id) && (
+                                                                        <span className="guest-event-scope-input">
+                                                                            <span>Invitees</span>
+                                                                            <select
+                                                                                aria-label={`${event.eventName} invitee scope`}
+                                                                                value={getGuestEventInviteScope(guest, event.id)}
+                                                                                onChange={(inputEvent) => updateGuestEventInviteScope(guestIndex, event.id, inputEvent.target.value as 'all' | 'number')}
+                                                                            >
+                                                                                <option value="all">All</option>
+                                                                                <option value="number" disabled={normalizeInvitedCount(guest.invitedCount) <= 1}>Specific number</option>
+                                                                            </select>
+                                                                            {getGuestEventInviteScope(guest, event.id) === 'number' && (
+                                                                                <input
+                                                                                    aria-label={`${event.eventName} invitee count`}
+                                                                                    type="number"
+                                                                                    min="1"
+                                                                                    max={Math.max(1, normalizeInvitedCount(guest.invitedCount) - 1)}
+                                                                                    value={getGuestEventInvitedCount(guest, event.id)}
+                                                                                    onChange={(inputEvent) => updateGuestEventInvitedCount(guestIndex, event.id, Number(inputEvent.target.value))}
+                                                                                />
+                                                                            )}
+                                                                        </span>
+                                                                    )}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        {validation.guests[guestIndex]?.invitedEventIds && <em>{validation.guests[guestIndex]?.invitedEventIds}</em>}
+                                                    </div>
+                                                </div>
+                                            )}
                                             <div className="guest-mobile-rsvp-detail">
                                                 <strong>RSVP Summary</strong>
                                                 <div>
@@ -4106,91 +4151,27 @@ export default function Dashboard({
 
 
 
-                                        {isExpanded && (
-                                            <div className="guest-mobile-editor">
-
-                                                <div className="guest-mobile-event-editor">
-                                                    <strong>Invited events</strong>
-                                                    <div className="guest-event-options compact">
-                                                        {weddingData.events.map((event) => (
-                                                            <label key={event.id} className="guest-event-count-option">
-                                                                <span className="guest-event-count-check">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={guest.invitedEventIds.includes(event.id)}
-                                                                        onChange={() => toggleGuestEvent(guestIndex, event.id)}
-                                                                    />
-                                                                    {event.eventName}
-                                                                </span>
-                                                                {guest.invitedEventIds.includes(event.id) && (
-                                                                    <span className="guest-event-scope-input">
-                                                                        <span>Invitees</span>
-                                                                        <select
-                                                                            aria-label={`${event.eventName} invitee scope`}
-                                                                            value={getGuestEventInviteScope(guest, event.id)}
-                                                                            onChange={(inputEvent) => updateGuestEventInviteScope(guestIndex, event.id, inputEvent.target.value as 'all' | 'number')}
-                                                                        >
-                                                                            <option value="all">All</option>
-                                                                            <option value="number" disabled={normalizeInvitedCount(guest.invitedCount) <= 1}>Specific number</option>
-                                                                        </select>
-                                                                        {getGuestEventInviteScope(guest, event.id) === 'number' && (
-                                                                            <input
-                                                                                aria-label={`${event.eventName} invitee count`}
-                                                                                type="number"
-                                                                                min="1"
-                                                                                max={Math.max(1, normalizeInvitedCount(guest.invitedCount) - 1)}
-                                                                                value={getGuestEventInvitedCount(guest, event.id)}
-                                                                                onChange={(inputEvent) => updateGuestEventInvitedCount(guestIndex, event.id, Number(inputEvent.target.value))}
-                                                                            />
-                                                                        )}
-                                                                    </span>
-                                                                )}
-                                                            </label>
-                                                        ))}
-                                                    </div>
-                                                    {validation.guests[guestIndex]?.invitedEventIds && <em>{validation.guests[guestIndex]?.invitedEventIds}</em>}
+                                        {messageHistory.length > 0 && (
+                                            <details className="guest-whatsapp-history">
+                                                <summary>Message history ({messageHistory.length})</summary>
+                                                <div>
+                                                    {messageHistory.map((entry) => (
+                                                        <span key={entry.id}>
+                                                            <span>
+                                                                <strong>{entry.messageType === 'invitation' ? 'Invitation' : 'Reminder'}</strong>
+                                                                <time dateTime={entry.sentAt}>{new Date(entry.sentAt).toLocaleString()}</time>
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                disabled={guestMessageHistorySavingKey === entry.id}
+                                                                onClick={() => removeGuestMessageRecord(entry)}
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        </span>
+                                                    ))}
                                                 </div>
-
-                                                <div className="guest-mobile-secondary-actions">
-                                                    <button type="button" onClick={() => copyGuestInviteLink(guest)}>Copy invite link</button>
-                                                    <button type="button" onClick={() => previewGuestInvite(guest)}>Preview invite</button>
-                                                    {firstInvitation && inviteWhatsAppUrl && (
-                                                        <a
-                                                            href={inviteWhatsAppUrl}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                        >
-                                                            Resend invitation
-                                                        </a>
-                                                    )}
-                                                </div>
-
-                                                {messageHistory.length > 0 && (
-                                                    <details className="guest-whatsapp-history">
-                                                        <summary>Message history ({messageHistory.length})</summary>
-                                                        <div>
-                                                            {messageHistory.map((entry) => (
-                                                                <span key={entry.id}>
-                                                                    <span>
-                                                                        <strong>{entry.messageType === 'invitation' ? 'Invitation' : 'Reminder'}</strong>
-                                                                        <time dateTime={entry.sentAt}>{new Date(entry.sentAt).toLocaleString()}</time>
-                                                                    </span>
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={guestMessageHistorySavingKey === entry.id}
-                                                                        onClick={() => removeGuestMessageRecord(entry)}
-                                                                    >
-                                                                        Remove
-                                                                    </button>
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    </details>
-                                                )}
-                                                <p className="guest-mobile-last-updated">
-                                                    Last RSVP update: {guestRsvpSummary?.lastUpdated ? new Date(guestRsvpSummary.lastUpdated).toLocaleString() : 'Not submitted'}
-                                                </p>
-                                            </div>
+                                            </details>
                                         )}
                                     </article>
                                 );

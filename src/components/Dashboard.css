@@ -3009,6 +3009,13 @@
         padding-top: 14px;
         border-top: 1px solid rgba(55, 42, 35, 0.1);
     }
+    .guest-mobile-inline-event-editor {
+        margin-top: 0;
+        padding: 12px;
+        border: 1px solid rgba(122, 31, 31, 0.14);
+        border-radius: 7px;
+        background: #fcf9f5;
+    }
 
     .guest-mobile-editor > label,
     .guest-mobile-editor-row > label {
