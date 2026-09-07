@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import './Section4.css';
 import {
     mockRsvpResponsesStorageKey,
@@ -79,6 +79,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
     });
     const [submitted, setSubmitted] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const successMessageRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -108,6 +109,19 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
             mounted = false;
         };
     }, [events, guest, weddingId, weddingSlug]);
+
+    useEffect(() => {
+        if (!submitted) return;
+
+        const frameId = window.requestAnimationFrame(() => {
+            successMessageRef.current?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest',
+            });
+        });
+
+        return () => window.cancelAnimationFrame(frameId);
+    }, [submitted]);
 
     const hasPositiveResponse = useMemo(() => (
         responses.some((response) => response.status === 'yes' || response.status === 'maybe')
@@ -303,7 +317,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                 </button>
 
                 {submitted && (
-                    <div className="rsvp-step fade-in success-step">
+                    <div ref={successMessageRef} className="rsvp-step success-step rsvp-submit-success" role="status" aria-live="polite">
                         {rsvp.successMessage.map((message) => (
                             <p key={message} className="success-text">{message}</p>
                         ))}

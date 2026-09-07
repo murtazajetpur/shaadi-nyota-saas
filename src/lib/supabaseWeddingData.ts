@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   DEFAULT_GUEST_RECORD_LIMIT,
   DEFAULT_INVITEE_LIMIT,
@@ -125,10 +126,13 @@ interface SupabaseGuestRow {
   wedding_id: string;
   guest_name: string;
   phone: string | null;
+  phone_input?: string | null;
+  client_ref?: string | null;
   invited_count: number | null;
   category: string | null;
   invite_code: string;
   meal_preference: MealPreference | null;
+  updated_at?: string | null;
 }
 
 interface SupabaseGuestEventInviteRow {
@@ -167,6 +171,19 @@ interface TransactionalRelationalRpcPayload {
     guest_invites?: number;
     guest_rsvp_responses?: number;
   };
+}
+
+interface GuestDraftRpcPayload {
+  success: boolean;
+  client_id: string;
+  guest: SupabaseGuestRow;
+  guest_event_invites: SupabaseGuestEventInviteRow[];
+}
+
+interface DashboardSaveRpcPayload {
+  success: boolean;
+  wedding_updated_at: string;
+  events: SupabaseEventRow[];
 }
 
 const fallbackWedding = () => {
@@ -378,7 +395,7 @@ const mapGuestRows = (
   return {
     id: guest.id,
     guestName: guest.guest_name,
-    phone: normalizeGuestPhone(guest.phone ?? '') || guest.phone || '',
+    phone: guest.phone_input ?? (normalizeGuestPhone(guest.phone ?? '') || guest.phone || ''),
     invitedCount: normalizeInvitedCount(guest.invited_count),
     category: guest.category ?? '',
     inviteCode: guest.invite_code,
@@ -388,6 +405,7 @@ const mapGuestRows = (
       normalizeInvitedCount(invite.invited_count ?? guest.invited_count),
     ])),
     mealPreference: guest.meal_preference ?? '',
+    updatedAt: guest.updated_at ?? undefined,
   };
 });
 
@@ -421,6 +439,7 @@ const mapWeddingBundle = (
       pageTitle: wedding.page_title || `${displayName} | Shaadi Nyota`,
       guestRecordLimit: wedding.guest_record_limit ?? DEFAULT_GUEST_RECORD_LIMIT,
       inviteeLimit: wedding.invitee_limit ?? DEFAULT_INVITEE_LIMIT,
+      updatedAt: wedding.updated_at ?? undefined,
     },
     hero: {
       revealStyle,
@@ -487,14 +506,24 @@ const mapWeddingBundle = (
 
 export async function loadSupabaseWeddingBundle(
   weddingId: string,
-  options: { includeGuests?: boolean } = {}
+  options: { includeGuests?: boolean; signal?: AbortSignal; client?: SupabaseClient } = {}
 ) {
-  if (!supabase) return { wedding: null, error: 'Supabase is not configured.' };
+  const client = options.client ?? supabase;
+  if (!client) return { wedding: null, error: 'Supabase is not configured.' };
+
+  const weddingQuery = client.from('weddings').select('*').eq('id', weddingId);
+  const settingsQuery = client.from('wedding_settings').select('*').eq('wedding_id', weddingId);
+  const eventsQuery = client.from('events').select('*').eq('wedding_id', weddingId).order('sort_order', { ascending: true });
+  if (options.signal) {
+    weddingQuery.abortSignal(options.signal);
+    settingsQuery.abortSignal(options.signal);
+    eventsQuery.abortSignal(options.signal);
+  }
 
   const [{ data: wedding, error: weddingError }, { data: settings, error: settingsError }, { data: events, error: eventsError }] = await Promise.all([
-    supabase.from('weddings').select('*').eq('id', weddingId).single(),
-    supabase.from('wedding_settings').select('*').eq('wedding_id', weddingId).maybeSingle(),
-    supabase.from('events').select('*').eq('wedding_id', weddingId).order('sort_order', { ascending: true }),
+    weddingQuery.single(),
+    settingsQuery.maybeSingle(),
+    eventsQuery,
   ]);
 
   if (weddingError) return { wedding: null, error: weddingError.message };
@@ -505,9 +534,16 @@ export async function loadSupabaseWeddingBundle(
   let invites: SupabaseGuestEventInviteRow[] = [];
 
   if (options.includeGuests) {
+    const guestsQuery = client.from('guests').select('*').eq('wedding_id', weddingId).order('created_at', { ascending: false });
+    const invitesQuery = client.from('guest_event_invites').select('guest_id,event_id,invited_count').eq('wedding_id', weddingId);
+    if (options.signal) {
+      guestsQuery.abortSignal(options.signal);
+      invitesQuery.abortSignal(options.signal);
+    }
+
     const [{ data: guestRows, error: guestsError }, { data: inviteRows, error: invitesError }] = await Promise.all([
-      supabase.from('guests').select('*').eq('wedding_id', weddingId).order('created_at', { ascending: true }),
-      supabase.from('guest_event_invites').select('guest_id,event_id,invited_count').eq('wedding_id', weddingId),
+      guestsQuery,
+      invitesQuery,
     ]);
     if (guestsError) return { wedding: null, error: guestsError.message };
     if (invitesError) return { wedding: null, error: invitesError.message };
@@ -782,60 +818,65 @@ const whatsappSettingsColumns = new Set([
   'whatsapp_preview_image_src',
 ]);
 
+const buildWeddingSettingsPayload = (wedding: SampleWeddingData) => ({
+  hero_reveal_style: wedding.hero.revealStyle,
+  hero_reveal_cta_text: wedding.hero.revealCtaText,
+  hero_scroll_hint_text: wedding.hero.scrollHintText,
+  hero_video_src: wedding.hero.videoSrc,
+  hero_poster_src: wedding.hero.posterSrc,
+  hero_skip_reveal_image: wedding.hero.skipRevealImage === true,
+  hero_reveal_image_src: wedding.hero.revealImageSrc,
+  hero_reveal_image_type: wedding.hero.revealImageType,
+  hero_reveal_image_alt: wedding.hero.revealImageAlt,
+  hero_reveal_image_show_at_seconds: wedding.hero.revealImageShowAtSeconds,
+  hero_fade_at_seconds: wedding.hero.heroFadeAtSeconds,
+  music_audio_src: wedding.music.audioSrc,
+  music_title: wedding.music.title,
+  whatsapp_invite_message: wedding.whatsapp.inviteMessage,
+  whatsapp_reminder_message: wedding.whatsapp.reminderMessage,
+  whatsapp_preview_title: wedding.whatsapp.previewTitle,
+  whatsapp_preview_description: wedding.whatsapp.previewDescription,
+  whatsapp_preview_image_src: wedding.whatsapp.previewImageSrc,
+  couple_enabled: wedding.couple.enabled,
+  couple_intro_line: wedding.couple.introLine,
+  couple_blessing_line: wedding.couple.blessingLine,
+  couple_background_image_src: wedding.couple.backgroundImageSrc,
+  story_title: wedding.couple.storyTitle,
+  story_text: wedding.couple.storyText,
+  story_image_src: wedding.couple.backgroundImageSrc,
+  story_image_alt: wedding.couple.imageAlt,
+  rsvp_enabled: wedding.rsvp.enabled,
+  rsvp_title: wedding.rsvp.title,
+  rsvp_subtitle: wedding.rsvp.subtitle,
+  rsvp_labels: {
+    nameQuestion: wedding.rsvp.nameQuestion,
+    namePlaceholder: wedding.rsvp.namePlaceholder,
+    attendanceQuestion: wedding.rsvp.attendanceQuestion,
+    phoneQuestion: wedding.rsvp.phoneQuestion,
+    phonePlaceholder: wedding.rsvp.phonePlaceholder,
+    responseOptions: wedding.rsvp.responseOptions,
+  },
+  rsvp_meal_preference_enabled: wedding.rsvp.mealPreferenceEnabled,
+  rsvp_attending_count_enabled: wedding.rsvp.attendingCountEnabled,
+  rsvp_meal_options: wedding.rsvp.mealOptions,
+  rsvp_success_message: wedding.rsvp.successMessage,
+  rsvp_background_image_src: wedding.rsvp.backgroundImageSrc,
+  closing_enabled: wedding.closing.enabled,
+  closing_include_photos: wedding.closing.includePhotos,
+  closing_layout: wedding.closing.includePhotos ? 'gallery' : 'simple',
+  closing_line: wedding.closing.closingLine,
+  closing_couple_display_name: wedding.closing.coupleDisplayName,
+  closing_message: wedding.closing.message,
+  closing_frame_image_src: wedding.closing.frameImageSrc,
+  closing_background_image_src: wedding.closing.backgroundImageSrc,
+  closing_carousel_images: wedding.closing.carouselImages,
+  closing_gallery_images: wedding.closing.carouselImages,
+});
+
 export async function saveSupabaseWeddingSettings(weddingId: string, wedding: SampleWeddingData) {
   if (!supabase) return { error: 'Supabase is not configured.' };
 
-  const basePayload = {
-    wedding_id: weddingId,
-    hero_reveal_style: wedding.hero.revealStyle,
-    hero_reveal_cta_text: wedding.hero.revealCtaText,
-    hero_scroll_hint_text: wedding.hero.scrollHintText,
-    hero_video_src: wedding.hero.videoSrc,
-    hero_poster_src: wedding.hero.posterSrc,
-    hero_skip_reveal_image: wedding.hero.skipRevealImage === true,
-    hero_reveal_image_src: wedding.hero.revealImageSrc,
-    hero_reveal_image_type: wedding.hero.revealImageType,
-    hero_reveal_image_alt: wedding.hero.revealImageAlt,
-    hero_reveal_image_show_at_seconds: wedding.hero.revealImageShowAtSeconds,
-    hero_fade_at_seconds: wedding.hero.heroFadeAtSeconds,
-    music_audio_src: wedding.music.audioSrc,
-    music_title: wedding.music.title,
-    whatsapp_invite_message: wedding.whatsapp.inviteMessage,
-    whatsapp_reminder_message: wedding.whatsapp.reminderMessage,
-    whatsapp_preview_title: wedding.whatsapp.previewTitle,
-    whatsapp_preview_description: wedding.whatsapp.previewDescription,
-    whatsapp_preview_image_src: wedding.whatsapp.previewImageSrc,
-    couple_enabled: wedding.couple.enabled,
-    couple_intro_line: wedding.couple.introLine,
-    couple_blessing_line: wedding.couple.blessingLine,
-    couple_background_image_src: wedding.couple.backgroundImageSrc,
-    story_title: wedding.couple.storyTitle,
-    story_text: wedding.couple.storyText,
-    story_image_src: wedding.couple.backgroundImageSrc,
-    story_image_alt: wedding.couple.imageAlt,
-    rsvp_enabled: wedding.rsvp.enabled,
-    rsvp_title: wedding.rsvp.title,
-    rsvp_subtitle: wedding.rsvp.subtitle,
-    rsvp_labels: {
-      nameQuestion: wedding.rsvp.nameQuestion,
-      namePlaceholder: wedding.rsvp.namePlaceholder,
-      attendanceQuestion: wedding.rsvp.attendanceQuestion,
-      phoneQuestion: wedding.rsvp.phoneQuestion,
-      phonePlaceholder: wedding.rsvp.phonePlaceholder,
-      responseOptions: wedding.rsvp.responseOptions,
-    },
-    rsvp_meal_preference_enabled: wedding.rsvp.mealPreferenceEnabled,
-    rsvp_meal_options: wedding.rsvp.mealOptions,
-    rsvp_success_message: wedding.rsvp.successMessage,
-    rsvp_background_image_src: wedding.rsvp.backgroundImageSrc,
-    closing_include_photos: wedding.closing.includePhotos,
-    closing_layout: wedding.closing.includePhotos ? 'gallery' : 'simple',
-    closing_line: wedding.closing.closingLine,
-    closing_couple_display_name: wedding.closing.coupleDisplayName,
-    closing_message: wedding.closing.message,
-    closing_frame_image_src: wedding.closing.frameImageSrc,
-    closing_background_image_src: wedding.closing.backgroundImageSrc,
-  };
+  const basePayload = { wedding_id: weddingId, ...buildWeddingSettingsPayload(wedding) };
 
   const payload: Record<string, unknown> = {
     ...basePayload,
@@ -1028,6 +1069,9 @@ const transactionalSaveError = (message?: string | null) => {
   if (normalized.includes('does not belong') || normalized.includes('do not match') || normalized.includes('access denied')) {
     return 'Some saved selections no longer belong to this wedding. Refresh the page and try again.';
   }
+  if (normalized.includes('changed in another session')) {
+    return 'This guest was updated elsewhere while you were editing. Your changes are still on screen; review them and retry.';
+  }
   if (normalized.includes('guest phone') || normalized.includes('phone number')) {
     return 'One or more guest phone numbers are invalid. Use a valid mobile number and include the country code for non-Indian numbers.';
   }
@@ -1042,6 +1086,121 @@ const mapTransactionalPayload = (payload: TransactionalRelationalRpcPayload) => 
   guests: mapGuestRows(payload.guests ?? [], payload.guest_event_invites ?? []),
   removed: payload.removed,
 });
+
+const isMissingGuestAutosaveMigration = (message?: string | null) => {
+  const normalized = message?.toLowerCase() ?? '';
+  return normalized.includes('schema cache') && (
+    normalized.includes('save_wedding_guest_draft') ||
+    normalized.includes('save_wedding_dashboard_transactional') ||
+    normalized.includes('phone_input') ||
+    normalized.includes('client_ref')
+  );
+};
+
+const guestDraftSaveTimeoutMs = 30000;
+
+export async function saveSupabaseGuestDraft(
+  weddingId: string,
+  guest: WeddingGuest,
+  options: { client?: SupabaseClient } = {}
+) {
+  const client = options.client ?? supabase;
+  if (!client) return { guest: null, error: 'Supabase is not configured.', detail: '', code: '' };
+
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), guestDraftSaveTimeoutMs);
+
+  try {
+    const { data, error } = await client.rpc('save_wedding_guest_draft', {
+      target_wedding_id: weddingId,
+      guest_row: {
+        id: guest.id,
+        guest_name: guest.guestName,
+        phone_input: guest.phone,
+        invited_count: normalizeInvitedCount(guest.invitedCount),
+        category: guest.category,
+        invite_code: guest.inviteCode,
+        meal_preference: guest.mealPreference || null,
+        invited_event_ids: guest.invitedEventIds,
+        invited_event_counts: guest.invitedEventCounts ?? {},
+      },
+      expected_updated_at: guest.updatedAt ?? null,
+    }).abortSignal(abortController.signal);
+
+    if (error) {
+      return {
+        guest: null,
+        error: isMissingGuestAutosaveMigration(error.message)
+          ? 'Guest autosave is not available yet. Run supabase/guest_autosave_and_save_reliability.sql and try again.'
+          : transactionalSaveError(error.message),
+        detail: error.message,
+        code: error.code ?? '',
+      };
+    }
+
+    const payload = data as GuestDraftRpcPayload;
+    const savedGuest = mapGuestRows([payload.guest], payload.guest_event_invites ?? [])[0] ?? null;
+    return { guest: savedGuest, clientId: payload.client_id, error: '', detail: '', code: '' };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      guest: null,
+      error: abortController.signal.aborted
+        ? 'Saving this guest took too long. Please check your connection and retry.'
+        : 'This guest could not be saved. Please retry.',
+      detail,
+      code: '',
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function saveSupabaseWeddingDashboard(
+  weddingId: string,
+  wedding: SampleWeddingData,
+  options: { client?: SupabaseClient } = {}
+) {
+  const client = options.client ?? supabase;
+  if (!client) return { error: 'Supabase is not configured.', detail: '', events: [], weddingUpdatedAt: '' };
+
+  const { data, error } = await client.rpc('save_wedding_dashboard_transactional', {
+    target_wedding_id: weddingId,
+    wedding_row: {
+      bride_name: wedding.couple.brideName.trim(),
+      groom_name: wedding.couple.groomName.trim(),
+      display_name: wedding.couple.displayName.trim(),
+      slug: wedding.wedding.slug.trim(),
+      theme_key: wedding.wedding.themeKey.trim(),
+      page_title: wedding.wedding.pageTitle.trim(),
+    },
+    settings_row: buildWeddingSettingsPayload(wedding),
+    event_rows: wedding.events.map((event, index) => eventToTransactionalRow(event, index)),
+    expected_updated_at: wedding.wedding.updatedAt ?? null,
+  });
+
+  if (error) {
+    const addressError = error.message.toLowerCase().includes('duplicate') && error.message.toLowerCase().includes('slug');
+    return {
+      error: addressError
+        ? 'This website address is already in use. Please choose a different address.'
+        : isMissingGuestAutosaveMigration(error.message)
+          ? 'Reliable dashboard saving is not available yet. Run supabase/guest_autosave_and_save_reliability.sql and try again.'
+          : transactionalSaveError(error.message),
+      detail: error.message,
+      events: [],
+      weddingUpdatedAt: '',
+    };
+  }
+
+  const payload = data as DashboardSaveRpcPayload;
+  return {
+    error: '',
+    detail: '',
+    events: (payload.events ?? []).map(mapEventRow),
+    weddingUpdatedAt: payload.wedding_updated_at ?? '',
+  };
+}
 
 export async function saveSupabaseRelationalData(
   weddingId: string,

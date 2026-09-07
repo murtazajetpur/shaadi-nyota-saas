@@ -45,13 +45,14 @@ Running the setup from scratch is a future reproducibility and production-readin
 4. `supabase/security_hardening_phase_1.sql`
 5. `supabase/data_integrity_phase_2.sql`
 6. Apply the feature migrations required by the deployed frontend.
-7. Create the public `wedding-assets` bucket and run `supabase/storage_policies.sql`.
-8. Run `supabase/add_wedding_media_library.sql` when enabling reusable uploads.
-9. For an existing production project, run `supabase/production_security_hotfix.sql`.
-10. Run `supabase/verify_production_security_hotfix.sql`; all checks must pass and both detail queries must return zero rows.
-11. Run `supabase/add_admin_delete_wedding.sql` to enable permanent admin wedding deletion and uploaded-file cleanup.
-12. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`.
-13. Configure Auth settings, including Confirm Email behavior.
+7. Run `supabase/guest_autosave_and_save_reliability.sql` after those migrations; its dashboard RPC references the current wedding-settings and event columns.
+8. Create the public `wedding-assets` bucket and run `supabase/storage_policies.sql`.
+9. Run `supabase/add_wedding_media_library.sql` when enabling reusable uploads.
+10. For an existing production project, run `supabase/production_security_hotfix.sql`.
+11. Run `supabase/verify_production_security_hotfix.sql`; all checks must pass and both detail queries must return zero rows.
+12. Run `supabase/add_admin_delete_wedding.sql` to enable permanent admin wedding deletion and uploaded-file cleanup.
+13. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`.
+14. Configure Auth settings, including Confirm Email behavior.
 
 ## Guest Capacity Controls
 
@@ -162,3 +163,14 @@ Running the setup from scratch is a future reproducibility and production-readin
 - Ten-digit Indian mobile numbers default to `+91`; non-Indian numbers must include their country calling code.
 - Valid numbers are stored in canonical E.164 format, while shared family phone numbers produce warnings rather than blocking import.
 - The database trigger validates and normalizes every new guest phone write. Existing rows are not bulk-modified by the migration.
+
+## Guest Draft Save Reliability
+
+- Apply `supabase/guest_autosave_and_save_reliability.sql` before deploying this frontend.
+- Guest text edits stay local while typing and save when the user confirms with the check icon or Enter. Family Size and invited-event changes save immediately. **Save All Changes** remains a fallback for any dirty guest rows plus website edits.
+- Adding a guest performs one initial draft write to obtain a stable database UUID; subsequent keystrokes do not trigger database writes.
+- Invitation actions remain gated by invitation readiness and never treat an invalid draft as sendable.
+- Save All explicitly saves dirty guest rows, then commits wedding identity, settings, and event edits through one database transaction.
+- Guest saves and dashboard saves use `updated_at` conflict checks so another session cannot be silently overwritten.
+- Local dashboard drafts expire after seven days and are cleared on logout.
+- Supabase Realtime is not required for this behavior; database writes happen only at the explicit guest or dashboard save boundaries.

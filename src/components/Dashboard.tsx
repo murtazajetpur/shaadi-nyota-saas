@@ -20,7 +20,8 @@ import Section5 from './Section5';
 import WeddingMediaLibrary from './WeddingMediaLibrary';
 import './Dashboard.css';
 import { useAuth } from '../context/AuthContext';
-import { updateWeddingPaymentStatus, updateWeddingShell } from '../lib/weddingOnboarding';
+import { createAuthenticatedDataClient } from '../lib/supabaseClient';
+import { updateWeddingPaymentStatus } from '../lib/weddingOnboarding';
 import {
     createSupabaseEvent,
     deleteSupabaseEvent,
@@ -28,11 +29,11 @@ import {
     importSupabaseGuests,
     loadSupabaseRsvpResponses,
     loadSupabaseWeddingBundle,
-    replaceSupabaseGuestInvites,
-    saveSupabaseRelationalData,
-    saveSupabaseWeddingSettings,
+    saveSupabaseGuestDraft,
+    saveSupabaseWeddingDashboard,
 } from '../lib/supabaseWeddingData';
 import {
+    isPersistedGuestMessageId,
     loadGuestMessageHistory,
     recordGuestMessageSent,
     removeGuestMessageHistoryEntry,
@@ -154,9 +155,55 @@ const getGuestIdentityKey = (guestName: string, phone: string) => (
 type DashboardMode = 'couple' | 'admin';
 type GuestWhatsAppFilter = 'all' | 'invite-not-sent' | 'invite-sent' | 'no-reminders' | 'reminders-sent';
 type GuestRsvpFilter = 'all' | 'no-response' | 'pending' | 'complete' | 'attending' | 'maybe' | 'declined';
-type GuestEditableField = 'guestName' | 'phone' | 'category' | 'invitedCount';
+type GuestEditableField = 'guestName' | 'phone' | 'category';
 type GuestActivityFilter = 'all' | 'never' | 'last-7-days' | 'older-than-7-days';
-type GuestPhoneFilter = 'all' | 'available' | 'missing';
+type GuestReadinessFilter =
+    | 'all'
+    | 'ready'
+    | 'needs-attention'
+    | 'invalid-phone'
+    | 'no-events'
+    | 'missing-name'
+    | 'missing-category'
+    | 'save-issue'
+    | 'invalid-invitee-count';
+type GuestSavePhase = 'pending' | 'saving' | 'saved' | 'error';
+type GuestSaveState = {
+    phase: GuestSavePhase;
+    message?: string;
+};
+
+const cloneGuestDraft = (guest: WeddingGuest): WeddingGuest => ({
+    ...guest,
+    invitedEventIds: [...guest.invitedEventIds],
+    invitedEventCounts: { ...(guest.invitedEventCounts ?? {}) },
+});
+
+const getGuestDraftSignature = (guest: WeddingGuest) => JSON.stringify({
+    guestName: guest.guestName,
+    phone: guest.phone,
+    invitedCount: guest.invitedCount,
+    category: guest.category,
+    inviteCode: guest.inviteCode,
+    mealPreference: guest.mealPreference,
+    invitedEventIds: [...guest.invitedEventIds].sort(),
+    invitedEventCounts: Object.fromEntries(Object.entries(guest.invitedEventCounts ?? {}).sort(([left], [right]) => left.localeCompare(right))),
+});
+const isGuestSaveVersionConflict = (code?: string, detail?: string) => (
+    code === '40001' || detail?.toLowerCase().includes('changed in another session') === true
+);
+const getWeddingContentDraftSignature = (wedding: SampleWeddingData) => JSON.stringify({
+    ...wedding,
+    wedding: {
+        ...wedding.wedding,
+        status: '',
+        paymentStatus: '',
+        updatedAt: '',
+    },
+    rsvp: { ...wedding.rsvp, guests: [] },
+});
+
+
 
 class DashboardPreviewErrorBoundary extends Component<{
     children: ReactNode;
@@ -391,59 +438,6 @@ const normalizeInvitedCount = (value: unknown) => (
     Math.max(1, Math.floor(Number(value) || 1))
 );
 
-function GuestFamilySizeInput({
-    value,
-    onCommit,
-    onFinish,
-    className = '',
-    ariaLabel = 'Family Size',
-    autoFocus = false,
-}: {
-    value: number;
-    onCommit: (value: number) => boolean;
-    onFinish?: () => void;
-    className?: string;
-    ariaLabel?: string;
-    autoFocus?: boolean;
-}) {
-    const [draftValue, setDraftValue] = useState(String(value));
-
-    const commitValue = () => {
-        const parsedValue = Number(draftValue);
-        if (!draftValue.trim() || !Number.isInteger(parsedValue) || parsedValue < 1) {
-            setDraftValue(String(value));
-            onFinish?.();
-            return;
-        }
-
-        const didCommit = onCommit(parsedValue);
-        setDraftValue(String(didCommit ? parsedValue : value));
-        onFinish?.();
-    };
-
-    return (
-        <input
-            aria-label={ariaLabel}
-            autoFocus={autoFocus}
-            className={className}
-            type="number"
-            inputMode="numeric"
-            min="1"
-            max={MAX_GUEST_FAMILY_SIZE}
-            value={draftValue}
-            onFocus={(event) => event.currentTarget.select()}
-            onChange={(event) => setDraftValue(event.target.value)}
-            onBlur={commitValue}
-            onKeyDown={(event) => {
-                if (event.key === 'Enter') event.currentTarget.blur();
-                if (event.key === 'Escape') {
-                    setDraftValue(String(value));
-                    event.currentTarget.blur();
-                }
-            }}
-        />
-    );
-}
 
 const getGuestCapacityError = (wedding: SampleWeddingData) => {
     const guestRecordLimit = wedding.wedding.guestRecordLimit ?? DEFAULT_GUEST_RECORD_LIMIT;
@@ -471,6 +465,30 @@ const getGuestEventInvitedCount = (guest: WeddingGuest, eventId: string) => (
 
 const getGuestEventInviteScope = (guest: WeddingGuest, eventId: string) => (
     getGuestEventInvitedCount(guest, eventId) >= normalizeInvitedCount(guest.invitedCount) ? 'all' : 'number'
+);
+
+const getGuestReadinessChecks = (guest: WeddingGuest) => {
+    const familySize = normalizeInvitedCount(guest.invitedCount);
+    const phoneValidation = validateGuestPhone(guest.phone);
+    const invalidInviteeCount = guest.invitedEventIds.some((eventId) => {
+        const count = getGuestEventInvitedCount(guest, eventId);
+        return count < 1 || count > familySize;
+    });
+
+    return {
+        missingName: !guest.guestName.trim(),
+        invalidPhone: Boolean(phoneValidation.error),
+        phoneError: phoneValidation.error,
+        noEvents: guest.invitedEventIds.length === 0,
+        missingCategory: !guest.category.trim(),
+        invalidInviteeCount,
+    };
+};
+
+const getGuestPhoneDraftWarning = (phoneError: string) => (
+    phoneError
+        ? `${phoneError} This does not block saving the guest as a draft, but WhatsApp and send-status actions stay disabled until the number is corrected.`
+        : ''
 );
 
 const buildWhatsAppUrl = (phone: string, message: string) => {
@@ -701,15 +719,22 @@ type DashboardDraftSnapshot = {
     wedding: SampleWeddingData;
 };
 
+const dashboardDraftMaxAgeMs = 7 * 24 * 60 * 60 * 1000;
+
 const readDashboardDraft = (storageKey: string) => {
     try {
         const storedDraft = window.localStorage.getItem(storageKey);
         if (!storedDraft) return null;
         const parsed = JSON.parse(storedDraft) as DashboardDraftSnapshot | SampleWeddingData;
-        const wedding = 'wedding' in parsed && 'savedAt' in parsed
-            ? parsed.wedding
-            : parsed as SampleWeddingData;
-        return normalizeWedding(wedding);
+        if ('wedding' in parsed && 'savedAt' in parsed) {
+            const savedAt = new Date(parsed.savedAt).getTime();
+            if (!Number.isFinite(savedAt) || Date.now() - savedAt > dashboardDraftMaxAgeMs) {
+                window.localStorage.removeItem(storageKey);
+                return null;
+            }
+            return normalizeWedding(parsed.wedding);
+        }
+        return normalizeWedding(parsed as SampleWeddingData);
     } catch {
         window.localStorage.removeItem(storageKey);
         return null;
@@ -837,7 +862,11 @@ export default function Dashboard({
     eyebrow?: string;
     mode?: DashboardMode;
 }) {
-    const { user, isConfigured, signOut } = useAuth();
+    const { user, session, isConfigured, signOut } = useAuth();
+    const authenticatedDataClient = useMemo(
+        () => createAuthenticatedDataClient(session?.access_token ?? ''),
+        [session?.access_token]
+    );
     const dashboardDraftStorageKey = supabaseWeddingId
         ? createDashboardDraftStorageKey(mode, supabaseWeddingId, initialWedding?.wedding.slug)
         : mockDashboardDraftStorageKey;
@@ -852,13 +881,30 @@ export default function Dashboard({
     const [weddingData, setWeddingData] = useState<SampleWeddingData>(() => (
         restoredDashboardDraft ?? (initialWedding ? normalizeWedding(initialWedding) : loadInitialWedding())
     ));
+    const persistedWeddingBaseline = initialWedding
+        ? normalizeWedding(initialWedding)
+        : weddingData;
+    const persistedGuestBaseline = persistedWeddingBaseline.rsvp.guests;
+    const persistedGuestBaselineById = new Map(persistedGuestBaseline.map((guest) => [guest.id, guest]));
+    const restoredDirtyGuestIds = restoredDashboardDraft
+        ? weddingData.rsvp.guests
+            .filter((guest) => {
+                const baselineGuest = persistedGuestBaselineById.get(guest.id);
+                return !baselineGuest || getGuestDraftSignature(guest) !== getGuestDraftSignature(baselineGuest);
+            })
+            .map((guest) => guest.id)
+        : [];
+    const restoredHasUnsavedChanges = restoredDirtyGuestIds.length > 0 || Boolean(
+        restoredDashboardDraft
+        && getWeddingContentDraftSignature(weddingData) !== getWeddingContentDraftSignature(persistedWeddingBaseline)
+    );
     const guestMessageHistoryStorageScope = supabaseWeddingId ?? weddingData.wedding.slug;
     const [guestSearchQuery, setGuestSearchQuery] = useState('');
     const [guestCategoryFilter, setGuestCategoryFilter] = useState('all');
     const [guestWhatsAppFilter, setGuestWhatsAppFilter] = useState<GuestWhatsAppFilter>('all');
     const [guestRsvpFilter, setGuestRsvpFilter] = useState<GuestRsvpFilter>('all');
     const [guestActivityFilter, setGuestActivityFilter] = useState<GuestActivityFilter>('all');
-    const [guestPhoneFilter, setGuestPhoneFilter] = useState<GuestPhoneFilter>('all');
+    const [guestReadinessFilter, setGuestReadinessFilter] = useState<GuestReadinessFilter>('all');
     const [areGuestFiltersOpen, setAreGuestFiltersOpen] = useState(false);
     const [guestPage, setGuestPage] = useState(1);
     const [guestPageSize, setGuestPageSize] = useState<(typeof guestPageSizeOptions)[number]>(25);
@@ -888,7 +934,11 @@ export default function Dashboard({
     const [weddingMediaSetupRequired, setWeddingMediaSetupRequired] = useState(false);
     const [mediaUploadingSection, setMediaUploadingSection] = useState<WeddingMediaSection | ''>('');
     const [guestMessageHistorySavingKey, setGuestMessageHistorySavingKey] = useState('');
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(restoredDashboardDraft));
+    const [guestSaveStateById, setGuestSaveStateById] = useState<Record<string, GuestSaveState>>(() => (
+        Object.fromEntries(restoredDirtyGuestIds.map((guestId) => [guestId, { phase: 'pending' as const }]))
+    ));
+    const [isSavingDashboard, setIsSavingDashboard] = useState(false);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(restoredHasUnsavedChanges);
     const [saveStatus, setSaveStatus] = useState('');
     const [saveError, setSaveError] = useState('');
     const [saveErrorDetail, setSaveErrorDetail] = useState('');
@@ -896,7 +946,28 @@ export default function Dashboard({
     const [previewRefreshNonce, setPreviewRefreshNonce] = useState(0);
     const [isPreviewRefreshing, setIsPreviewRefreshing] = useState(false);
     const weddingDataRef = useRef(weddingData);
-    const hasUnsavedChangesRef = useRef(Boolean(restoredDashboardDraft));
+    const hasUnsavedChangesRef = useRef(restoredHasUnsavedChanges);
+    const isSaveInFlightRef = useRef(false);
+    const guestAutosaveVersionsRef = useRef(new Map<string, number>());
+    const guestAutosaveAliasesRef = useRef(new Map<string, string>());
+    const guestAutosaveInFlightRef = useRef(new Map<string, Promise<boolean>>());
+    const guestSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+    const guestAutosaveErrorsRef = useRef(new Map<string, string>());
+    const dashboardDraftWriteTimerRef = useRef<number | null>(null);
+    const dirtyGuestIdsRef = useRef(new Set(restoredDirtyGuestIds));
+    const savedGuestSnapshotsRef = useRef(new Map(persistedGuestBaseline.map((guest) => [guest.id, cloneGuestDraft(guest)])));
+    const savedWeddingContentSignatureRef = useRef(getWeddingContentDraftSignature(persistedWeddingBaseline));
+    const resetGuestSaveTracking = (persistedGuests: WeddingGuest[], dirtyGuestIds: string[] = []) => {
+        const dirtyIds = new Set(dirtyGuestIds);
+        savedGuestSnapshotsRef.current = new Map(persistedGuests.map((guest) => [guest.id, cloneGuestDraft(guest)]));
+        dirtyGuestIdsRef.current = dirtyIds;
+        guestAutosaveAliasesRef.current.clear();
+        guestAutosaveVersionsRef.current.clear();
+        guestAutosaveErrorsRef.current.clear();
+        setGuestSaveStateById(Object.fromEntries(
+            dirtyGuestIds.map((guestId) => [guestId, { phase: 'pending' as const }])
+        ));
+    };
     const activeDraftStorageKeyRef = useRef(dashboardDraftStorageKey);
     const activeTabStorageKeyRef = useRef(dashboardActiveTabStorageKey);
     const whatsappMessageTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -975,6 +1046,14 @@ export default function Dashboard({
     useEffect(() => {
         hasUnsavedChangesRef.current = hasUnsavedChanges;
     }, [hasUnsavedChanges]);
+
+    useEffect(() => () => {
+        guestAutosaveErrorsRef.current.clear();
+        if (dashboardDraftWriteTimerRef.current !== null) {
+            window.clearTimeout(dashboardDraftWriteTimerRef.current);
+            dashboardDraftWriteTimerRef.current = null;
+        }
+    }, []);
 
     useEffect(() => {
         if (activeTabStorageKeyRef.current === dashboardActiveTabStorageKey) return;
@@ -1141,16 +1220,34 @@ export default function Dashboard({
             const restoredDraft = supabaseWeddingId ? readDashboardDraft(dashboardDraftStorageKey) : null;
             if (restoredDraft) {
                 const nextDraft = applyAuthoritativePlanState(restoredDraft, initialWedding);
+                const baselineWedding = normalizeWedding(initialWedding);
+                savedWeddingContentSignatureRef.current = getWeddingContentDraftSignature(baselineWedding);
+                const baselineGuests = baselineWedding.rsvp.guests;
+                const baselineById = new Map(baselineGuests.map((guest) => [guest.id, guest]));
+                const dirtyGuestIds = nextDraft.rsvp.guests
+                    .filter((guest) => {
+                        const baselineGuest = baselineById.get(guest.id);
+                        return !baselineGuest || getGuestDraftSignature(guest) !== getGuestDraftSignature(baselineGuest);
+                    })
+                    .map((guest) => guest.id);
+                resetGuestSaveTracking(baselineGuests, dirtyGuestIds);
                 setWeddingData(nextDraft);
                 weddingDataRef.current = nextDraft;
-                setHasUnsavedChanges(true);
-                hasUnsavedChangesRef.current = true;
-                setSaveStatus('Unsaved draft restored');
+                const hasRestoredChanges = (
+                    dirtyGuestIds.length > 0
+                    || getWeddingContentDraftSignature(nextDraft) !== savedWeddingContentSignatureRef.current
+                );
+                setHasUnsavedChanges(hasRestoredChanges);
+                hasUnsavedChangesRef.current = hasRestoredChanges;
+                setSaveStatus(hasRestoredChanges ? 'Unsaved draft restored' : '');
+                if (!hasRestoredChanges) clearDashboardDraft(dashboardDraftStorageKey);
                 return;
             }
             const nextWedding = normalizeWedding(initialWedding);
+            savedWeddingContentSignatureRef.current = getWeddingContentDraftSignature(nextWedding);
             setWeddingData(nextWedding);
             weddingDataRef.current = nextWedding;
+            resetGuestSaveTracking(nextWedding.rsvp.guests);
             setHasUnsavedChanges(false);
             hasUnsavedChangesRef.current = false;
         }
@@ -1384,7 +1481,20 @@ export default function Dashboard({
                 const lastUpdatedTime = rsvpSummary?.lastUpdated ? Date.parse(rsvpSummary.lastUpdated) : Number.NaN;
                 const hasValidLastUpdated = Number.isFinite(lastUpdatedTime);
                 const normalizedCategory = guest.category.trim();
-                const hasPhone = Boolean(guest.phone.trim());
+                const readinessChecks = getGuestReadinessChecks(guest);
+                const resolvedGuestId = guestAutosaveAliasesRef.current.get(guest.id) ?? guest.id;
+                const guestSaveState = guestSaveStateById[guest.id] ?? guestSaveStateById[resolvedGuestId];
+                const hasSaveIssue = dirtyGuestIdsRef.current.has(guest.id)
+                    || dirtyGuestIdsRef.current.has(resolvedGuestId)
+                    || guestSaveState?.phase === 'pending'
+                    || guestSaveState?.phase === 'saving'
+                    || guestSaveState?.phase === 'error'
+                    || Boolean(supabaseWeddingId && !isPersistedGuestMessageId(guest.id));
+                const needsAttention = readinessChecks.missingName
+                    || readinessChecks.invalidPhone
+                    || readinessChecks.noEvents
+                    || readinessChecks.invalidInviteeCount
+                    || hasSaveIssue;
 
                 const matchesSearch = !query || [
                     guest.guestName,
@@ -1411,26 +1521,34 @@ export default function Dashboard({
                     || (guestActivityFilter === 'never' && !hasValidLastUpdated)
                     || (guestActivityFilter === 'last-7-days' && hasValidLastUpdated && lastUpdatedTime >= sevenDaysAgo)
                     || (guestActivityFilter === 'older-than-7-days' && hasValidLastUpdated && lastUpdatedTime < sevenDaysAgo);
-                const matchesPhone = guestPhoneFilter === 'all'
-                    || (guestPhoneFilter === 'available' && hasPhone)
-                    || (guestPhoneFilter === 'missing' && !hasPhone);
+                const matchesReadiness = guestReadinessFilter === 'all'
+                    || (guestReadinessFilter === 'ready' && !needsAttention)
+                    || (guestReadinessFilter === 'needs-attention' && needsAttention)
+                    || (guestReadinessFilter === 'invalid-phone' && readinessChecks.invalidPhone)
+                    || (guestReadinessFilter === 'no-events' && readinessChecks.noEvents)
+                    || (guestReadinessFilter === 'missing-name' && readinessChecks.missingName)
+                    || (guestReadinessFilter === 'missing-category' && readinessChecks.missingCategory)
+                    || (guestReadinessFilter === 'save-issue' && hasSaveIssue)
+                    || (guestReadinessFilter === 'invalid-invitee-count' && readinessChecks.invalidInviteeCount);
 
                 return matchesSearch
                     && matchesCategory
                     && matchesWhatsApp
                     && matchesRsvp
                     && matchesActivity
-                    && matchesPhone;
+                    && matchesReadiness;
             });
     }, [
         guestActivityFilter,
         guestCategoryFilter,
         guestMessageHistoryByGuestId,
-        guestPhoneFilter,
+        guestReadinessFilter,
         guestRsvpFilter,
         guestSearchQuery,
+        guestSaveStateById,
         guestWhatsAppFilter,
         rsvpAnalytics.guestSummaryById,
+        supabaseWeddingId,
         weddingData.rsvp.guests,
     ]);
     const activeGuestFilterCount = [
@@ -1439,7 +1557,7 @@ export default function Dashboard({
         guestWhatsAppFilter !== 'all',
         guestRsvpFilter !== 'all',
         guestActivityFilter !== 'all',
-        guestPhoneFilter !== 'all',
+        guestReadinessFilter !== 'all',
     ].filter(Boolean).length;
     const clearGuestFilters = () => {
         setGuestSearchQuery('');
@@ -1447,7 +1565,7 @@ export default function Dashboard({
         setGuestWhatsAppFilter('all');
         setGuestRsvpFilter('all');
         setGuestActivityFilter('all');
-        setGuestPhoneFilter('all');
+        setGuestReadinessFilter('all');
         setGuestPage(1);
     };
     const guestRecordLimit = weddingData.wedding.guestRecordLimit ?? DEFAULT_GUEST_RECORD_LIMIT;
@@ -1466,17 +1584,51 @@ export default function Dashboard({
         selectedGuestIds.includes(guest.id)
     ));
 
-    const updateWeddingData = (updater: (current: SampleWeddingData) => SampleWeddingData) => {
-        setWeddingData((current) => {
-            const nextWedding = updater(current);
-            weddingDataRef.current = nextWedding;
+    const queueDashboardDraftWrite = () => {
+        if (dashboardDraftWriteTimerRef.current !== null) {
+            window.clearTimeout(dashboardDraftWriteTimerRef.current);
+        }
+        dashboardDraftWriteTimerRef.current = window.setTimeout(() => {
+            dashboardDraftWriteTimerRef.current = null;
+            if (!hasUnsavedChangesRef.current) return;
+            const latestWedding = weddingDataRef.current;
             if (supabaseWeddingId) {
-                writeDashboardDraft(dashboardDraftStorageKey, nextWedding);
+                writeDashboardDraft(dashboardDraftStorageKey, latestWedding);
             } else {
-                window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(nextWedding));
+                window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(latestWedding));
             }
-            return nextWedding;
-        });
+        }, 600);
+    };
+
+    const clearQueuedDashboardDraftWrite = () => {
+        if (dashboardDraftWriteTimerRef.current === null) return;
+        window.clearTimeout(dashboardDraftWriteTimerRef.current);
+        dashboardDraftWriteTimerRef.current = null;
+    };
+
+    const syncDashboardDirtyState = () => {
+        const hasWebsiteChanges = (
+            getWeddingContentDraftSignature(weddingDataRef.current)
+            !== savedWeddingContentSignatureRef.current
+        );
+        const isDirty = hasWebsiteChanges || dirtyGuestIdsRef.current.size > 0;
+        hasUnsavedChangesRef.current = isDirty;
+        setHasUnsavedChanges(isDirty);
+        if (isDirty) {
+            queueDashboardDraftWrite();
+        } else {
+            clearQueuedDashboardDraftWrite();
+            if (supabaseWeddingId) clearDashboardDraft(dashboardDraftStorageKey);
+            else window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(weddingDataRef.current));
+        }
+        return isDirty;
+    };
+
+    const updateWeddingData = (updater: (current: SampleWeddingData) => SampleWeddingData) => {
+        const nextWedding = updater(weddingDataRef.current);
+        weddingDataRef.current = nextWedding;
+        setWeddingData(nextWedding);
+        queueDashboardDraftWrite();
         hasUnsavedChangesRef.current = true;
         setHasUnsavedChanges(true);
         setSaveStatus('');
@@ -1484,117 +1636,412 @@ export default function Dashboard({
         setSaveErrorDetail('');
     };
 
+    const resolveGuestAutosaveId = (guestId: string) => (
+        guestAutosaveAliasesRef.current.get(guestId) ?? guestId
+    );
+
+    const getGuestInvitationReadiness = (guest: WeddingGuest) => {
+        const issues: string[] = [];
+        const readinessChecks = getGuestReadinessChecks(guest);
+        if (dirtyGuestIdsRef.current.has(resolveGuestAutosaveId(guest.id))) {
+            issues.push('Save this guest before sending or recording an invitation.');
+        }
+        if (supabaseWeddingId && !isPersistedGuestMessageId(guest.id)) issues.push('Wait for this guest to finish saving.');
+        if (readinessChecks.missingName) issues.push('Add a guest or family name.');
+        if (readinessChecks.invalidPhone) issues.push(readinessChecks.phoneError);
+        if (readinessChecks.noEvents) issues.push('Select at least one invited event.');
+        if (readinessChecks.invalidInviteeCount) issues.push('Event invitees must be between 1 and Family Size.');
+        return { ready: issues.length === 0, issues, message: issues[0] ?? '' };
+    };
+
+    const getGuestDraftStatus = (guest: WeddingGuest) => {
+        const resolvedGuestId = resolveGuestAutosaveId(guest.id);
+        const saveState = guestSaveStateById[resolvedGuestId] ?? guestSaveStateById[guest.id];
+        if (saveState?.phase === 'saving') return { label: 'Saving...', tone: 'saving' };
+        if (saveState?.phase === 'pending') return { label: 'Unsaved changes', tone: 'pending' };
+        if (saveState?.phase === 'error') return { label: 'Save failed', tone: 'error', title: saveState.message };
+        const readiness = getGuestInvitationReadiness(guest);
+        if (!readiness.ready) return { label: 'Draft saved - needs details', tone: 'attention', title: readiness.message };
+        return { label: 'Saved', tone: 'saved' };
+    };
+
+    const applySavedGuest = (sourceGuestId: string, savedGuest: WeddingGuest, savedVersion: number) => {
+        const resolvedSourceId = resolveGuestAutosaveId(sourceGuestId);
+        const currentWedding = weddingDataRef.current;
+        const guestIndex = currentWedding.rsvp.guests.findIndex((guest) => (
+            guest.id === sourceGuestId || guest.id === resolvedSourceId || guest.id === savedGuest.id
+        ));
+        if (guestIndex < 0) return;
+
+        const currentGuest = currentWedding.rsvp.guests[guestIndex];
+        const currentVersion = Math.max(
+            guestAutosaveVersionsRef.current.get(sourceGuestId) ?? savedVersion,
+            guestAutosaveVersionsRef.current.get(resolvedSourceId) ?? savedVersion,
+            guestAutosaveVersionsRef.current.get(savedGuest.id) ?? savedVersion
+        );
+        const nextGuest = currentVersion > savedVersion
+            ? { ...currentGuest, id: savedGuest.id, updatedAt: savedGuest.updatedAt }
+            : savedGuest;
+        const nextGuests = [...currentWedding.rsvp.guests];
+        nextGuests[guestIndex] = nextGuest;
+        const nextWedding = {
+            ...currentWedding,
+            rsvp: { ...currentWedding.rsvp, guests: nextGuests },
+        };
+        weddingDataRef.current = nextWedding;
+        setWeddingData(nextWedding);
+        savedGuestSnapshotsRef.current.set(savedGuest.id, cloneGuestDraft(savedGuest));
+
+        if (sourceGuestId !== savedGuest.id) {
+            guestAutosaveAliasesRef.current.set(sourceGuestId, savedGuest.id);
+            guestAutosaveAliasesRef.current.set(resolvedSourceId, savedGuest.id);
+            guestAutosaveVersionsRef.current.set(savedGuest.id, currentVersion);
+            dirtyGuestIdsRef.current.delete(sourceGuestId);
+            dirtyGuestIdsRef.current.delete(resolvedSourceId);
+            setSelectedGuestIds((current) => current.map((id) => id === sourceGuestId ? savedGuest.id : id));
+            setExpandedGuestId((current) => current === sourceGuestId ? savedGuest.id : current);
+            setEditingGuestField((current) => current?.guestId === sourceGuestId
+                ? { ...current, guestId: savedGuest.id }
+                : current);
+        }
+        dirtyGuestIdsRef.current.delete(sourceGuestId);
+        dirtyGuestIdsRef.current.delete(resolvedSourceId);
+        if (currentVersion > savedVersion) {
+            dirtyGuestIdsRef.current.add(savedGuest.id);
+        } else {
+            dirtyGuestIdsRef.current.delete(savedGuest.id);
+        }
+
+        guestAutosaveErrorsRef.current.delete(sourceGuestId);
+        guestAutosaveErrorsRef.current.delete(resolvedSourceId);
+        guestAutosaveErrorsRef.current.delete(savedGuest.id);
+        setGuestSaveStateById((current) => {
+            const next = { ...current };
+            delete next[sourceGuestId];
+            delete next[resolvedSourceId];
+            next[savedGuest.id] = { phase: currentVersion > savedVersion ? 'pending' : 'saved' };
+            return next;
+        });
+        syncDashboardDirtyState();
+    };
+
+    const persistGuestDraft = async (
+        requestedGuestId: string,
+        requestedVersion?: number
+    ): Promise<boolean> => {
+        let guestId = resolveGuestAutosaveId(requestedGuestId);
+        const existingSave = guestAutosaveInFlightRef.current.get(guestId);
+        if (existingSave) {
+            const existingResult = await existingSave;
+            guestId = resolveGuestAutosaveId(requestedGuestId);
+            if (!existingResult) return false;
+            if (!dirtyGuestIdsRef.current.has(guestId)) return existingResult;
+            if (guestAutosaveInFlightRef.current.get(guestId) === existingSave) {
+                guestAutosaveInFlightRef.current.delete(guestId);
+            }
+            return persistGuestDraft(guestId);
+        }
+        guestId = resolveGuestAutosaveId(requestedGuestId);
+        const guest = weddingDataRef.current.rsvp.guests.find((item) => item.id === guestId || item.id === requestedGuestId);
+        if (!guest) return true;
+
+        const version = requestedVersion
+            ?? guestAutosaveVersionsRef.current.get(guest.id)
+            ?? guestAutosaveVersionsRef.current.get(requestedGuestId)
+            ?? 0;
+        setGuestSaveStateById((current) => ({ ...current, [guest.id]: { phase: 'saving' } }));
+
+        if (!supabaseWeddingId) {
+            savedGuestSnapshotsRef.current.set(guest.id, cloneGuestDraft(guest));
+            dirtyGuestIdsRef.current.delete(guest.id);
+            guestAutosaveErrorsRef.current.delete(guest.id);
+            setGuestSaveStateById((current) => ({ ...current, [guest.id]: { phase: 'saved' } }));
+            syncDashboardDirtyState();
+            return true;
+        }
+
+        const executeSave = async () => {
+            try {
+                let result = await saveSupabaseGuestDraft(supabaseWeddingId, guest, {
+                    client: authenticatedDataClient ?? undefined,
+                });
+                if (result.error && isGuestSaveVersionConflict(result.code, result.detail)) {
+                    const latest = await loadSupabaseWeddingBundle(supabaseWeddingId, {
+                    includeGuests: true,
+                    client: authenticatedDataClient ?? undefined,
+                });
+                    const remoteGuest = latest.wedding?.rsvp.guests.find((item) => item.id === guest.id);
+                    if (remoteGuest) {
+                        const submittedSignature = getGuestDraftSignature(guest);
+                        const remoteSignature = getGuestDraftSignature(remoteGuest);
+                        if (remoteSignature === submittedSignature) {
+                            applySavedGuest(guest.id, remoteGuest, version);
+                            return true;
+                        }
+
+                        const baselineGuest = savedGuestSnapshotsRef.current.get(guest.id);
+                        if (
+                            remoteGuest.updatedAt
+                            && baselineGuest
+                            && remoteSignature === getGuestDraftSignature(baselineGuest)
+                        ) {
+                            result = await saveSupabaseGuestDraft(supabaseWeddingId, {
+                                ...guest,
+                                updatedAt: remoteGuest.updatedAt,
+                            }, { client: authenticatedDataClient ?? undefined });
+                        }
+                    }
+                }
+                if (result.error || !result.guest) {
+                    const message = result.error || 'This guest could not be saved. Please retry.';
+                    guestAutosaveErrorsRef.current.set(guest.id, message);
+                    setGuestSaveStateById((current) => ({
+                        ...current,
+                        [guest.id]: { phase: 'error', message },
+                    }));
+                    setSaveStatus('');
+                    setSaveError(message);
+                    setSaveErrorDetail(result.detail);
+                    return false;
+                }
+                applySavedGuest(guest.id, result.guest, version);
+                return true;
+            } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                const message = 'This guest could not be saved. Please retry.';
+                guestAutosaveErrorsRef.current.set(guest.id, message);
+                setGuestSaveStateById((current) => ({
+                    ...current,
+                    [guest.id]: { phase: 'error', message },
+                }));
+                setSaveStatus('');
+                setSaveError(message);
+                setSaveErrorDetail(detail);
+                return false;
+            }
+        };
+
+        const savePromise = guestSaveQueueRef.current
+            .catch(() => undefined)
+            .then(executeSave);
+        guestSaveQueueRef.current = savePromise.then(
+            () => undefined,
+            () => undefined
+        );
+
+        guestAutosaveInFlightRef.current.set(guestId, savePromise);
+        try {
+            return await savePromise;
+        } finally {
+            if (guestAutosaveInFlightRef.current.get(guestId) === savePromise) {
+                guestAutosaveInFlightRef.current.delete(guestId);
+            }
+        }
+    };
+
+    const markGuestDirty = (guestId: string) => {
+        const resolvedId = resolveGuestAutosaveId(guestId);
+        const nextVersion = (guestAutosaveVersionsRef.current.get(resolvedId) ?? 0) + 1;
+        guestAutosaveVersionsRef.current.set(resolvedId, nextVersion);
+        guestAutosaveErrorsRef.current.delete(resolvedId);
+        dirtyGuestIdsRef.current.add(resolvedId);
+        setGuestSaveStateById((current) => ({ ...current, [resolvedId]: { phase: 'pending' } }));
+        return nextVersion;
+    };
+    const markAndSaveGuest = (guestId: string) => {
+        markGuestDirty(guestId);
+        void persistGuestDraft(guestId);
+    };
+
+
+    const pruneGuestAutosaveErrors = () => {
+        const activeGuestIds = new Set(weddingDataRef.current.rsvp.guests.map((guest) => guest.id));
+        guestAutosaveErrorsRef.current.forEach((_message, guestId) => {
+            const resolvedId = resolveGuestAutosaveId(guestId);
+            if (!activeGuestIds.has(guestId) && !activeGuestIds.has(resolvedId)) {
+                guestAutosaveErrorsRef.current.delete(guestId);
+                dirtyGuestIdsRef.current.delete(guestId);
+                savedGuestSnapshotsRef.current.delete(guestId);
+                setGuestSaveStateById((current) => {
+                    const next = { ...current };
+                    delete next[guestId];
+                    return next;
+                });
+            }
+        });
+        return Array.from(guestAutosaveErrorsRef.current.keys()).filter((guestId) => {
+            const resolvedId = resolveGuestAutosaveId(guestId);
+            return activeGuestIds.has(guestId) || activeGuestIds.has(resolvedId);
+        });
+    };
+
+    const saveDirtyGuests = async () => {
+        const dirtyGuestIds = Array.from(dirtyGuestIdsRef.current);
+        await Promise.all(dirtyGuestIds.map((guestId) => persistGuestDraft(
+            guestId,
+            guestAutosaveVersionsRef.current.get(resolveGuestAutosaveId(guestId))
+        )));
+        await Promise.all(Array.from(guestAutosaveInFlightRef.current.values()));
+        return pruneGuestAutosaveErrors();
+    };
+
+
+    const handleSaveGuest = async (guestId: string) => {
+        const resolvedId = resolveGuestAutosaveId(guestId);
+        setSaveError('');
+        setSaveErrorDetail('');
+        setSaveStatus('Saving guest...');
+        const saved = await persistGuestDraft(
+            resolvedId,
+            guestAutosaveVersionsRef.current.get(resolvedId)
+        );
+        setSaveStatus(saved ? 'Guest saved' : '');
+        return saved;
+    };
+
+    const cancelGuestChanges = (guestId: string) => {
+        const resolvedId = resolveGuestAutosaveId(guestId);
+        if (guestAutosaveInFlightRef.current.has(resolvedId)) return;
+        const snapshot = savedGuestSnapshotsRef.current.get(resolvedId)
+            ?? savedGuestSnapshotsRef.current.get(guestId);
+        const currentWedding = weddingDataRef.current;
+        const nextGuests = snapshot
+            ? currentWedding.rsvp.guests.map((guest) => (
+                guest.id === guestId || guest.id === resolvedId ? cloneGuestDraft(snapshot) : guest
+            ))
+            : currentWedding.rsvp.guests.filter((guest) => guest.id !== guestId && guest.id !== resolvedId);
+        const nextWedding = {
+            ...currentWedding,
+            rsvp: { ...currentWedding.rsvp, guests: nextGuests },
+        };
+        weddingDataRef.current = nextWedding;
+        setWeddingData(nextWedding);
+        dirtyGuestIdsRef.current.delete(guestId);
+        dirtyGuestIdsRef.current.delete(resolvedId);
+        guestAutosaveErrorsRef.current.delete(guestId);
+        guestAutosaveErrorsRef.current.delete(resolvedId);
+        setGuestSaveStateById((current) => {
+            const next = { ...current };
+            delete next[guestId];
+            delete next[resolvedId];
+            if (snapshot) next[snapshot.id] = { phase: 'saved' };
+            return next;
+        });
+        setEditingGuestField((current) => current?.guestId === guestId || current?.guestId === resolvedId ? null : current);
+        syncDashboardDirtyState();
+        setExpandedGuestId((current) => current === guestId || current === resolvedId ? null : current);
+        setSaveError('');
+        setSaveErrorDetail('');
+        setSaveStatus(snapshot ? 'Guest changes discarded' : 'Unsaved guest removed');
+    };
     const handleSaveDraft = async () => {
-        const weddingToSave = weddingDataRef.current;
+        if (isSaveInFlightRef.current) return false;
+        isSaveInFlightRef.current = true;
+        setIsSavingDashboard(true);
         setSaveError('');
         setSaveErrorDetail('');
         setSaveStatus('Saving...');
-        const guestCapacityError = getGuestCapacityError(weddingToSave);
-        if (guestCapacityError) {
-            setSaveStatus('');
-            setSaveError(guestCapacityError);
-            return;
-        }
 
-        if (supabaseWeddingId) {
-            if (validation.slug || validation.brideName || validation.groomName) {
+        try {
+            await saveDirtyGuests();
+
+            const weddingToSave = cloneWedding(weddingDataRef.current);
+            const guestCapacityError = getGuestCapacityError(weddingToSave);
+            if (guestCapacityError) {
                 setSaveStatus('');
-                setSaveError('Could not save wedding details. Please fix the highlighted wedding fields.');
-                return;
+                setSaveError(guestCapacityError);
+                return false;
             }
 
-            const result = await updateWeddingShell({
-                weddingId: supabaseWeddingId,
-                brideName: weddingToSave.couple.brideName.trim(),
-                groomName: weddingToSave.couple.groomName.trim(),
-                displayName: weddingToSave.couple.displayName.trim(),
-                slug: weddingToSave.wedding.slug.trim(),
-                themeKey: weddingToSave.wedding.themeKey.trim(),
-                pageTitle: weddingToSave.wedding.pageTitle.trim(),
-            });
+            if (supabaseWeddingId) {
+                if (validation.slug || validation.brideName || validation.groomName) {
+                    setSaveStatus('');
+                    setSaveError('Could not save wedding details. Please fix the highlighted wedding fields.');
+                    return false;
+                }
 
-            if (result.error) {
-                console.warn('Could not save wedding details', result.error);
-                setSaveStatus('');
-                setSaveErrorDetail(result.error);
-                setSaveError(result.error.toLowerCase().includes('duplicate') || result.error.toLowerCase().includes('unique')
-                    ? 'This website address is already in use. Please choose a different address.'
-                    : result.error);
-                return;
-            }
-
-            const settingsResult = await saveSupabaseWeddingSettings(supabaseWeddingId, weddingToSave);
-            if (settingsResult.error) {
-                console.error('Could not save wedding settings', {
-                    error: settingsResult.error,
-                    weddingId: supabaseWeddingId,
-                    mode,
+                const result = await saveSupabaseWeddingDashboard(supabaseWeddingId, weddingToSave, {
+                    client: authenticatedDataClient ?? undefined,
                 });
-                setSaveStatus('');
-                setSaveErrorDetail(settingsResult.error);
-                setSaveError(`Could not save wedding settings. If you recently added builder sections, run the latest Supabase migration SQL and try again.${isAdminMode ? adminRlsHint : ''}`);
-                return;
+                if (result.error) {
+                    console.error('Could not save dashboard transactionally', {
+                        error: result.detail || result.error,
+                        weddingId: supabaseWeddingId,
+                        mode,
+                    });
+                    setSaveStatus('');
+                    setSaveErrorDetail(result.detail || result.error);
+                    setSaveError(result.error + (isAdminMode ? adminRlsHint : ''));
+                    return false;
+                }
+
+                const submittedEventsById = new Map(weddingToSave.events.map((event) => [event.id, event]));
+                weddingToSave.events = result.events.map((savedEvent) => ({
+                    ...savedEvent,
+                    eventTextPosition: submittedEventsById.get(savedEvent.id)?.eventTextPosition ?? savedEvent.eventTextPosition,
+                    eventShowCalendar: submittedEventsById.get(savedEvent.id)?.eventShowCalendar ?? savedEvent.eventShowCalendar,
+                }));
+                weddingToSave.wedding.updatedAt = result.weddingUpdatedAt || weddingToSave.wedding.updatedAt;
+                weddingToSave.rsvp.guests = cloneWedding(weddingDataRef.current).rsvp.guests;
             }
 
-            const relationalResult = await saveSupabaseRelationalData(
-                supabaseWeddingId,
-                weddingToSave.events,
-                weddingToSave.rsvp.guests,
-                'replace'
-            );
-            if (relationalResult.error) {
-                console.error('Could not save events and guests transactionally', {
-                    error: relationalResult.detail || relationalResult.error,
-                    weddingId: supabaseWeddingId,
-                    mode,
-                    events: weddingToSave.events.map((event) => ({
-                        id: event.id,
-                        eventName: event.eventName,
-                        eventKey: event.eventKey,
-                        eventVisualKey: event.eventVisualKey,
-                        eventAnimationKey: event.eventAnimationKey,
-                    })),
-                });
-                setSaveStatus('');
-                setSaveErrorDetail(relationalResult.detail || relationalResult.error);
-                setSaveError(`${relationalResult.error}${isAdminMode ? adminRlsHint : ''}`);
-                return;
+            let mediaCleanupWarning = '';
+            if (supabaseWeddingId && pendingWeddingMediaDeletions.length > 0) {
+                const deletionResults = await Promise.all(
+                    pendingWeddingMediaDeletions.map(async (asset) => ({ asset, result: await deleteWeddingMedia(asset) }))
+                );
+                const failedDeletions = deletionResults.filter(({ result }) => Boolean(result.error));
+                const deletedIds = new Set(
+                    deletionResults.filter(({ result }) => !result.error).map(({ asset }) => asset.id)
+                );
+                setWeddingMedia((current) => current.filter((asset) => !deletedIds.has(asset.id)));
+                setPendingWeddingMediaDeletions(failedDeletions.map(({ asset }) => asset));
+                if (failedDeletions.length > 0) {
+                    mediaCleanupWarning = 'The wedding was saved, but ' + failedDeletions.length + ' image file' + (failedDeletions.length === 1 ? '' : 's') + ' could not be removed. Please try removing ' + (failedDeletions.length === 1 ? 'it' : 'them') + ' again.';
+                    setSaveErrorDetail(failedDeletions.map(({ result }) => result.detail || result.error).join(' | '));
+                }
             }
-            const submittedEventsById = new Map(weddingToSave.events.map((event) => [event.id, event]));
-            weddingToSave.events = relationalResult.events.map((savedEvent) => ({
-                ...savedEvent,
-                eventTextPosition: submittedEventsById.get(savedEvent.id)?.eventTextPosition ?? savedEvent.eventTextPosition,
-                eventShowCalendar: submittedEventsById.get(savedEvent.id)?.eventShowCalendar ?? savedEvent.eventShowCalendar,
-            }));
-            weddingToSave.rsvp.guests = relationalResult.guests;
-        }
 
-        let mediaCleanupWarning = '';
-        if (supabaseWeddingId && pendingWeddingMediaDeletions.length > 0) {
-            const deletionResults = await Promise.all(
-                pendingWeddingMediaDeletions.map(async (asset) => ({ asset, result: await deleteWeddingMedia(asset) }))
+            const persistedWedding = cloneWedding(weddingToSave);
+            savedWeddingContentSignatureRef.current = getWeddingContentDraftSignature(persistedWedding);
+            const failedGuestIds = pruneGuestAutosaveErrors();
+            const guestSaveWarning = failedGuestIds.length > 0
+                ? `${failedGuestIds.length} guest draft${failedGuestIds.length === 1 ? '' : 's'} could not be saved. Website changes were saved; review the guest row${failedGuestIds.length === 1 ? '' : 's'} marked Save failed and retry.`
+                : '';
+            const hasNewerWebsiteChanges = (
+                getWeddingContentDraftSignature(weddingDataRef.current)
+                !== savedWeddingContentSignatureRef.current
             );
-            const failedDeletions = deletionResults.filter(({ result }) => Boolean(result.error));
-            const deletedIds = new Set(
-                deletionResults.filter(({ result }) => !result.error).map(({ asset }) => asset.id)
+            const hasNewerChanges = (
+                hasNewerWebsiteChanges
+                || dirtyGuestIdsRef.current.size > 0
+                || failedGuestIds.length > 0
             );
-            setWeddingMedia((current) => current.filter((asset) => !deletedIds.has(asset.id)));
-            setPendingWeddingMediaDeletions([]);
-            if (failedDeletions.length > 0) {
-                mediaCleanupWarning = `The wedding was saved, but ${failedDeletions.length} image file${failedDeletions.length === 1 ? '' : 's'} could not be removed. Please try removing ${failedDeletions.length === 1 ? 'it' : 'them'} again.`;
-                setSaveErrorDetail(failedDeletions.map(({ result }) => result.detail || result.error).join(' | '));
+            if (hasNewerChanges) {
+                const currentWedding = cloneWedding(weddingDataRef.current);
+                currentWedding.wedding.updatedAt = weddingToSave.wedding.updatedAt;
+                weddingDataRef.current = currentWedding;
+                setWeddingData(currentWedding);
+                syncDashboardDirtyState();
+                setSaveStatus(guestSaveWarning
+                    ? 'Website changes saved. Guest attention is still needed.'
+                    : mediaCleanupWarning
+                        ? 'Saved earlier changes with an image cleanup warning. Newer changes are still unsaved.'
+                        : 'Saved earlier changes. Newer changes are still unsaved.');
+            } else {
+                setWeddingData(persistedWedding);
+                weddingDataRef.current = persistedWedding;
+                syncDashboardDirtyState();
+                setSaveStatus(mediaCleanupWarning ? 'Saved with image cleanup warning' : 'Saved');
             }
+            const saveWarnings = [guestSaveWarning, mediaCleanupWarning].filter(Boolean);
+            if (saveWarnings.length > 0) setSaveError(saveWarnings.join(' '));
+            else setSaveError('');
+            return true;
+        } finally {
+            isSaveInFlightRef.current = false;
+            setIsSavingDashboard(false);
         }
-
-        if (supabaseWeddingId) {
-            clearDashboardDraft(dashboardDraftStorageKey);
-        } else {
-            window.localStorage.setItem(mockDashboardDraftStorageKey, JSON.stringify(weddingToSave));
-        }
-        hasUnsavedChangesRef.current = false;
-        setHasUnsavedChanges(false);
-        setSaveStatus(mediaCleanupWarning ? 'Saved with image cleanup warning' : 'Saved');
-        if (mediaCleanupWarning) setSaveError(mediaCleanupWarning);
     };
 
     const handleResetDraft = async () => {
@@ -1603,14 +2050,21 @@ export default function Dashboard({
         window.localStorage.removeItem(mockDashboardDraftStorageKey);
         setPendingWeddingMediaDeletions([]);
         if (supabaseWeddingId) {
-            const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
+            const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, {
+                    includeGuests: true,
+                    client: authenticatedDataClient ?? undefined,
+                });
             const nextWedding = refreshed.wedding ?? normalizeWedding(initialWedding ?? dashboardBaseWedding);
             setWeddingData(nextWedding);
             weddingDataRef.current = nextWedding;
+            savedWeddingContentSignatureRef.current = getWeddingContentDraftSignature(nextWedding);
+            resetGuestSaveTracking(nextWedding.rsvp.guests);
         } else {
             const nextWedding = cloneWedding(initialWedding ?? dashboardBaseWedding);
             setWeddingData(nextWedding);
             weddingDataRef.current = nextWedding;
+            savedWeddingContentSignatureRef.current = getWeddingContentDraftSignature(nextWedding);
+            resetGuestSaveTracking(nextWedding.rsvp.guests);
         }
         hasUnsavedChangesRef.current = false;
         setHasUnsavedChanges(false);
@@ -1625,7 +2079,10 @@ export default function Dashboard({
 
         try {
             if (supabaseWeddingId && !hasUnsavedChangesRef.current) {
-                const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
+                const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, {
+                    includeGuests: true,
+                    client: authenticatedDataClient ?? undefined,
+                });
                 if (refreshed.error || !refreshed.wedding) {
                     console.error('Preview load failed:', refreshed.error);
                     setPreviewError('Could not load preview. Please refresh or try again.');
@@ -1636,6 +2093,8 @@ export default function Dashboard({
                 const nextWedding = normalizeWedding(refreshed.wedding);
                 setWeddingData(nextWedding);
                 weddingDataRef.current = nextWedding;
+                savedWeddingContentSignatureRef.current = getWeddingContentDraftSignature(nextWedding);
+                resetGuestSaveTracking(nextWedding.rsvp.guests);
             }
 
             setPreviewRefreshNonce((current) => current + 1);
@@ -1912,6 +2371,7 @@ export default function Dashboard({
         key: Key,
         value: WeddingGuest[Key]
     ) => {
+        const guestId = weddingDataRef.current.rsvp.guests[index]?.id;
         updateWeddingData((current) => ({
             ...current,
             rsvp: {
@@ -1921,10 +2381,11 @@ export default function Dashboard({
                 )),
             },
         }));
+        if (guestId) markGuestDirty(guestId);
     };
 
     const normalizeGuestPhoneAtIndex = (index: number) => {
-        const guest = weddingData.rsvp.guests[index];
+        const guest = weddingDataRef.current.rsvp.guests[index];
         if (!guest) return;
         const { canonicalPhone } = validateGuestPhone(guest.phone);
         if (canonicalPhone && canonicalPhone !== guest.phone) updateGuest(index, 'phone', canonicalPhone);
@@ -1932,7 +2393,8 @@ export default function Dashboard({
 
     const updateGuestFamilySize = (index: number, value: number) => {
         const familySize = normalizeInvitedCount(value);
-        const currentGuest = weddingData.rsvp.guests[index];
+        const currentGuest = weddingDataRef.current.rsvp.guests[index];
+        if (currentGuest && normalizeInvitedCount(currentGuest.invitedCount) === familySize) return true;
         const nextPeopleTotal = guestSummary.totalPeople - normalizeInvitedCount(currentGuest?.invitedCount) + familySize;
         if (familySize > MAX_GUEST_FAMILY_SIZE) {
             setSaveError(`Family Size cannot be more than ${MAX_GUEST_FAMILY_SIZE}. Split larger groups into separate guest entries.`);
@@ -1942,6 +2404,7 @@ export default function Dashboard({
             setSaveError(`This wedding supports up to ${inviteeLimit.toLocaleString()} people. Reduce another Family Size before increasing this one.`);
             return false;
         }
+        const guestId = weddingDataRef.current.rsvp.guests[index]?.id;
         updateWeddingData((current) => ({
             ...current,
             rsvp: {
@@ -1959,10 +2422,26 @@ export default function Dashboard({
                 }),
             },
         }));
+        if (guestId) markAndSaveGuest(guestId);
         return true;
     };
+    const finishGuestEdit = async (
+        guestIndex: number,
+        guestId: string,
+        field: GuestEditableField
+    ) => {
+        if (field === 'phone') normalizeGuestPhoneAtIndex(guestIndex);
+        setEditingGuestField(null);
+
+        const resolvedId = resolveGuestAutosaveId(guestId);
+        if (!dirtyGuestIdsRef.current.has(resolvedId)) {
+            setSaveStatus('Guest already saved');
+            return true;
+        }
+        return handleSaveGuest(resolvedId);
+    };
     const toggleGuestEvent = (guestIndex: number, eventId: string) => {
-        const currentGuest = weddingData.rsvp.guests[guestIndex];
+        const currentGuest = weddingDataRef.current.rsvp.guests[guestIndex];
         const isSelected = currentGuest.invitedEventIds.includes(eventId);
         const nextEventIds = isSelected
             ? currentGuest.invitedEventIds.filter((id) => id !== eventId)
@@ -1984,19 +2463,11 @@ export default function Dashboard({
                 }),
             },
         }));
-
-        if (supabaseWeddingId) {
-            replaceSupabaseGuestInvites(supabaseWeddingId, currentGuest.id, nextEventIds, weddingData.events, nextEventCounts).then((result) => {
-                if (result.error) {
-                    console.warn('Could not update guest events', result.error);
-                    setSaveErrorDetail(result.detail || result.error);
-                    setSaveError(`${result.error}${isAdminMode ? adminRlsHint : ''}`);
-                }
-            });
-        }
+        markAndSaveGuest(currentGuest.id);
     };
 
     const updateGuestEventInvitedCount = (guestIndex: number, eventId: string, value: number) => {
+        const guestId = weddingDataRef.current.rsvp.guests[guestIndex]?.id;
         updateWeddingData((current) => ({
             ...current,
             rsvp: {
@@ -2013,9 +2484,11 @@ export default function Dashboard({
                 }),
             },
         }));
+        if (guestId) markAndSaveGuest(guestId);
     };
 
     const updateGuestEventInviteScope = (guestIndex: number, eventId: string, scope: 'all' | 'number') => {
+        const guestId = weddingDataRef.current.rsvp.guests[guestIndex]?.id;
         updateWeddingData((current) => ({
             ...current,
             rsvp: {
@@ -2037,6 +2510,7 @@ export default function Dashboard({
                 }),
             },
         }));
+        if (guestId) markAndSaveGuest(guestId);
     };
     const addGuest = () => {
         if (cannotAddGuest) {
@@ -2068,12 +2542,14 @@ export default function Dashboard({
         setGuestWhatsAppFilter('all');
         setGuestRsvpFilter('all');
         setGuestActivityFilter('all');
-        setGuestPhoneFilter('all');
+        setGuestReadinessFilter('all');
         setGuestPage(1);
         setExpandedGuestId(newGuest.id);
         setSaveError('');
         setSaveErrorDetail('');
-        setSaveStatus('New guest added. Complete the details and save your changes.');
+        setSaveStatus('New guest draft created. Use the edit icons to complete text details; Family Size and invited-event changes save automatically.');
+        const initialSaveVersion = markGuestDirty(newGuest.id);
+        void persistGuestDraft(newGuest.id, initialSaveVersion);
     };
 
     const getGuestInviteLink = (guest: WeddingGuest) => {
@@ -2143,12 +2619,24 @@ export default function Dashboard({
         );
     };
 
-    const getGuestWhatsAppUrl = (guest: WeddingGuest, messageType: GuestMessageType) => (
-        buildWhatsAppUrl(guest.phone, getGuestWhatsAppMessage(guest, messageType))
+    const getGuestWhatsAppUrl = (guest: WeddingGuest, messageType: GuestMessageType) => {
+        if (!getGuestInvitationReadiness(guest).ready) return '';
+        return buildWhatsAppUrl(guest.phone, getGuestWhatsAppMessage(guest, messageType));
+    };
+
+    const canRecordGuestMessageHistory = (guest: WeddingGuest) => (
+        getGuestInvitationReadiness(guest).ready
     );
 
-
     const confirmGuestMessageSent = async (guest: WeddingGuest, messageType: GuestMessageType) => {
+        const invitationReadiness = getGuestInvitationReadiness(guest);
+        if (!invitationReadiness.ready) {
+            setSaveStatus('');
+            setSaveError(invitationReadiness.message || 'Complete and save this guest before recording an invitation or reminder.');
+            setSaveErrorDetail('');
+            return;
+        }
+
         const savingKey = `${guest.id}:${messageType}`;
         setGuestMessageHistorySavingKey(savingKey);
         setSaveError('');
@@ -2248,8 +2736,8 @@ export default function Dashboard({
 
 
     const previewGuestInvite = async (guest: WeddingGuest) => {
-        await handleSaveDraft();
-        window.open(getGuestInviteUrl(guest), '_blank', 'noopener,noreferrer');
+        const saved = await handleSaveDraft();
+        if (saved) window.open(getGuestInviteUrl(guest), '_blank', 'noopener,noreferrer');
     };
 
     const getGuestCsvEventHeaders = () => weddingData.events.map((event) => event.eventName);
@@ -2759,14 +3247,21 @@ export default function Dashboard({
                 setGuestImportWarnings([...warnings, `${result.error}${isAdminMode ? adminRlsHint : ''}`]);
                 return;
             }
-            const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
+            const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, {
+                    includeGuests: true,
+                    client: authenticatedDataClient ?? undefined,
+                });
             if (refreshed.wedding) {
-                const nextWedding = normalizeWedding(refreshed.wedding);
+                const currentWedding = weddingDataRef.current;
+                const nextWedding = {
+                    ...currentWedding,
+                    rsvp: { ...currentWedding.rsvp, guests: normalizeWedding(refreshed.wedding).rsvp.guests },
+                };
                 setWeddingData(nextWedding);
-                writeDashboardDraft(dashboardDraftStorageKey, nextWedding);
-                hasUnsavedChangesRef.current = true;
-                setHasUnsavedChanges(true);
-                setSaveStatus('');
+                weddingDataRef.current = nextWedding;
+                resetGuestSaveTracking(nextWedding.rsvp.guests);
+                syncDashboardDirtyState();
+                setSaveStatus('Guest import saved');
                 setSaveError('');
             }
             setGuestImportWarnings([]);
@@ -2785,6 +3280,8 @@ export default function Dashboard({
                     : [...current.rsvp.guests, ...importedGuests],
             },
         }));
+        resetGuestSaveTracking(weddingDataRef.current.rsvp.guests);
+        syncDashboardDirtyState();
         setGuestImportWarnings([]);
         setSelectedGuestCsvFile(null);
         setGuestCsvAnalysis(null);
@@ -2967,7 +3464,10 @@ export default function Dashboard({
                 return;
             }
 
-            const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, { includeGuests: true });
+            const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, {
+                    includeGuests: true,
+                    client: authenticatedDataClient ?? undefined,
+                });
             if (refreshed.error || !refreshed.wedding) {
                 console.error('Could not refresh guests after bulk delete', refreshed.error);
                 setSaveError('Guests were deleted, but the guest list could not refresh. Please reload the page.');
@@ -2976,10 +3476,15 @@ export default function Dashboard({
                 return;
             }
 
-            const nextWedding = normalizeWedding(refreshed.wedding);
-            clearDashboardDraft(dashboardDraftStorageKey);
+            const currentWedding = weddingDataRef.current;
+            const nextWedding = {
+                ...currentWedding,
+                rsvp: { ...currentWedding.rsvp, guests: normalizeWedding(refreshed.wedding).rsvp.guests },
+            };
             setWeddingData(nextWedding);
             weddingDataRef.current = nextWedding;
+            resetGuestSaveTracking(nextWedding.rsvp.guests);
+            syncDashboardDirtyState();
             setSelectedGuestIds([]);
             setExpandedGuestId(null);
             setSaveStatus(`Deleted ${guestsToDelete.length} guest${guestsToDelete.length === 1 ? '' : 's'}`);
@@ -2996,6 +3501,8 @@ export default function Dashboard({
                 guests: current.rsvp.guests.filter((guest) => !deletedIds.has(guest.id)),
             },
         }));
+        resetGuestSaveTracking(weddingDataRef.current.rsvp.guests);
+        syncDashboardDirtyState();
         setSelectedGuestIds([]);
         setExpandedGuestId((current) => current && deletedIds.has(current) ? null : current);
         setSaveStatus(`Deleted ${guestsToDelete.length} guest${guestsToDelete.length === 1 ? '' : 's'}`);
@@ -3040,6 +3547,8 @@ export default function Dashboard({
     };
 
     const handleLogout = async () => {
+        clearDashboardDraft(dashboardDraftStorageKey);
+        window.localStorage.removeItem(mockDashboardDraftStorageKey);
         await signOut();
         window.location.href = '/login';
     };
@@ -3063,8 +3572,8 @@ export default function Dashboard({
                     </span>
                     {saveError && <em>{saveError}</em>}
                     {showTechnicalSaveDetail && <em className="technical-detail">Technical detail: {saveErrorDetail}</em>}
-                    <small className="dashboard-save-hint">Save buttons apply all unsaved dashboard changes.</small>
-                    <button type="button" onClick={handleResetDraft}>{discardUnsavedChangesLabel}</button>
+                    <small className="dashboard-save-hint">Save an edited guest directly, or use Save All Changes for every unsaved guest and website update.</small>
+                    <button type="button" disabled={isSavingDashboard} onClick={handleResetDraft}>{discardUnsavedChangesLabel}</button>
                     {isConfigured && <button type="button" onClick={handleLogout}>Logout</button>}
                 </div>
                 <div className="dashboard-mobile-section-nav">
@@ -3151,8 +3660,8 @@ export default function Dashboard({
                                 <p className="dashboard-eyebrow">Overview</p>
                                 <h2>{weddingData.couple.displayName}</h2>
                             </div>
-                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                {saveAllChangesLabel}
+                            <button className="dashboard-primary-btn" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                             </button>
                         </div>
                         <WebsiteActivationBanner
@@ -3228,8 +3737,8 @@ export default function Dashboard({
                                 <p className="dashboard-eyebrow">Opening Reveal</p>
                                 <h2>Edit the invite intro</h2>
                             </div>
-                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                {saveAllChangesLabel}
+                            <button className="dashboard-primary-btn" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                             </button>
                         </div>
                         <p className="dashboard-note">
@@ -3330,8 +3839,8 @@ export default function Dashboard({
                                 <p className="dashboard-eyebrow">Our Story</p>
                                 <h2>Edit the couple story</h2>
                             </div>
-                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                {saveAllChangesLabel}
+                            <button className="dashboard-primary-btn" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                             </button>
                         </div>
                         <p className="dashboard-note">
@@ -3410,8 +3919,8 @@ export default function Dashboard({
                                 <p className="dashboard-eyebrow">Couple</p>
                                 <h2>Edit couple details</h2>
                             </div>
-                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                {saveAllChangesLabel}
+                            <button className="dashboard-primary-btn" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                             </button>
                         </div>
                         <ToggleField
@@ -3439,8 +3948,8 @@ export default function Dashboard({
                                 <h2>Wedding events</h2>
                             </div>
                             <div className="dashboard-header-actions">
-                                <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
-                                    {saveAllChangesLabel}
+                                <button className="dashboard-primary-btn secondary" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                    {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                                 </button>
                                 <button className="dashboard-primary-btn" type="button" onClick={addEvent}>Add event</button>
                             </div>
@@ -3576,8 +4085,8 @@ export default function Dashboard({
                                         Delete selected ({selectedGuestIds.length})
                                     </button>
                                 )}
-                                <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
-                                    {saveAllChangesLabel}
+                                <button className="dashboard-primary-btn secondary" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                    {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                                 </button>
                                 <button
                                     className="dashboard-primary-btn"
@@ -3738,14 +4247,14 @@ export default function Dashboard({
                                         No RSVP
                                     </button>
                                     <button
-                                        className={guestPhoneFilter === 'missing' ? 'active' : ''}
+                                        className={guestReadinessFilter === 'needs-attention' ? 'active' : ''}
                                         type="button"
                                         onClick={() => {
-                                            setGuestPhoneFilter(guestPhoneFilter === 'missing' ? 'all' : 'missing');
+                                            setGuestReadinessFilter(guestReadinessFilter === 'needs-attention' ? 'all' : 'needs-attention');
                                             setGuestPage(1);
                                         }}
                                     >
-                                        Missing phone
+                                        Needs attention
                                     </button>
                                 </div>
                                 <button
@@ -3837,17 +4346,23 @@ export default function Dashboard({
                                     </select>
                                 </label>
                                 <label className="guest-filter-field">
-                                    <span>Phone</span>
+                                    <span>Guest Readiness</span>
                                     <select
-                                        value={guestPhoneFilter}
+                                        value={guestReadinessFilter}
                                         onChange={(event) => {
-                                            setGuestPhoneFilter(event.target.value as GuestPhoneFilter);
+                                            setGuestReadinessFilter(event.target.value as GuestReadinessFilter);
                                             setGuestPage(1);
                                         }}
                                     >
-                                        <option value="all">Any phone status</option>
-                                        <option value="available">Ready to message</option>
-                                        <option value="missing">Missing phone</option>
+                                        <option value="all">All guests</option>
+                                        <option value="ready">Ready to invite</option>
+                                        <option value="needs-attention">Needs attention</option>
+                                        <option value="invalid-phone">Missing or invalid phone</option>
+                                        <option value="no-events">No invited events</option>
+                                        <option value="missing-name">Missing guest name</option>
+                                        <option value="missing-category">Missing category</option>
+                                        <option value="save-issue">Unsaved or save failed</option>
+                                        <option value="invalid-invitee-count">Invalid invitee count</option>
                                     </select>
                                 </label>
                             </div>
@@ -3867,6 +4382,8 @@ export default function Dashboard({
                                 const isGuestMessageHistorySaving = guestMessageHistorySavingKey.startsWith(`${guest.id}:`);
                                 const isExpanded = expandedGuestId === guest.id;
                                 const activeEditField = editingGuestField?.guestId === guest.id ? editingGuestField.field : null;
+                                const guestDraftStatus = getGuestDraftStatus(guest);
+                                const invitationReadiness = getGuestInvitationReadiness(guest);
 
                                 return (
                                     <article className="guest-mobile-card" key={guest.id}>
@@ -3885,7 +4402,6 @@ export default function Dashboard({
                                                         className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
                                                         value={guest.guestName}
                                                         onChange={(event) => updateGuest(guestIndex, 'guestName', event.target.value)}
-                                                        onBlur={() => setEditingGuestField(null)}
                                                         placeholder="Guest / family"
                                                     />
                                                 ) : (
@@ -3897,19 +4413,46 @@ export default function Dashboard({
                                                     {normalizeInvitedCount(guest.invitedCount)} {normalizeInvitedCount(guest.invitedCount) === 1 ? 'person' : 'people'}
                                                 </span>
                                                 {validation.guests[guestIndex]?.guestName && <em>{validation.guests[guestIndex]?.guestName}</em>}
+                                                <span className={`guest-save-status ${guestDraftStatus.tone}`} title={guestDraftStatus.title}>
+                                                    {guestDraftStatus.label}
+                                                </span>
+                                                {guestDraftStatus.tone === 'error' && guestDraftStatus.title && (
+                                                    <em className="guest-save-error">{guestDraftStatus.title}</em>
+                                                )}
                                             </div>
                                             <button
                                                 className="guest-mobile-field-edit"
                                                 type="button"
                                                 aria-label={activeEditField === 'guestName' ? 'Finish editing guest name' : 'Edit guest name'}
                                                 title={activeEditField === 'guestName' ? 'Finish editing' : 'Edit guest name'}
-                                                onClick={() => setEditingGuestField(
-                                                    activeEditField === 'guestName' ? null : { guestId: guest.id, field: 'guestName' }
-                                                )}
+                                                onClick={() => {
+                                                    if (activeEditField === 'guestName') {
+                                                        void finishGuestEdit(guestIndex, guest.id, 'guestName');
+                                                        return;
+                                                    }
+                                                    setEditingGuestField({ guestId: guest.id, field: 'guestName' });
+                                                }}
                                             >
                                                 {activeEditField === 'guestName' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
                                             </button>
                                         </div>
+                                        {guestDraftStatus.tone === 'error' && (
+                                            <div className="guest-row-save-actions">
+                                                <button
+                                                    className="primary"
+                                                    type="button"
+                                                    onClick={() => void handleSaveGuest(guest.id)}
+                                                >
+                                                    Retry save
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => cancelGuestChanges(guest.id)}
+                                                >
+                                                    Cancel changes
+                                                </button>
+                                            </div>
+                                        )}
 
                                         <div className="guest-mobile-card-summary">
                                             <div className="guest-mobile-editable-row">
@@ -3918,16 +4461,12 @@ export default function Dashboard({
                                                     {activeEditField === 'phone' ? (
                                                         <input
                                                             autoFocus
-                                                            className={validation.guests[guestIndex]?.phone ? 'cell-error' : ''}
+                                                            className={validation.guests[guestIndex]?.phone ? 'cell-warning' : ''}
                                                             value={guest.phone}
                                                             onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
                                                             placeholder="+91..."
                                                             inputMode="tel"
                                                             autoComplete="tel"
-                                                            onBlur={() => {
-                                                                normalizeGuestPhoneAtIndex(guestIndex);
-                                                                setEditingGuestField(null);
-                                                            }}
                                                         />
                                                     ) : (
                                                         <span>{guest.phone.trim() || 'Missing phone'}</span>
@@ -3937,14 +4476,22 @@ export default function Dashboard({
                                                         type="button"
                                                         aria-label={activeEditField === 'phone' ? 'Finish editing phone' : 'Edit phone'}
                                                         title={activeEditField === 'phone' ? 'Finish editing' : 'Edit phone'}
-                                                        onClick={() => setEditingGuestField(
-                                                            activeEditField === 'phone' ? null : { guestId: guest.id, field: 'phone' }
-                                                        )}
+                                                        onClick={() => {
+                                                            if (activeEditField === 'phone') {
+                                                                void finishGuestEdit(guestIndex, guest.id, 'phone');
+                                                                return;
+                                                            }
+                                                            setEditingGuestField({ guestId: guest.id, field: 'phone' });
+                                                        }}
                                                     >
                                                         {activeEditField === 'phone' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
                                                     </button>
                                                 </div>
-                                                {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
+                                                {validation.guests[guestIndex]?.phone && (
+                                                    <em className="guest-field-warning">
+                                                        {getGuestPhoneDraftWarning(validation.guests[guestIndex].phone)}
+                                                    </em>
+                                                )}
                                             </div>
                                             <div className="guest-mobile-editable-row">
                                                 <strong>Category</strong>
@@ -3954,7 +4501,6 @@ export default function Dashboard({
                                                             autoFocus
                                                             value={guest.category}
                                                             onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
-                                                            onBlur={() => setEditingGuestField(null)}
                                                             placeholder="Category"
                                                         />
                                                     ) : (
@@ -3965,9 +4511,13 @@ export default function Dashboard({
                                                         type="button"
                                                         aria-label={activeEditField === 'category' ? 'Finish editing category' : 'Edit category'}
                                                         title={activeEditField === 'category' ? 'Finish editing' : 'Edit category'}
-                                                        onClick={() => setEditingGuestField(
-                                                            activeEditField === 'category' ? null : { guestId: guest.id, field: 'category' }
-                                                        )}
+                                                        onClick={() => {
+                                                            if (activeEditField === 'category') {
+                                                                void finishGuestEdit(guestIndex, guest.id, 'category');
+                                                                return;
+                                                            }
+                                                            setEditingGuestField({ guestId: guest.id, field: 'category' });
+                                                        }}
                                                     >
                                                         {activeEditField === 'category' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
                                                     </button>
@@ -3975,30 +4525,16 @@ export default function Dashboard({
                                             </div>
                                             <div className="guest-mobile-editable-row">
                                                 <strong>Family Size</strong>
-                                                <div className="guest-mobile-editable-value">
-                                                    {activeEditField === 'invitedCount' ? (
-                                                        <GuestFamilySizeInput
-                                                            key={`${guest.id}:${guest.invitedCount}:mobile`}
-                                                            value={normalizeInvitedCount(guest.invitedCount)}
-                                                            autoFocus
-                                                            className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
-                                                            onCommit={(value) => updateGuestFamilySize(guestIndex, value)}
-                                                            onFinish={() => setEditingGuestField(null)}
-                                                        />
-                                                    ) : (
-                                                        <span>{normalizeInvitedCount(guest.invitedCount)}</span>
-                                                    )}
-                                                    <button
-                                                        className="guest-mobile-field-edit"
-                                                        type="button"
-                                                        aria-label={activeEditField === 'invitedCount' ? 'Finish editing Family Size' : 'Edit Family Size'}
-                                                        title={activeEditField === 'invitedCount' ? 'Finish editing' : 'Edit Family Size'}
-                                                        onClick={() => setEditingGuestField(
-                                                            activeEditField === 'invitedCount' ? null : { guestId: guest.id, field: 'invitedCount' }
-                                                        )}
+                                                <div className="guest-mobile-editable-value guest-mobile-select-value">
+                                                    <select
+                                                        aria-label="Family Size"
+                                                        value={normalizeInvitedCount(guest.invitedCount)}
+                                                        onChange={(event) => updateGuestFamilySize(guestIndex, Number(event.target.value))}
                                                     >
-                                                        {activeEditField === 'invitedCount' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
-                                                    </button>
+                                                        {Array.from({ length: MAX_GUEST_FAMILY_SIZE }, (_, optionIndex) => optionIndex + 1).map((size) => (
+                                                            <option key={size} value={size}>{size}</option>
+                                                        ))}
+                                                    </select>
                                                 </div>
                                                 {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
                                             </div>
@@ -4014,8 +4550,8 @@ export default function Dashboard({
                                                     <button
                                                         className="guest-mobile-field-edit"
                                                         type="button"
-                                                        aria-label={isExpanded ? 'Finish editing invited events' : 'Edit invited events'}
-                                                        title={isExpanded ? 'Finish editing' : 'Edit invited events'}
+                                                        aria-label={isExpanded ? 'Close invited events editor' : 'Edit invited events'}
+                                                        title={isExpanded ? 'Close event editor' : 'Edit invited events'}
                                                         aria-expanded={isExpanded}
                                                         onClick={() => setExpandedGuestId(isExpanded ? null : guest.id)}
                                                     >
@@ -4050,14 +4586,13 @@ export default function Dashboard({
                                                                                 <option value="number" disabled={normalizeInvitedCount(guest.invitedCount) <= 1}>Specific number</option>
                                                                             </select>
                                                                             {getGuestEventInviteScope(guest, event.id) === 'number' && (
-                                                                                <input
+                                                                                <select
                                                                                     aria-label={`${event.eventName} invitee count`}
-                                                                                    type="number"
-                                                                                    min="1"
-                                                                                    max={Math.max(1, normalizeInvitedCount(guest.invitedCount) - 1)}
                                                                                     value={getGuestEventInvitedCount(guest, event.id)}
                                                                                     onChange={(inputEvent) => updateGuestEventInvitedCount(guestIndex, event.id, Number(inputEvent.target.value))}
-                                                                                />
+                                                                                >
+                                                                                    {Array.from({ length: Math.max(1, normalizeInvitedCount(guest.invitedCount) - 1) }, (_, countIndex) => countIndex + 1).map((count) => <option key={count} value={count}>{count}</option>)}
+                                                                                </select>
                                                                             )}
                                                                         </span>
                                                                     )}
@@ -4124,15 +4659,19 @@ export default function Dashboard({
                                             </a>
                                         ) : (
                                             <button className="guest-mobile-whatsapp-action disabled" type="button" disabled>
-                                                Add a phone number to send
+                                                {invitationReadiness.message || 'Complete guest details to send'}
                                             </button>
                                         )}
                                         <div className="guest-whatsapp-manual-actions">
-                                            <span>Update send status manually</span>
+                                            <span>
+                                                {canRecordGuestMessageHistory(guest)
+                                                    ? 'Update send status manually'
+                                                    : invitationReadiness.message || 'Complete and save this guest to enable message tracking'}
+                                            </span>
                                             <div>
                                                 <button
                                                     type="button"
-                                                    disabled={isGuestMessageHistorySaving}
+                                                    disabled={isGuestMessageHistorySaving || !canRecordGuestMessageHistory(guest)}
                                                     onClick={() => confirmGuestMessageSent(guest, 'invitation')}
                                                 >
                                                     <CheckCircle2 aria-hidden="true" />
@@ -4140,7 +4679,7 @@ export default function Dashboard({
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    disabled={isGuestMessageHistorySaving}
+                                                    disabled={isGuestMessageHistorySaving || !canRecordGuestMessageHistory(guest)}
                                                     onClick={() => confirmGuestMessageSent(guest, 'reminder')}
                                                 >
                                                     <CheckCircle2 aria-hidden="true" />
@@ -4214,6 +4753,9 @@ export default function Dashboard({
                                         const isGuestMessageHistorySaving = guestMessageHistorySavingKey.startsWith(`${guest.id}:`);
                                         const inviteWhatsAppUrl = getGuestWhatsAppUrl(guest, 'invitation');
                                         const reminderWhatsAppUrl = getGuestWhatsAppUrl(guest, 'reminder');
+                                        const guestDraftStatus = getGuestDraftStatus(guest);
+                                        const activeEditField = editingGuestField?.guestId === guest.id ? editingGuestField.field : null;
+                                        const invitationReadiness = getGuestInvitationReadiness(guest);
 
                                         return (
                                             <Fragment key={guest.id}>
@@ -4228,46 +4770,151 @@ export default function Dashboard({
                                                         />
                                                     </td>
                                                     <td className="guest-identity-cell">
-                                                        <input
-                                                            className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
-                                                            value={guest.guestName}
-                                                            onChange={(event) => updateGuest(guestIndex, 'guestName', event.target.value)}
-                                                            placeholder="Guest / family"
-                                                        />
+                                                        <div className="guest-desktop-editable-value guest-desktop-name-value">
+                                                            {activeEditField === 'guestName' ? (
+                                                                <input
+                                                                    autoFocus
+                                                                    className={validation.guests[guestIndex]?.guestName ? 'cell-error' : ''}
+                                                                    value={guest.guestName}
+                                                                    onChange={(event) => updateGuest(guestIndex, 'guestName', event.target.value)}
+                                                                    onKeyDown={(event) => {
+                                                                        if (event.key === 'Enter') void finishGuestEdit(guestIndex, guest.id, 'guestName');
+                                                                    }}
+                                                                    placeholder="Guest / family"
+                                                                />
+                                                            ) : (
+                                                                <strong>{guest.guestName || 'Unnamed guest'}</strong>
+                                                            )}
+                                                            <button
+                                                                className="guest-desktop-field-edit"
+                                                                type="button"
+                                                                aria-label={activeEditField === 'guestName' ? 'Save guest name' : 'Edit guest name'}
+                                                                title={activeEditField === 'guestName' ? 'Save guest name' : 'Edit guest name'}
+                                                                onClick={() => {
+                                                                    if (activeEditField === 'guestName') {
+                                                                        void finishGuestEdit(guestIndex, guest.id, 'guestName');
+                                                                        return;
+                                                                    }
+                                                                    setEditingGuestField({ guestId: guest.id, field: 'guestName' });
+                                                                }}
+                                                            >
+                                                                {activeEditField === 'guestName' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+                                                            </button>
+                                                        </div>
                                                         {validation.guests[guestIndex]?.guestName && <em>{validation.guests[guestIndex]?.guestName}</em>}
+                                                        <span className={`guest-save-status ${guestDraftStatus.tone}`} title={guestDraftStatus.title}>
+                                                            {guestDraftStatus.label}
+                                                        </span>
+                                                        {guestDraftStatus.tone === 'error' && guestDraftStatus.title && (
+                                                            <em className="guest-save-error">{guestDraftStatus.title}</em>
+                                                        )}
                                                         <div className="guest-identity-grid">
-                                                            <label className="guest-compact-field">
+                                                            <div className="guest-compact-field">
                                                                 <span>Phone</span>
-                                                                <input
-                                                                    className={validation.guests[guestIndex]?.phone ? 'cell-error' : ''}
-                                                                    value={guest.phone}
-                                                                    onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
-                                                                    placeholder="+91..."
-                                                                    inputMode="tel"
-                                                                    autoComplete="tel"
-                                                                    onBlur={() => normalizeGuestPhoneAtIndex(guestIndex)}
-                                                                />
-                                                                {validation.guests[guestIndex]?.phone && <em>{validation.guests[guestIndex]?.phone}</em>}
-                                                            </label>
-                                                            <label className="guest-compact-field">
+                                                                <div className="guest-desktop-editable-value">
+                                                                    {activeEditField === 'phone' ? (
+                                                                        <input
+                                                                            autoFocus
+                                                                            className={validation.guests[guestIndex]?.phone ? 'cell-warning' : ''}
+                                                                            value={guest.phone}
+                                                                            onChange={(event) => updateGuest(guestIndex, 'phone', event.target.value)}
+                                                                            onKeyDown={(event) => {
+                                                                                if (event.key === 'Enter') void finishGuestEdit(guestIndex, guest.id, 'phone');
+                                                                            }}
+                                                                            placeholder="+91..."
+                                                                            inputMode="tel"
+                                                                            autoComplete="tel"
+                                                                        />
+                                                                    ) : (
+                                                                        <span>{guest.phone.trim() || 'Missing phone'}</span>
+                                                                    )}
+                                                                    <button
+                                                                        className="guest-desktop-field-edit"
+                                                                        type="button"
+                                                                        aria-label={activeEditField === 'phone' ? 'Save phone number' : 'Edit phone number'}
+                                                                        title={activeEditField === 'phone' ? 'Save phone number' : 'Edit phone number'}
+                                                                        onClick={() => {
+                                                                            if (activeEditField === 'phone') {
+                                                                                void finishGuestEdit(guestIndex, guest.id, 'phone');
+                                                                                return;
+                                                                            }
+                                                                            setEditingGuestField({ guestId: guest.id, field: 'phone' });
+                                                                        }}
+                                                                    >
+                                                                        {activeEditField === 'phone' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+                                                                    </button>
+                                                                </div>
+                                                                {validation.guests[guestIndex]?.phone && (
+                                                                    <em className="guest-field-warning">
+                                                                        {getGuestPhoneDraftWarning(validation.guests[guestIndex].phone)}
+                                                                    </em>
+                                                                )}
+                                                            </div>
+                                                            <div className="guest-compact-field">
                                                                 <span>Category</span>
-                                                                <input
-                                                                    value={guest.category}
-                                                                    onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
-                                                                    placeholder="Category"
-                                                                />
-                                                            </label>
+                                                                <div className="guest-desktop-editable-value">
+                                                                    {activeEditField === 'category' ? (
+                                                                        <input
+                                                                            autoFocus
+                                                                            value={guest.category}
+                                                                            onChange={(event) => updateGuest(guestIndex, 'category', event.target.value)}
+                                                                            onKeyDown={(event) => {
+                                                                                if (event.key === 'Enter') void finishGuestEdit(guestIndex, guest.id, 'category');
+                                                                            }}
+                                                                            placeholder="Category"
+                                                                        />
+                                                                    ) : (
+                                                                        <span>{guest.category.trim() || 'Uncategorized'}</span>
+                                                                    )}
+                                                                    <button
+                                                                        className="guest-desktop-field-edit"
+                                                                        type="button"
+                                                                        aria-label={activeEditField === 'category' ? 'Save category' : 'Edit category'}
+                                                                        title={activeEditField === 'category' ? 'Save category' : 'Edit category'}
+                                                                        onClick={() => {
+                                                                            if (activeEditField === 'category') {
+                                                                                void finishGuestEdit(guestIndex, guest.id, 'category');
+                                                                                return;
+                                                                            }
+                                                                            setEditingGuestField({ guestId: guest.id, field: 'category' });
+                                                                        }}
+                                                                    >
+                                                                        {activeEditField === 'category' ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         <label className="guest-family-size-field">
                                                             <span>Family Size</span>
-                                                            <GuestFamilySizeInput
-                                                                key={`${guest.id}:${guest.invitedCount}:desktop`}
-                                                                value={normalizeInvitedCount(guest.invitedCount)}
+                                                            <select
+                                                                aria-label={`Family Size for ${guest.guestName || 'guest'}`}
                                                                 className={validation.guests[guestIndex]?.invitedCount ? 'cell-error' : ''}
-                                                                onCommit={(value) => updateGuestFamilySize(guestIndex, value)}
-                                                            />
+                                                                value={normalizeInvitedCount(guest.invitedCount)}
+                                                                onChange={(event) => updateGuestFamilySize(guestIndex, Number(event.target.value))}
+                                                            >
+                                                                {Array.from({ length: MAX_GUEST_FAMILY_SIZE }, (_, optionIndex) => optionIndex + 1).map((size) => (
+                                                                    <option key={size} value={size}>{size}</option>
+                                                                ))}
+                                                            </select>
                                                         </label>
                                                         {validation.guests[guestIndex]?.invitedCount && <em>{validation.guests[guestIndex]?.invitedCount}</em>}
+                                                        {guestDraftStatus.tone === 'error' && (
+                                                            <div className="guest-row-save-actions">
+                                                                <button
+                                                                    className="primary"
+                                                                    type="button"
+                                                                    onClick={() => void handleSaveGuest(guest.id)}
+                                                                >
+                                                                    Retry save
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => cancelGuestChanges(guest.id)}
+                                                                >
+                                                                    Cancel changes
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="guest-events-cell">
                                                         <button
@@ -4367,14 +5014,20 @@ export default function Dashboard({
                                                                 )}
                                                             </>
                                                         ) : (
-                                                            <button className="guest-missing-phone-btn" type="button" disabled>Missing phone</button>
+                                                            <button className="guest-missing-phone-btn" type="button" disabled>
+                                                                {invitationReadiness.message || 'Complete guest details'}
+                                                            </button>
                                                         )}
                                                         <div className="guest-whatsapp-manual-actions">
-                                                            <span>Update send status manually</span>
+                                                            <span>
+                                                                {canRecordGuestMessageHistory(guest)
+                                                                    ? 'Update send status manually'
+                                                                    : invitationReadiness.message || 'Complete and save this guest to enable message tracking'}
+                                                            </span>
                                                             <div>
                                                                 <button
                                                                     type="button"
-                                                                    disabled={isGuestMessageHistorySaving}
+                                                                    disabled={isGuestMessageHistorySaving || !canRecordGuestMessageHistory(guest)}
                                                                     onClick={() => confirmGuestMessageSent(guest, 'invitation')}
                                                                 >
                                                                     <CheckCircle2 aria-hidden="true" />
@@ -4382,7 +5035,7 @@ export default function Dashboard({
                                                                 </button>
                                                                 <button
                                                                     type="button"
-                                                                    disabled={isGuestMessageHistorySaving}
+                                                                    disabled={isGuestMessageHistorySaving || !canRecordGuestMessageHistory(guest)}
                                                                     onClick={() => confirmGuestMessageSent(guest, 'reminder')}
                                                                 >
                                                                     <CheckCircle2 aria-hidden="true" />
@@ -4418,14 +5071,13 @@ export default function Dashboard({
                                                                                     <option value="number" disabled={normalizeInvitedCount(guest.invitedCount) <= 1}>Specific number</option>
                                                                                 </select>
                                                                                 {getGuestEventInviteScope(guest, event.id) === 'number' && (
-                                                                                    <input
+                                                                                    <select
                                                                                         aria-label={`${event.eventName} invitee count`}
-                                                                                        type="number"
-                                                                                        min="1"
-                                                                                        max={Math.max(1, normalizeInvitedCount(guest.invitedCount) - 1)}
                                                                                         value={getGuestEventInvitedCount(guest, event.id)}
                                                                                         onChange={(inputEvent) => updateGuestEventInvitedCount(guestIndex, event.id, Number(inputEvent.target.value))}
-                                                                                    />
+                                                                                    >
+                                                                                        {Array.from({ length: Math.max(1, normalizeInvitedCount(guest.invitedCount) - 1) }, (_, countIndex) => countIndex + 1).map((count) => <option key={count} value={count}>{count}</option>)}
+                                                                                    </select>
                                                                                 )}
                                                                             </span>
                                                                         )}
@@ -4496,8 +5148,8 @@ export default function Dashboard({
                                 <p className="dashboard-eyebrow">WhatsApp Message</p>
                                 <h2>Configure messages and link preview</h2>
                             </div>
-                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                {saveAllChangesLabel}
+                            <button className="dashboard-primary-btn" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                             </button>
                         </div>
 
@@ -4728,8 +5380,8 @@ export default function Dashboard({
                                 <p className="dashboard-eyebrow">RSVP Form</p>
                                 <h2>RSVP form settings</h2>
                             </div>
-                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                {saveAllChangesLabel}
+                            <button className="dashboard-primary-btn" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                             </button>
                         </div>
                         <section className="rsvp-settings-card rsvp-settings-card-stacked">
@@ -4784,8 +5436,8 @@ export default function Dashboard({
                                 <h2>Response analytics</h2>
                             </div>
                             <div className="dashboard-header-actions">
-                                <button className="dashboard-primary-btn secondary" type="button" onClick={handleSaveDraft}>
-                                    {saveAllChangesLabel}
+                                <button className="dashboard-primary-btn secondary" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                    {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                                 </button>
                                 <button className="dashboard-primary-btn secondary" type="button" onClick={exportRsvpCsv}>
                                     Export RSVP CSV
@@ -4874,8 +5526,8 @@ export default function Dashboard({
                                 <p className="dashboard-eyebrow">Closing Gallery</p>
                                 <h2>Edit the final thank-you section</h2>
                             </div>
-                            <button className="dashboard-primary-btn" type="button" onClick={handleSaveDraft}>
-                                {saveAllChangesLabel}
+                            <button className="dashboard-primary-btn" type="button" disabled={isSavingDashboard} onClick={handleSaveDraft}>
+                                {isSavingDashboard ? 'Saving...' : saveAllChangesLabel}
                             </button>
                         </div>
                         <p className="dashboard-note">

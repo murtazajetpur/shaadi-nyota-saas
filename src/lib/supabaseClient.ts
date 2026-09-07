@@ -20,3 +20,10 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
+export const createAuthenticatedDataClient = (accessToken: string): SupabaseClient | null => {
+  if (!supabaseUrl || !supabaseAnonKey || !accessToken) return null;
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    accessToken: async () => accessToken,
+  });
+};

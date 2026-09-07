@@ -92,6 +92,7 @@ export interface WeddingGuest {
   invitedEventIds: string[];
   invitedEventCounts?: Record<string, number>;
   mealPreference?: MealPreference;
+  updatedAt?: string;
 }
 
 export interface RsvpResponse {
@@ -119,6 +120,7 @@ export interface SampleWeddingData {
     pageTitle: string;
     guestRecordLimit: number;
     inviteeLimit: number;
+    updatedAt?: string;
   };
   hero: {
     revealStyle: RevealStyle;

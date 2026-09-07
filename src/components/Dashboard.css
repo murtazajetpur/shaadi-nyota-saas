@@ -2442,12 +2442,21 @@
     background: #fffafa;
 }
 
+.guest-table input.cell-warning {
+    border-color: #b1842f;
+    background: #fffaf0;
+}
+
 .guest-table em {
     display: block;
     margin-top: 4px;
     font-size: 0.74rem;
     font-style: normal;
     color: #9a332c;
+}
+
+.guest-table em.guest-field-warning {
+    color: #745614;
 }
 
 .guest-table code {
@@ -2904,8 +2913,10 @@
     }
 
     .guest-mobile-card-name input,
-    .guest-mobile-editable-value input {
+    .guest-mobile-editable-value input,
+    .guest-mobile-editable-value select {
         width: 100%;
+        box-sizing: border-box;
         min-width: 0;
         min-height: 40px;
         border: 1px solid rgba(55, 42, 35, 0.2);
@@ -2918,7 +2929,8 @@
     }
 
     .guest-mobile-card-name input:focus,
-    .guest-mobile-editable-value input:focus {
+    .guest-mobile-editable-value input:focus,
+    .guest-mobile-editable-value select:focus {
         border-color: rgba(122, 31, 31, 0.58);
         outline: 2px solid rgba(122, 31, 31, 0.1);
         outline-offset: 1px;
@@ -2930,12 +2942,21 @@
         background: #fffafa;
     }
 
+    .guest-mobile-editable-value input.cell-warning {
+        border-color: #b1842f;
+        background: #fffaf0;
+    }
+
     .guest-mobile-card-name em,
     .guest-mobile-editable-row em {
         color: #9a332c;
         font-size: 0.72rem;
         font-style: normal;
         line-height: 1.35;
+    }
+
+    .guest-mobile-editable-row em.guest-field-warning {
+        color: #745614;
     }
 
     .guest-mobile-field-edit {
@@ -2967,7 +2988,13 @@
         grid-template-columns: minmax(0, 1fr) 40px;
         align-items: center;
         gap: 8px;
+        width: 100%;
+        max-width: 100%;
         min-width: 0;
+    }
+
+    .guest-mobile-select-value {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .guest-mobile-editable-value > span {
@@ -3752,11 +3779,27 @@
     color: #7b2f2a;
 }
 
-.guest-family-size-field input {
+.guest-family-size-field input,
+.guest-family-size-field select {
     width: 64px !important;
     min-width: 64px !important;
     padding: 6px 8px !important;
     text-align: center;
+}
+
+.guest-family-size-field select {
+    border: 1px solid rgba(55, 42, 35, 0.18);
+    border-radius: 6px;
+    background: #fbfaf8;
+    color: #2e2723;
+    font: inherit;
+}
+
+.guest-family-size-field select:focus {
+    border-color: rgba(122, 31, 31, 0.58);
+    outline: 2px solid rgba(122, 31, 31, 0.1);
+    outline-offset: 1px;
+    background: #ffffff;
 }
 
 .dashboard-check-stack {
@@ -4264,6 +4307,13 @@
         word-break: break-word;
     }
 
+    .guest-mobile-card-summary > .guest-mobile-editable-row > em {
+        grid-column: 1 / -1;
+        width: 100%;
+        min-width: 0;
+        text-align: left;
+    }
+
     .guest-mobile-rsvp-detail,
     .guest-mobile-link-detail {
         display: grid;
@@ -4409,8 +4459,60 @@
     min-width: 0;
 }
 
-.guest-identity-cell > input {
+.guest-desktop-name-value > strong {
     font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.guest-desktop-editable-value {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+.guest-desktop-editable-value > input {
+    width: 100%;
+    min-width: 0;
+}
+
+.guest-desktop-editable-value > span {
+    min-width: 0;
+    color: #554b45;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.guest-desktop-field-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    border: 1px solid rgba(122, 31, 31, 0.18);
+    border-radius: 50%;
+    padding: 0;
+    background: #fbf7f2;
+    color: #7a1f1f;
+    cursor: pointer;
+}
+
+.guest-desktop-field-edit:hover {
+    border-color: rgba(122, 31, 31, 0.38);
+    background: #f7efe8;
+}
+
+.guest-desktop-field-edit:focus-visible {
+    outline: 2px solid rgba(122, 31, 31, 0.22);
+    outline-offset: 2px;
+}
+
+.guest-desktop-field-edit svg {
+    width: 15px;
+    height: 15px;
 }
 
 .guest-identity-grid {
@@ -4771,4 +4873,93 @@
         width: 100%;
         min-height: 44px;
     }
+}
+
+.guest-save-status {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding: 0.22rem 0.48rem;
+  border: 1px solid #d9d4c8;
+  border-radius: 999px;
+  background: #f7f5ef;
+  color: #625f57;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.guest-save-status.saving,
+.guest-save-status.pending {
+  border-color: #d9c79a;
+  background: #fbf5e5;
+  color: #765b1f;
+}
+
+.guest-save-status.saved {
+  border-color: #bad4c0;
+  background: #eef7f0;
+  color: #2f6b42;
+}
+
+.guest-save-status.attention {
+  border-color: #dbc48e;
+  background: #fff8e8;
+  color: #745614;
+}
+
+.guest-save-status.error {
+  border-color: #dfb6b0;
+  background: #fff1ef;
+  color: #8a3028;
+}
+
+.guest-save-error {
+  display: block;
+  max-width: 34rem;
+  margin-top: 0.3rem;
+  color: #8a3028;
+  font-size: 0.74rem;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.guest-row-save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.guest-row-save-actions button {
+  min-height: 38px;
+  border: 1px solid rgba(55, 42, 35, 0.18);
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  background: #ffffff;
+  color: #4e2822;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.guest-row-save-actions button.primary {
+  border-color: #376e4a;
+  background: #376e4a;
+  color: #ffffff;
+}
+
+.guest-row-save-actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 720px) {
+  .guest-mobile-card > .guest-row-save-actions button {
+    flex: 1 1 8rem;
+  }
 }

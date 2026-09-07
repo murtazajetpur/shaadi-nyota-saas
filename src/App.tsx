@@ -35,7 +35,7 @@ import {
   loadSupabaseWeddingBundle,
   loadSupabaseWeddingBySlug,
 } from './lib/supabaseWeddingData';
-import { isSupabaseConfigured } from './lib/supabaseClient';
+import { createAuthenticatedDataClient, isSupabaseConfigured } from './lib/supabaseClient';
 
 const templateDemoRoutes: Record<string, { slug: string; inviteCode: string; title: string }> = {
   'classic-envelope': {
@@ -284,34 +284,107 @@ function AccessMessage({
   );
 }
 
+const dashboardLoadTimeoutMs = 10000;
+
+class DashboardLoadTimeoutError extends Error {
+  constructor(stage: string) {
+    super(`${stage} is taking too long. Supabase did not respond after two attempts.`);
+    this.name = 'DashboardLoadTimeoutError';
+  }
+}
+
+const runDashboardLoadRequest = async <T,>(
+  stage: string,
+  request: (signal: AbortSignal) => Promise<T>
+): Promise<T> => {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    let timeoutId = 0;
+
+    try {
+      return await Promise.race([
+        request(controller.signal),
+        new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(() => {
+            controller.abort();
+            reject(new DashboardLoadTimeoutError(stage));
+          }, dashboardLoadTimeoutMs);
+        }),
+      ]);
+    } catch (error) {
+      lastError = error;
+      if (attempt === 1) throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  throw lastError;
+};
+
 function DashboardRoute() {
-  const { user, loading, isConfigured } = useAuth();
+  const { user, session, loading, isConfigured } = useAuth();
   const userId = user?.id;
   const [ownedWedding, setOwnedWedding] = useState<OwnedWeddingRow | null>(null);
   const [dashboardWedding, setDashboardWedding] = useState<SampleWeddingData | null>(null);
   const [isCheckingWedding, setIsCheckingWedding] = useState(false);
   const [weddingError, setWeddingError] = useState('');
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
-    if (!isConfigured || loading || !userId) return;
+    if (!isConfigured || loading || !userId || !session?.access_token) return;
 
-    setIsCheckingWedding(true);
-    getOwnedWeddingForUser(userId).then(async ({ wedding, error }) => {
-      setOwnedWedding(wedding);
-      if (error || !wedding) {
-        setWeddingError(error ?? '');
+    let cancelled = false;
+    const loadDashboardWedding = async () => {
+      setIsCheckingWedding(true);
+      setWeddingError('');
+      const dataClient = createAuthenticatedDataClient(session.access_token);
+
+      try {
+        const { wedding, error } = await runDashboardLoadRequest(
+          'Checking your wedding account',
+          (signal) => getOwnedWeddingForUser(userId, { signal, client: dataClient ?? undefined })
+        );
+        if (cancelled) return;
+
+        setOwnedWedding(wedding);
+        if (error || !wedding) {
+          setWeddingError(error ?? '');
+          setDashboardWedding(null);
+          return;
+        }
+
+        const bundle = await runDashboardLoadRequest(
+          'Loading your wedding details',
+          (signal) => loadSupabaseWeddingBundle(wedding.id, {
+            includeGuests: true,
+            signal,
+            client: dataClient ?? undefined,
+          })
+        );
+        if (cancelled) return;
+
+        setDashboardWedding(bundle.wedding ?? buildWeddingShellFromRow(wedding));
+        setWeddingError(bundle.error ?? '');
+      } catch (error) {
+        if (cancelled) return;
+        setOwnedWedding(null);
         setDashboardWedding(null);
-        setIsCheckingWedding(false);
-        return;
+        setWeddingError(error instanceof Error
+          ? error.message
+          : 'Could not load your wedding workspace. Please refresh and try again.');
+      } finally {
+        if (!cancelled) setIsCheckingWedding(false);
       }
+    };
 
-      const bundle = await loadSupabaseWeddingBundle(wedding.id, { includeGuests: true });
-      setDashboardWedding(bundle.wedding ?? buildWeddingShellFromRow(wedding));
-      setWeddingError(bundle.error ?? '');
-      setIsCheckingWedding(false);
-    });
-  }, [isConfigured, loading, userId]);
-
+    void loadDashboardWedding();
+    return () => {
+      cancelled = true;
+    };
+  }, [isConfigured, loadAttempt, loading, session?.access_token, userId]);
   if (!isConfigured) {
     return <Dashboard authNotice="Supabase env vars are missing, so the dashboard is running with development fallback data." />;
   }
@@ -325,7 +398,17 @@ function DashboardRoute() {
   }
 
   if (weddingError) {
-    return <AccessMessage title="Unable to load wedding" message={weddingError} />;
+    return (
+      <AccessMessage
+        title="Unable to load wedding"
+        message={weddingError}
+        action={(
+          <button className="auth-link-button" type="button" onClick={() => setLoadAttempt((current) => current + 1)}>
+            Try again
+          </button>
+        )}
+      />
+    );
   }
 
   if (!ownedWedding) {

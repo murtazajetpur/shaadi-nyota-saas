@@ -25,6 +25,9 @@ type GuestMessageHistoryRow = {
 };
 
 const historySelect = 'id,wedding_id,guest_id,message_type,message_snapshot,sent_at,recorded_by,created_at';
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const isPersistedGuestMessageId = (value: string) => uuidPattern.test(value.trim());
 
 const mapHistoryRow = (row: GuestMessageHistoryRow): GuestMessageHistoryEntry => ({
   id: row.id,
@@ -80,6 +83,16 @@ export async function recordGuestMessageSent({
   messageSnapshot: string;
 }) {
   if (!supabase) return { entry: null, error: 'Supabase is not configured.', detail: '' };
+  if (!isPersistedGuestMessageId(guestId)) {
+    return {
+      entry: null,
+      error: 'Save this guest before recording an invitation or reminder.',
+      detail: '',
+    };
+  }
+  if (!uuidPattern.test(weddingId.trim())) {
+    return { entry: null, error: 'Could not update WhatsApp tracking. Please try again.', detail: '' };
+  }
 
   const { data, error } = await supabase
     .from('guest_message_history')

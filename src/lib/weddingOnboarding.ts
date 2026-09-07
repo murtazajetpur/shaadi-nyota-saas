@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import {
   defaultOurStorySubtitle,
@@ -152,16 +153,22 @@ export const buildWeddingShellFromRow = (row: OwnedWeddingRow): SampleWeddingDat
   };
 };
 
-export const getOwnedWeddingForUser = async (userId: string) => {
-  if (!supabase) return { wedding: null, error: 'Supabase is not configured.' };
+export const getOwnedWeddingForUser = async (
+  userId: string,
+  options: { signal?: AbortSignal; client?: SupabaseClient } = {}
+) => {
+  const client = options.client ?? supabase;
+  if (!client) return { wedding: null, error: 'Supabase is not configured.' };
 
-  const { data, error } = await supabase
+  const query = client
     .from('weddings')
     .select('id, owner_id, created_by, slug, package_type, status, payment_status, theme_key, page_title, bride_name, groom_name, display_name, guest_record_limit, invitee_limit, published_at')
     .eq('owner_id', userId)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  if (options.signal) query.abortSignal(options.signal);
+  const { data, error } = await query.maybeSingle();
 
   return {
     wedding: data as OwnedWeddingRow | null,

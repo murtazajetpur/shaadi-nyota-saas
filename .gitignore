@@ -18,6 +18,11 @@ dist-ssr
 *.local
 supabase/.temp/
 
+# Local QA and generated runtime artifacts
+tmp/
+production_schema_audit.sql
+marketing/reels/**/chrome-profile/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

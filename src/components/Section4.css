@@ -51,11 +51,14 @@
 
 .step-indicator {
     font-family: var(--font-secondary);
-    font-size: 0.75rem;
-    letter-spacing: 0.1em;
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: 0;
     color: var(--color-text);
-    opacity: 0.6;
-    margin-bottom: 1rem;
+    opacity: 1;
+    margin-bottom: 0.75rem;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
 }
 
 .rsvp-title {
@@ -290,6 +293,13 @@
     margin-top: 4rem;
 }
 
+.rsvp-submit-success {
+    margin-top: 1.5rem;
+    padding: 0.85rem 0;
+    scroll-margin-block-end: min(18vh, 120px);
+    animation: rsvpSuccessReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .success-text {
     font-family: var(--font-secondary);
     font-size: 1.8rem;
@@ -312,6 +322,26 @@
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+@keyframes rsvpSuccessReveal {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+        filter: blur(3px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rsvp-submit-success {
+        animation: none;
     }
 }
 

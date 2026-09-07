@@ -13,13 +13,14 @@ The setup order below is for future reproducibility and production-readiness tes
 3. Run `supabase/seed.sql`
 4. For an existing project, run `supabase/security_hardening_phase_1.sql`
 5. Run `supabase/data_integrity_phase_2.sql`
-6. Create the `wedding-assets` Storage bucket and run `supabase/storage_policies.sql`
-7. Apply the feature migrations required by the deployed frontend.
-8. Run `supabase/production_security_hotfix.sql` on an existing production project.
-9. Run `supabase/verify_production_security_hotfix.sql` and confirm every check passes.
-10. Run `supabase/add_admin_delete_wedding.sql` to enable the Admin Panel permanent-delete action.
-11. Add local env vars
-12. Configure Auth settings, including Confirm Email behavior
+6. Apply the feature migrations required by the deployed frontend
+7. Run `supabase/guest_autosave_and_save_reliability.sql` after those migrations because its dashboard RPC references the current wedding-settings and event columns
+8. Create the `wedding-assets` Storage bucket and run `supabase/storage_policies.sql`
+9. Run `supabase/production_security_hotfix.sql` on an existing production project.
+10. Run `supabase/verify_production_security_hotfix.sql` and confirm every check passes.
+11. Run `supabase/add_admin_delete_wedding.sql` to enable the Admin Panel permanent-delete action.
+12. Add local env vars
+13. Configure Auth settings, including Confirm Email behavior
 
 ## 1. Create A Supabase Project
 
@@ -343,3 +344,15 @@ The login page links to `/forgot-password`. Supabase sends the recovery email ba
 - Ten-digit Indian mobile numbers default to `+91`; non-Indian numbers must include their country calling code.
 - Valid numbers are stored in canonical E.164 format, while shared family phone numbers produce warnings rather than blocking import.
 - The database trigger validates and normalizes every new guest phone write. Existing rows are not bulk-modified by the migration.
+
+## Guest Draft And Reliable Dashboard Saves
+
+Run `supabase/guest_autosave_and_save_reliability.sql` once on the existing project after the current Phase 2, guest-phone, wedding-settings, and event-field migrations. The migration:
+
+- Adds `guests.phone_input` so incomplete or invalid phone input can be retained as a draft while `guests.phone` remains canonical E.164 only when valid.
+- Adds `guests.client_ref` so retries for a newly added guest are idempotent.
+- Adds `save_wedding_guest_draft`, which saves one guest and that guest's event assignments atomically without replacing unrelated guests.
+- Adds `save_wedding_dashboard_transactional`, which saves the wedding shell, wedding settings, and existing event edits in one transaction.
+- Validates wedding ownership/admin access, event ownership, capacity limits, unique invite codes, and optimistic `updated_at` values.
+
+Guest text edits remain local while typing and save when the check icon or Enter confirms the field. Family Size and invited-event changes save immediately. Adding a guest performs one initial draft write for a stable UUID, and **Save All Changes** remains a fallback for dirty guest rows plus website edits. Incomplete rows can remain saved drafts, but WhatsApp invitation actions stay disabled until the guest has a valid phone, name, persisted ID, Family Size, at least one event, and no unsaved row edits. Existing CSV replace imports remain validate-first and transactional.
