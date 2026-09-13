@@ -283,7 +283,6 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                                         >
                                             {Array.from({ length: maxAttendingCount + 1 }, (_, count) => <option key={count} value={count}>{count}</option>)}
                                         </select>
-                                        <small>Maximum {maxAttendingCount}</small>
                                     </label>
                                 )}
                             </div>

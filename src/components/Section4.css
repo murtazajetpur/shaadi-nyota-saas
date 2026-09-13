@@ -386,9 +386,3 @@
     cursor: pointer;
 }
 
-.rsvp-attending-count-field small {
-    grid-column: 1 / -1;
-    color: var(--color-text-light);
-    font-family: var(--font-secondary);
-    font-size: 0.74rem;
-}
