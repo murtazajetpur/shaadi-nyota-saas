@@ -107,7 +107,7 @@ export const getGuestEventInviteeCountDisplayMode = (
 
   const familySize = Math.max(1, Math.floor(Number(guest.invitedCount) || 1));
   const invitedCount = Math.max(1, Math.floor(Number(guest.invitedEventCounts?.[eventId] ?? familySize) || 1));
-  return invitedCount === familySize && familySize > 2 ? 'all' : 'number';
+  return invitedCount === familySize ? 'all' : 'number';
 };
 
 export interface RsvpResponse {

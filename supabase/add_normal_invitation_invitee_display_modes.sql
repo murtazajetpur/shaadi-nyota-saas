@@ -15,7 +15,7 @@ alter table public.guest_event_invites
   check (invitee_count_display_mode in ('all', 'number'));
 
 comment on column public.guest_event_invites.invitee_count_display_mode is
-  'Explicit All or numeric display override. Null applies the product default: numeric for matching groups of 1-2, All for matching groups of 3+, and numeric when event count differs from Family Size.';
+  'Explicit All or numeric display override. Null preserves the legacy default: All when event count matches Family Size, and numeric when it differs.';
 
 create or replace function public.apply_guest_invitee_display_modes(
   target_wedding_id uuid,
