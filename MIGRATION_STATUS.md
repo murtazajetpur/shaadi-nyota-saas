@@ -46,13 +46,14 @@ Running the setup from scratch is a future reproducibility and production-readin
 5. `supabase/data_integrity_phase_2.sql`
 6. Apply the feature migrations required by the deployed frontend.
 7. Run `supabase/guest_autosave_and_save_reliability.sql` after those migrations; its dashboard RPC references the current wedding-settings and event columns.
-8. Create the public `wedding-assets` bucket and run `supabase/storage_policies.sql`.
-9. Run `supabase/add_wedding_media_library.sql` when enabling reusable uploads.
-10. For an existing production project, run `supabase/production_security_hotfix.sql`.
-11. Run `supabase/verify_production_security_hotfix.sql`; all checks must pass and both detail queries must return zero rows.
-12. Run `supabase/add_admin_delete_wedding.sql` to enable permanent admin wedding deletion and uploaded-file cleanup.
-13. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`.
-14. Configure Auth settings, including Confirm Email behavior.
+8. Run `supabase/add_normal_invitation_invitee_display_modes.sql` for the personalized-invitation All-versus-number override.
+9. Create the public `wedding-assets` bucket and run `supabase/storage_policies.sql`.
+10. Run `supabase/add_wedding_media_library.sql` when enabling reusable uploads.
+11. For an existing production project, run `supabase/production_security_hotfix.sql`.
+12. Run `supabase/verify_production_security_hotfix.sql`; all checks must pass and both detail queries must return zero rows.
+13. Run `supabase/add_admin_delete_wedding.sql` to enable permanent admin wedding deletion and uploaded-file cleanup.
+14. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env`.
+15. Configure Auth settings, including Confirm Email behavior.
 
 ## Guest Capacity Controls
 
@@ -174,3 +175,24 @@ Running the setup from scratch is a future reproducibility and production-readin
 - Guest saves and dashboard saves use `updated_at` conflict checks so another session cannot be silently overwritten.
 - Local dashboard drafts expire after seven days and are cleared on logout.
 - Supabase Realtime is not required for this behavior; database writes happen only at the explicit guest or dashboard save boundaries.
+
+## Normal Invitation Invitee Display
+
+- Apply `supabase/add_normal_invitation_invitee_display_modes.sql` after `supabase/guest_autosave_and_save_reliability.sql`.
+- When event invitees equal Family Size, groups of one or two default to the number and groups of three or more default to **All family members**.
+- A manually selected mode overrides that default, including displaying a number equal to Family Size.
+- CSV `All` and numeric values preserve the same distinction through import and export.
+## Open Invitations
+
+- Apply `supabase/add_open_invitations.sql` after the guest autosave/save-reliability migration. Existing projects that already ran it must also run `supabase/add_open_invitation_rsvp_preferences.sql`. Projects with an older link-wide capacity setting must run `supabase/remove_open_invitation_total_capacity.sql`. To add the invitee-count visibility setting to an existing Open Invitations install, run `supabase/add_open_invitation_invitee_count_visibility.sql`, followed by the latest `supabase/upsert_open_invitation_rsvp.sql`.
+- Pro dashboards can create reusable group links with event scope, a per-response party-size limit, optional invitee-count selection, expiry, pause/reactivate, link regeneration, and a per-link meal-preference switch. When invitee count is hidden, each response is stored as one person. There is no link-wide response or attendee cap.
+- Open Invitation respondents who decline every event only need to provide a name. Phone validation applies when any answer is Yes or Maybe.
+- Public `/{slug}/open/{code}` routes reuse the normal invite renderer and show only the events assigned to that link.
+- A successful first submission transaction creates a normal guest, event assignments, RSVP responses, and a personalized invite code.
+- A later submission from another device updates that guest only when the normalized phone belongs to the same Open Invitation. It never returns the existing private invite code, and it cannot overwrite an individual guest or a guest created by another Open Invitation.
+- Guest List and Open Invitations now share one **Invitations** dashboard section with **Individual Invitations** and **Open Invitations** views.
+- Submitted guests are marked in Individual Invitations as having joined through an Open Invitation.
+- Deleting an Open Invitation configuration does not delete guests or RSVP history already created from it.
+- Existing personalized invitation routes and RSVP behavior remain unchanged.
+- The frontend does not apply the SQL automatically; hosted Supabase projects require the migration to be run manually before the feature is used.
+- Existing projects that report missing `gen_random_bytes(integer)` during Open Invitation submission must run `supabase/fix_open_invitation_code_generation.sql`; new installs already use the extension-qualified function.

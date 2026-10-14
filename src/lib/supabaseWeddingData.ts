@@ -5,6 +5,7 @@ import {
   defaultDashboardWeddingSlug,
   getWeddingBySlug,
   type MealPreference,
+  type InviteeCountDisplayMode,
   type PackageType,
   type RevealImageType,
   type RevealStyle,
@@ -22,11 +23,59 @@ import {
   getDefaultWhatsAppPreviewTitle,
 } from '../data/whatsappInviteMessages';
 import { normalizeEventAnimationKey } from '../data/eventAnimations';
-import { supabase } from './supabaseClient';
-import { normalizeGuestPhone } from './guestPhone';
+import { publicSupabase, supabase } from './supabaseClient';
+import { normalizeGuestPhone, validateGuestPhone } from './guestPhone';
 
 export type WebsiteStatus = 'draft' | 'published' | 'suspended';
 export type PublicWeddingRouteStatus = 'live' | 'not_live' | 'not_found' | 'unknown';
+
+export interface OpenInvitation {
+  id: string;
+  weddingId: string;
+  label: string;
+  category: string;
+  inviteCode: string;
+  isActive: boolean;
+  maxPartySize: number;
+  showInviteeCount: boolean;
+  mealPreferenceEnabled: boolean;
+  expiresAt: string | null;
+  eventIds: string[];
+  responseCount: number;
+  registeredPeople: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OpenInvitationDraft = Pick<
+  OpenInvitation,
+  'label' | 'category' | 'isActive' | 'maxPartySize' | 'showInviteeCount' | 'mealPreferenceEnabled' | 'expiresAt' | 'eventIds'
+> & { id?: string };
+
+export interface PublicOpenInvitation {
+  id: string;
+  label: string;
+  category: string;
+  inviteCode: string;
+  maxPartySize: number;
+  showInviteeCount: boolean;
+  mealPreferenceEnabled: boolean;
+  expiresAt: string | null;
+}
+
+export interface OpenInvitationRsvpInput {
+  weddingSlug: string;
+  inviteCode: string;
+  respondentName: string;
+  respondentPhone: string;
+  partySize: number;
+  responses: Array<{
+    eventId: string;
+    status: Exclude<RsvpStatus, ''>;
+    attendingCount: number;
+  }>;
+  mealPreference?: MealPreference;
+}
 
 export interface SupabaseWeddingRow {
   id: string;
@@ -107,6 +156,7 @@ interface SupabaseEventRow {
   event_show_calendar?: boolean | null;
   event_show_invited_count?: boolean | null;
   guest_invited_count?: number | null;
+  guest_invitee_count_display_mode?: InviteeCountDisplayMode | null;
   event_name: string;
   date_label: string | null;
   start_time_label: string | null;
@@ -132,6 +182,7 @@ interface SupabaseGuestRow {
   category: string | null;
   invite_code: string;
   meal_preference: MealPreference | null;
+  open_invitation_id?: string | null;
   updated_at?: string | null;
 }
 
@@ -139,6 +190,7 @@ interface SupabaseGuestEventInviteRow {
   guest_id: string;
   event_id: string;
   invited_count?: number | null;
+  invitee_count_display_mode?: InviteeCountDisplayMode | null;
 }
 
 interface SupabaseRsvpResponseRow {
@@ -156,6 +208,31 @@ interface PublicInviteRpcPayload {
   guest: SupabaseGuestRow;
   events: SupabaseEventRow[];
   rsvp_responses: SupabaseRsvpResponseRow[];
+}
+
+interface SupabaseOpenInvitationRow {
+  id: string;
+  wedding_id?: string;
+  label: string;
+  category?: string | null;
+  invite_code: string;
+  is_active?: boolean;
+  max_party_size: number;
+  show_invitee_count?: boolean;
+  meal_preference_enabled?: boolean;
+  expires_at?: string | null;
+  event_ids?: string[];
+  response_count?: number;
+  registered_people?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface PublicOpenInvitationRpcPayload {
+  wedding: SupabaseWeddingRow;
+  settings: SupabaseWeddingSettingsRow | null;
+  open_invitation: SupabaseOpenInvitationRow;
+  events: SupabaseEventRow[];
 }
 
 interface TransactionalRelationalRpcPayload {
@@ -386,6 +463,9 @@ const mapEventRow = (row: SupabaseEventRow): WeddingEvent => ({
 });
 
 const normalizeInvitedCount = (value: unknown) => Math.max(1, Math.floor(Number(value) || 1));
+const normalizeInviteeCountDisplayMode = (value: unknown): InviteeCountDisplayMode | undefined => (
+  value === 'all' || value === 'number' ? value : undefined
+);
 
 const mapGuestRows = (
   guests: SupabaseGuestRow[],
@@ -404,9 +484,32 @@ const mapGuestRows = (
       invite.event_id,
       normalizeInvitedCount(invite.invited_count ?? guest.invited_count),
     ])),
+    invitedEventDisplayModes: Object.fromEntries(guestInvites.flatMap((invite) => {
+      const mode = normalizeInviteeCountDisplayMode(invite.invitee_count_display_mode);
+      return mode ? [[invite.event_id, mode]] : [];
+    })),
     mealPreference: guest.meal_preference ?? '',
+    sourceOpenInvitationId: guest.open_invitation_id ?? undefined,
     updatedAt: guest.updated_at ?? undefined,
   };
+});
+
+const mapOpenInvitationRow = (row: SupabaseOpenInvitationRow): OpenInvitation => ({
+  id: row.id,
+  weddingId: row.wedding_id ?? '',
+  label: row.label,
+  category: row.category ?? '',
+  inviteCode: row.invite_code,
+  isActive: row.is_active !== false,
+  maxPartySize: Math.max(1, Math.min(20, Number(row.max_party_size) || 20)),
+  showInviteeCount: row.show_invitee_count !== false,
+  mealPreferenceEnabled: row.meal_preference_enabled !== false,
+  expiresAt: row.expires_at ?? null,
+  eventIds: Array.isArray(row.event_ids) ? row.event_ids : [],
+  responseCount: Number(row.response_count) || 0,
+  registeredPeople: Number(row.registered_people) || 0,
+  createdAt: row.created_at ?? '',
+  updatedAt: row.updated_at ?? '',
 });
 
 const mapWeddingBundle = (
@@ -535,7 +638,7 @@ export async function loadSupabaseWeddingBundle(
 
   if (options.includeGuests) {
     const guestsQuery = client.from('guests').select('*').eq('wedding_id', weddingId).order('created_at', { ascending: false });
-    const invitesQuery = client.from('guest_event_invites').select('guest_id,event_id,invited_count').eq('wedding_id', weddingId);
+    const invitesQuery = client.from('guest_event_invites').select('*').eq('wedding_id', weddingId);
     if (options.signal) {
       guestsQuery.abortSignal(options.signal);
       invitesQuery.abortSignal(options.signal);
@@ -628,6 +731,7 @@ export async function loadSupabasePersonalizedInvite(slug: string, inviteCode: s
     guest_id: payload.guest.id,
     event_id: event.id,
     invited_count: event.guest_invited_count ?? payload.guest.invited_count ?? 1,
+    invitee_count_display_mode: event.guest_invitee_count_display_mode ?? null,
   }));
   const guest = mapGuestRows([payload.guest], inviteRows)[0];
   const wedding = mapWeddingBundle(payload.wedding, payload.settings, eventRows, [payload.guest], inviteRows);
@@ -638,6 +742,257 @@ export async function loadSupabasePersonalizedInvite(slug: string, inviteCode: s
     guest,
     visibleEvents: wedding.events,
     error: '',
+  };
+}
+
+const isMissingOpenInvitationMigration = (message?: string | null) => {
+  const normalized = message?.toLowerCase() ?? '';
+  return normalized.includes('schema cache') && (
+    normalized.includes('open_invitation') ||
+    normalized.includes('open invitation')
+  );
+};
+
+const openInvitationManagementError = (message?: string | null) => {
+  const normalized = message?.toLowerCase() ?? '';
+  if (isMissingOpenInvitationMigration(message)) {
+    return 'Open Invitations are not available yet. Run supabase/add_open_invitations.sql and try again.';
+  }
+  if (normalized.includes('pro plan')) return 'Open Invitations are available on the Pro plan.';
+  if (normalized.includes('access denied')) return 'You do not have access to manage Open Invitations for this wedding.';
+  if (normalized.includes('select at least one event')) return 'Select at least one event for this Open Invitation.';
+  if (normalized.includes('maximum group size')) return 'Maximum group size must be between 1 and 20.';
+  if (normalized.includes('does not belong')) return 'One or more selected events no longer belong to this wedding. Refresh and try again.';
+  return message || 'The Open Invitation could not be saved. Please try again.';
+};
+
+const publicOpenInvitationError = (message?: string | null) => {
+  const normalized = message?.toLowerCase() ?? '';
+  if (isMissingOpenInvitationMigration(message)) {
+    return 'This Open Invitation is not available yet. Please contact the couple.';
+  }
+  if (normalized.includes('invalid, paused, or expired')) {
+    return 'This Open Invitation is invalid, paused, or has expired.';
+  }
+  if (normalized.includes('connected to another invitation')) {
+    return 'This mobile number is already linked to another wedding invitation. Please use that invitation link or contact the couple.';
+  }
+  if (normalized.includes('already been submitted')) {
+    return 'This response could not be updated. Please refresh and try again.';
+  }
+  if (normalized.includes('guest entry limit') || normalized.includes('total people limit')) {
+    return 'This wedding guest list has reached its capacity. Please contact the couple.';
+  }
+  if (normalized.includes('mobile number')) return 'Enter a valid mobile number with its country code.';
+  if (normalized.includes('answer every event')) return 'Please answer every event before submitting.';
+  if (normalized.includes('not included in this open invitation') || normalized.includes('rsvp event is invalid')) {
+    return 'The events on this invitation have changed. Refresh the page and try again.';
+  }
+  if (normalized.includes('attending count')) return 'Choose a valid attendee count for every event.';
+  if (normalized.includes('meal preference')) return 'Choose a valid meal preference and try again.';
+  if (normalized.includes('group size')) return 'Choose a valid group size for this invitation.';
+  if (normalized.includes('name')) return 'Enter your name using no more than 120 characters.';
+  if (normalized.includes('jwt') || normalized.includes('token')) {
+    return 'Your RSVP session could not be verified. Refresh the page and try again.';
+  }
+  if (normalized.includes('failed to fetch') || normalized.includes('network')) {
+    return 'We could not reach the RSVP service. Check your connection and try again.';
+  }
+  return 'Your RSVP could not be submitted. Please review the form and try again.';
+};
+
+const getSupabaseErrorDetail = (error: {
+  message?: string | null;
+  code?: string | null;
+  details?: string | null;
+  hint?: string | null;
+}) => [
+  error.code ? `Code: ${error.code}` : '',
+  error.message ?? '',
+  error.details ?? '',
+  error.hint ?? '',
+].filter(Boolean).join(' | ');
+
+export async function loadSupabaseOpenInvitations(
+  weddingId: string,
+  options: { client?: SupabaseClient } = {}
+) {
+  const client = options.client ?? supabase;
+  if (!client) return { invitations: [], error: 'Supabase is not configured.', detail: '' };
+
+  const { data, error } = await client.rpc('list_open_invitations', {
+    target_wedding_id: weddingId,
+  });
+  if (error) {
+    return { invitations: [], error: openInvitationManagementError(error.message), detail: error.message };
+  }
+
+  const rows = Array.isArray(data) ? data as SupabaseOpenInvitationRow[] : [];
+  return { invitations: rows.map(mapOpenInvitationRow), error: '', detail: '' };
+}
+
+export async function saveSupabaseOpenInvitation(
+  weddingId: string,
+  invitation: OpenInvitationDraft,
+  options: { client?: SupabaseClient } = {}
+) {
+  const client = options.client ?? supabase;
+  if (!client) return { id: '', inviteCode: '', error: 'Supabase is not configured.', detail: '' };
+
+  const { data, error } = await client.rpc('save_open_invitation', {
+    target_wedding_id: weddingId,
+    invitation_row: {
+      id: invitation.id ?? null,
+      label: invitation.label.trim(),
+      category: invitation.category.trim(),
+      is_active: invitation.isActive,
+      max_party_size: invitation.maxPartySize,
+      show_invitee_count: invitation.showInviteeCount,
+      meal_preference_enabled: invitation.mealPreferenceEnabled,
+      expires_at: invitation.expiresAt,
+      event_ids: invitation.eventIds,
+    },
+  });
+  if (error) {
+    return { id: '', inviteCode: '', error: openInvitationManagementError(error.message), detail: error.message };
+  }
+
+  const payload = (data ?? {}) as { id?: string; invite_code?: string };
+  return { id: payload.id ?? '', inviteCode: payload.invite_code ?? '', error: '', detail: '' };
+}
+
+export async function regenerateSupabaseOpenInvitationCode(
+  weddingId: string,
+  openInvitationId: string,
+  options: { client?: SupabaseClient } = {}
+) {
+  const client = options.client ?? supabase;
+  if (!client) return { inviteCode: '', error: 'Supabase is not configured.', detail: '' };
+
+  const { data, error } = await client.rpc('regenerate_open_invitation_code', {
+    target_wedding_id: weddingId,
+    target_open_invitation_id: openInvitationId,
+  });
+  if (error) {
+    return { inviteCode: '', error: openInvitationManagementError(error.message), detail: error.message };
+  }
+
+  const payload = (data ?? {}) as { invite_code?: string };
+  return { inviteCode: payload.invite_code ?? '', error: '', detail: '' };
+}
+
+export async function deleteSupabaseOpenInvitation(
+  weddingId: string,
+  openInvitationId: string,
+  options: { client?: SupabaseClient } = {}
+) {
+  const client = options.client ?? supabase;
+  if (!client) return { error: 'Supabase is not configured.', detail: '' };
+
+  const { error } = await client.rpc('delete_open_invitation', {
+    target_wedding_id: weddingId,
+    target_open_invitation_id: openInvitationId,
+  });
+  return error
+    ? { error: openInvitationManagementError(error.message), detail: error.message }
+    : { error: '', detail: '' };
+}
+
+export async function loadSupabaseOpenInvitation(slug: string, inviteCode: string) {
+  if (!publicSupabase) {
+    return { wedding: null, weddingId: '', openInvitation: undefined, visibleEvents: undefined, error: 'Supabase is not configured.' };
+  }
+
+  const { data, error } = await publicSupabase.rpc('get_public_open_invitation_by_code', {
+    wedding_slug: slug,
+    open_invite_code: inviteCode,
+  });
+  if (error) {
+    return {
+      wedding: null,
+      weddingId: '',
+      openInvitation: undefined,
+      visibleEvents: undefined,
+      error: publicOpenInvitationError(error.message),
+    };
+  }
+  if (!data) {
+    return { wedding: null, weddingId: '', openInvitation: undefined, visibleEvents: undefined, error: '' };
+  }
+
+  const payload = data as PublicOpenInvitationRpcPayload;
+  const eventRows = payload.events ?? [];
+  const wedding = mapWeddingBundle(payload.wedding, payload.settings, eventRows);
+  const invitation = mapOpenInvitationRow(payload.open_invitation);
+  const openInvitation: PublicOpenInvitation = {
+    id: invitation.id,
+    label: invitation.label,
+    category: invitation.category,
+    inviteCode: invitation.inviteCode,
+    maxPartySize: invitation.maxPartySize,
+    showInviteeCount: invitation.showInviteeCount,
+    mealPreferenceEnabled: invitation.mealPreferenceEnabled,
+    expiresAt: invitation.expiresAt,
+  };
+
+  return {
+    wedding,
+    weddingId: payload.wedding.id,
+    openInvitation,
+    visibleEvents: wedding.events,
+    error: '',
+  };
+}
+
+export async function submitSupabaseOpenInvitationRsvp(input: OpenInvitationRsvpInput) {
+  if (!publicSupabase) return { inviteCode: '', guestId: '', action: 'created' as const, error: 'Supabase is not configured.', detail: '' };
+  const requiresPhone = input.responses.some((response) => (
+    response.status === 'yes' || response.status === 'maybe'
+  ));
+  let canonicalPhone = '';
+  if (requiresPhone || input.respondentPhone.trim()) {
+    const phone = validateGuestPhone(input.respondentPhone);
+    if (phone.error) return { inviteCode: '', guestId: '', action: 'created' as const, error: phone.error, detail: '' };
+    canonicalPhone = phone.canonicalPhone;
+  }
+
+  const { data, error } = await publicSupabase.rpc('submit_open_invitation_rsvp', {
+    wedding_slug: input.weddingSlug,
+    open_invite_code: input.inviteCode,
+    respondent_name: input.respondentName.trim(),
+    respondent_phone: canonicalPhone,
+    party_size: input.partySize,
+    responses: input.responses.map((response) => ({
+      event_id: response.eventId,
+      status: response.status,
+      attending_count: response.attendingCount,
+    })),
+    meal_preference: input.mealPreference || null,
+  });
+  if (error) {
+    const detail = getSupabaseErrorDetail(error);
+    if (import.meta.env.DEV) {
+      console.error('Open Invitation RSVP submission failed:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+    }
+    return { inviteCode: '', guestId: '', action: 'created' as const, error: publicOpenInvitationError(error.message), detail };
+  }
+
+  const payload = (data ?? {}) as {
+    invite_code?: string;
+    guest_id?: string;
+    submission_action?: 'created' | 'updated';
+  };
+  return {
+    inviteCode: payload.invite_code ?? '',
+    guestId: payload.guest_id ?? '',
+    action: payload.submission_action === 'updated' ? 'updated' as const : 'created' as const,
+    error: '',
+    detail: '',
   };
 }
 
@@ -980,6 +1335,7 @@ const guestToTransactionalRow = (guest: WeddingGuest) => ({
   meal_preference: guest.mealPreference || null,
   invited_event_ids: guest.invitedEventIds,
   invited_event_counts: guest.invitedEventCounts ?? {},
+  invited_event_display_modes: guest.invitedEventDisplayModes ?? {},
 });
 
 async function loadCurrentGuestIdSet(weddingId: string) {
@@ -1029,8 +1385,13 @@ function sanitizeRelationalSavePayload(
         normalizeInvitedCount(guest.invitedEventCounts?.[eventId] ?? guest.invitedEventCounts?.[originalId] ?? guest.invitedCount),
       ];
     }));
+    const invitedEventDisplayModes = Object.fromEntries(invitedEventIds.flatMap((eventId) => {
+      const originalId = Array.from(eventIdRemap.entries()).find(([, mappedId]) => mappedId === eventId)?.[0] ?? eventId;
+      const mode = guest.invitedEventDisplayModes?.[eventId] ?? guest.invitedEventDisplayModes?.[originalId];
+      return mode ? [[eventId, mode]] : [];
+    }));
 
-    return { ...guest, invitedEventIds, invitedEventCounts };
+    return { ...guest, invitedEventIds, invitedEventCounts, invitedEventDisplayModes };
   });
 
   return { events: sanitizedEvents, guests: sanitizedGuests };
@@ -1038,6 +1399,12 @@ function sanitizeRelationalSavePayload(
 
 const transactionalSaveError = (message?: string | null) => {
   const normalized = message?.toLowerCase() ?? '';
+  if (normalized.includes('schema cache') && (
+    normalized.includes('save_wedding_guests_with_invitee_display_modes_transactional') ||
+    normalized.includes('replace_guest_event_invites_with_display_modes_transactional')
+  )) {
+    return 'Could not save invitee display choices because the normal-invitation display-mode migration has not been applied. Run supabase/add_normal_invitation_invitee_display_modes.sql and try again.';
+  }
   if (normalized.includes('schema cache') && normalized.includes('save_wedding_relational_data_limited')) {
     return 'Could not save because the guest limits migration has not been applied. Run supabase/add_guest_limits_and_pagination.sql and try again.';
   }
@@ -1093,7 +1460,8 @@ const isMissingGuestAutosaveMigration = (message?: string | null) => {
     normalized.includes('save_wedding_guest_draft') ||
     normalized.includes('save_wedding_dashboard_transactional') ||
     normalized.includes('phone_input') ||
-    normalized.includes('client_ref')
+    normalized.includes('client_ref') ||
+    normalized.includes('invitee_count_display_mode')
   );
 };
 
@@ -1111,7 +1479,7 @@ export async function saveSupabaseGuestDraft(
   const timeoutId = setTimeout(() => abortController.abort(), guestDraftSaveTimeoutMs);
 
   try {
-    const { data, error } = await client.rpc('save_wedding_guest_draft', {
+    const { data, error } = await client.rpc('save_wedding_guest_draft_with_invitee_display_modes', {
       target_wedding_id: weddingId,
       guest_row: {
         id: guest.id,
@@ -1123,6 +1491,7 @@ export async function saveSupabaseGuestDraft(
         meal_preference: guest.mealPreference || null,
         invited_event_ids: guest.invitedEventIds,
         invited_event_counts: guest.invitedEventCounts ?? {},
+        invited_event_display_modes: guest.invitedEventDisplayModes ?? {},
       },
       expected_updated_at: guest.updatedAt ?? null,
     }).abortSignal(abortController.signal);
@@ -1131,7 +1500,7 @@ export async function saveSupabaseGuestDraft(
       return {
         guest: null,
         error: isMissingGuestAutosaveMigration(error.message)
-          ? 'Guest autosave is not available yet. Run supabase/guest_autosave_and_save_reliability.sql and try again.'
+          ? 'Guest autosave is not available yet. Run supabase/guest_autosave_and_save_reliability.sql, then supabase/add_normal_invitation_invitee_display_modes.sql, and try again.'
           : transactionalSaveError(error.message),
         detail: error.message,
         code: error.code ?? '',
@@ -1266,7 +1635,8 @@ export async function replaceSupabaseGuestInvites(
   guestId: string,
   eventIds: string[],
   events: WeddingEvent[] = [],
-  eventCounts: Record<string, number> = {}
+  eventCounts: Record<string, number> = {},
+  eventDisplayModes: Record<string, InviteeCountDisplayMode> = {}
 ) {
   if (!supabase) return { error: 'Supabase is not configured.', detail: '' };
 
@@ -1281,12 +1651,17 @@ export async function replaceSupabaseGuestInvites(
     resolveEventId(eventId) ?? eventId,
     normalizeInvitedCount(count),
   ]));
+  const resolvedEventDisplayModes = Object.fromEntries(Object.entries(eventDisplayModes).map(([eventId, mode]) => [
+    resolveEventId(eventId) ?? eventId,
+    mode,
+  ]));
 
-  const { error } = await supabase.rpc('replace_guest_event_invites_transactional', {
+  const { error } = await supabase.rpc('replace_guest_event_invites_with_display_modes_transactional', {
     target_wedding_id: weddingId,
     target_guest_id: guestId,
     event_ids: resolvedIds,
     event_counts: resolvedEventCounts,
+    event_display_modes: resolvedEventDisplayModes,
   });
 
   return {
@@ -1317,14 +1692,18 @@ export async function saveSupabaseGuests(weddingId: string, guests: WeddingGuest
       resolvedId,
       normalizeInvitedCount(guest.invitedEventCounts?.[originalId] ?? guest.invitedEventCounts?.[resolvedId] ?? guest.invitedCount),
     ]));
-    return { ...guest, invitedEventIds, invitedEventCounts };
+    const invitedEventDisplayModes = Object.fromEntries(resolvedPairs.flatMap(({ originalId, resolvedId }) => {
+      const mode = guest.invitedEventDisplayModes?.[originalId] ?? guest.invitedEventDisplayModes?.[resolvedId];
+      return mode ? [[resolvedId, mode]] : [];
+    }));
+    return { ...guest, invitedEventIds, invitedEventCounts, invitedEventDisplayModes };
   });
 
   if (unresolvedSelections.size) {
     return { error: `Could not save guest event invites because these event selections do not map to Supabase event UUIDs: ${Array.from(unresolvedSelections).join(', ')}` };
   }
 
-  const { data, error } = await supabase.rpc('save_wedding_guests_transactional', {
+  const { data, error } = await supabase.rpc('save_wedding_guests_with_invitee_display_modes_transactional', {
     target_wedding_id: weddingId,
     guest_rows: guestsWithResolvedEvents.map(guestToTransactionalRow),
     guest_mode: 'replace',
@@ -1390,15 +1769,19 @@ export async function importSupabaseGuests(
       resolvedId,
       normalizeInvitedCount(guest.invitedEventCounts?.[originalId] ?? guest.invitedEventCounts?.[resolvedId] ?? guest.invitedCount),
     ]));
+    const invitedEventDisplayModes = Object.fromEntries(resolvedPairs.flatMap(({ originalId, resolvedId }) => {
+      const mode = guest.invitedEventDisplayModes?.[originalId] ?? guest.invitedEventDisplayModes?.[resolvedId];
+      return mode ? [[resolvedId, mode]] : [];
+    }));
 
-    return { ...guest, invitedEventIds, invitedEventCounts };
+    return { ...guest, invitedEventIds, invitedEventCounts, invitedEventDisplayModes };
   });
 
   if (unresolvedSelections.size) {
     return { error: `Could not import guests because these event selections do not map to Supabase event UUIDs: ${Array.from(unresolvedSelections).join(', ')}` };
   }
 
-  const { data, error } = await supabase.rpc('save_wedding_guests_transactional', {
+  const { data, error } = await supabase.rpc('save_wedding_guests_with_invitee_display_modes_transactional', {
     target_wedding_id: weddingId,
     guest_rows: resolvedGuests.map(guestToTransactionalRow),
     guest_mode: mode,

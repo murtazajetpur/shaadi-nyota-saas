@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './Section3.css';
 import type { RefObject } from 'react';
-import type { SampleWeddingData, WeddingEvent, WeddingGuest } from '../data/sampleWeddingData';
+import { getGuestEventInviteeCountDisplayMode, type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
 import { getEventVisualByKey } from '../data/eventVisuals';
 import { getOptimizedAssetPath } from '../data/assetRegistry';
 import EventAnimationLayer from './EventAnimationLayer';
@@ -103,8 +103,9 @@ const getGuestEventInvitedCountLabel = (event: WeddingEvent, guest?: WeddingGues
         : event.guestInvitedCount;
     if (count === undefined) return null;
     const eventCount = normalizeInvitedCount(count);
-    const familyCount = guest ? normalizeInvitedCount(guest.invitedCount) : null;
-    return familyCount && eventCount >= familyCount ? 'All' : String(eventCount);
+    return guest && getGuestEventInviteeCountDisplayMode(guest, event.id) === 'all'
+        ? 'All'
+        : String(eventCount);
 };
 
 const particlePositions = Array.from({ length: 15 }, (_, index) => ({

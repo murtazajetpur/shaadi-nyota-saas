@@ -20,6 +20,19 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
+
+// Public invite links must not inherit a dashboard/admin browser session. A
+// session-free client also avoids stale authenticated tokens blocking an
+// otherwise anonymous RSVP submission.
+export const publicSupabase: SupabaseClient | null = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  })
+  : null;
 export const createAuthenticatedDataClient = (accessToken: string): SupabaseClient | null => {
   if (!supabaseUrl || !supabaseAnonKey || !accessToken) return null;
 

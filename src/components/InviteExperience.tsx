@@ -6,6 +6,7 @@ import DemoWatermarkOverlay from './DemoWatermarkOverlay';
 import { type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
 import { getWeddingSectionConfig, type WeddingSectionConfig } from '../data/sectionConfig';
 import WeddingSectionRenderer from './WeddingSectionRenderer';
+import type { PublicOpenInvitation } from '../lib/supabaseWeddingData';
 import { getOptimizedAssetPath, resolveAssetPath } from '../data/assetRegistry';
 
 interface InviteExperienceProps {
@@ -21,6 +22,7 @@ interface InviteExperienceProps {
   forceSectionsVisible?: boolean;
   forceEventsVisible?: boolean;
   demoPreviewMode?: boolean;
+  openInvitation?: PublicOpenInvitation;
 }
 
 interface ClassicInviteExperienceProps extends InviteExperienceProps {
@@ -39,6 +41,7 @@ function ClassicInviteExperience({
   previewScrollFrame = false,
   forceSectionsVisible = false,
   demoPreviewMode = false,
+  openInvitation,
   eventsToShow,
   sectionConfig,
 }: ClassicInviteExperienceProps) {
@@ -128,6 +131,7 @@ function ClassicInviteExperience({
           guest={guest}
           personalizedInviteMode={personalizedInviteMode}
           showStoryScrollPrompt={heroDone && data.hero.skipRevealImage}
+          openInvitation={openInvitation}
         />
       )}
     </div>
@@ -165,10 +169,12 @@ export default function InviteExperience({
   forceSectionsVisible = false,
   forceEventsVisible = false,
   demoPreviewMode = false,
+  openInvitation,
 }: InviteExperienceProps) {
   const eventsToShow = visibleEvents ?? data.events;
   const sectionConfig = getWeddingSectionConfig(data, { visibleEvents }).map((section) => (
-    forceEventsVisible && section.type === 'events' && eventsToShow.length > 0
+    (forceEventsVisible && section.type === 'events' && eventsToShow.length > 0)
+      || (openInvitation && section.type === 'rsvp')
       ? { ...section, enabled: true }
       : section
   ));
@@ -187,6 +193,7 @@ export default function InviteExperience({
       previewScrollFrame={previewScrollFrame}
       forceSectionsVisible={forceSectionsVisible}
       demoPreviewMode={demoPreviewMode}
+      openInvitation={openInvitation}
       eventsToShow={eventsToShow}
       sectionConfig={sectionConfig}
     />

@@ -15,12 +15,13 @@ The setup order below is for future reproducibility and production-readiness tes
 5. Run `supabase/data_integrity_phase_2.sql`
 6. Apply the feature migrations required by the deployed frontend
 7. Run `supabase/guest_autosave_and_save_reliability.sql` after those migrations because its dashboard RPC references the current wedding-settings and event columns
-8. Create the `wedding-assets` Storage bucket and run `supabase/storage_policies.sql`
-9. Run `supabase/production_security_hotfix.sql` on an existing production project.
-10. Run `supabase/verify_production_security_hotfix.sql` and confirm every check passes.
-11. Run `supabase/add_admin_delete_wedding.sql` to enable the Admin Panel permanent-delete action.
-12. Add local env vars
-13. Configure Auth settings, including Confirm Email behavior
+8. Run `supabase/add_normal_invitation_invitee_display_modes.sql` to persist the All-versus-number choice for personalized invitations
+9. Create the `wedding-assets` Storage bucket and run `supabase/storage_policies.sql`
+10. Run `supabase/production_security_hotfix.sql` on an existing production project.
+11. Run `supabase/verify_production_security_hotfix.sql` and confirm every check passes.
+12. Run `supabase/add_admin_delete_wedding.sql` to enable the Admin Panel permanent-delete action.
+13. Add local env vars
+14. Configure Auth settings, including Confirm Email behavior
 
 ## 1. Create A Supabase Project
 
@@ -356,3 +357,52 @@ Run `supabase/guest_autosave_and_save_reliability.sql` once on the existing proj
 - Validates wedding ownership/admin access, event ownership, capacity limits, unique invite codes, and optimistic `updated_at` values.
 
 Guest text edits remain local while typing and save when the check icon or Enter confirms the field. Family Size and invited-event changes save immediately. Adding a guest performs one initial draft write for a stable UUID, and **Save All Changes** remains a fallback for dirty guest rows plus website edits. Incomplete rows can remain saved drafts, but WhatsApp invitation actions stay disabled until the guest has a valid phone, name, persisted ID, Family Size, at least one event, and no unsaved row edits. Existing CSV replace imports remain validate-first and transactional.
+
+## Normal Invitation Invitee Display Modes
+
+Run `supabase/add_normal_invitation_invitee_display_modes.sql` after the guest autosave migration. It stores an explicit **All family members** or **Specific number** override for each guest-event assignment and returns that choice through personalized invitation links. Without an override, matching groups of one or two display the number, matching groups of three or more display **All**, and event counts below Family Size display the number. CSV `All` values preserve the All mode, while numeric CSV values preserve the numeric mode even when the number equals Family Size.
+## Open Invitations
+
+Run `supabase/add_open_invitations.sql` once after
+`supabase/guest_autosave_and_save_reliability.sql`. The migration creates the
+Open Invitation tables, adds `guests.open_invitation_id`, and installs
+owner/admin management RPCs plus public lookup and submission RPCs.
+
+Existing projects that already ran `add_open_invitations.sql` must also run
+`supabase/add_open_invitation_rsvp_preferences.sql` once.
+Projects that used the earlier optional total-capacity setting must run
+`supabase/remove_open_invitation_total_capacity.sql` to clear stored caps and
+install the current RPC behavior. To add the per-link invitee-count visibility
+setting to an existing Open Invitations install, run
+`supabase/add_open_invitation_invitee_count_visibility.sql`. Then run
+`supabase/upsert_open_invitation_rsvp.sql` so a respondent can safely update a
+response created by the same Open Invitation from another device.
+
+Open Invitations are available to Pro weddings (the internal `rsvp` package;
+legacy `whatsapp` records remain compatible). A couple can choose the events,
+maximum party size, optional expiry, and a per-link meal preference question for
+one reusable `/{slug}/open/{code}` link. Each link can show an invitee-count
+selector or hide it and register exactly one person per response. There is intentionally no link-wide
+registration cap. Pausing or
+regenerating the link invalidates future access. Deleting the link keeps guests and
+RSVP responses already created from it.
+
+Public submissions are one transaction: validate the published paid wedding,
+link, selected events, party size, and all RSVP answers; then create or update the
+guest, event assignments, and RSVP rows together. A phone number is required and
+validated when any event answer is Yes or Maybe; an all-No response requires only
+the guest name, but a voluntarily supplied phone is still validated and can match a
+later cross-device update. A normalized phone may update only a guest created by
+the same Open Invitation. A phone linked to an individual invitation or another
+Open Invitation is rejected without modifying that guest. Existing private invite
+codes are preserved and are never returned by the cross-device update response.
+
+Browser roles cannot directly read or write the Open Invitation tables. A newly
+created guest receives a normal personalized invite code and appears under
+**Invitations > Individual Invitations**. Reusable links are managed under
+**Invitations > Open Invitations**.
+
+If an existing project reports that `gen_random_bytes(integer)` does not exist,
+run `supabase/fix_open_invitation_code_generation.sql`. Supabase installs
+`pgcrypto` under the `extensions` schema; the hotfix qualifies that schema in
+the link default and code-generating RPCs, then reloads the API schema cache.

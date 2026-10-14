@@ -1,0 +1,128 @@
+.open-invitation-rsvp {
+  min-height: 100dvh;
+  padding-block: max(2rem, env(safe-area-inset-top)) max(3rem, env(safe-area-inset-bottom));
+  align-items: flex-start;
+}
+
+.open-invitation-rsvp-container {
+  max-width: 390px;
+  padding-top: 1rem;
+}
+
+.open-invitation-identity {
+  display: grid;
+  gap: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.open-invitation-identity label {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.open-invitation-identity label > span {
+  font-family: var(--font-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.open-invitation-identity input,
+.open-invitation-identity select {
+  width: 100%;
+  min-height: 46px;
+  box-sizing: border-box;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
+  font-family: var(--font-secondary);
+  font-size: 0.95rem;
+}
+
+.open-invitation-identity small {
+  color: var(--color-text-light);
+  font-family: var(--font-secondary);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.open-invitation-submit-error {
+  margin: 0.85rem 0 0;
+  color: #8a3029;
+  font-family: var(--font-secondary);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.open-invitation-submit-detail {
+  margin-top: 0.75rem;
+  color: #6e3a32;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.open-invitation-submit-detail summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.open-invitation-rsvp .rsvp-submit-btn:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.open-invitation-success {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.4rem 0;
+  text-align: center;
+  animation: rsvpSuccessReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.open-invitation-success > span {
+  color: #8b6c26;
+  font-family: var(--font-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.open-invitation-success h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-secondary);
+  font-size: 1.7rem;
+  line-height: 1.2;
+}
+
+.open-invitation-success p {
+  margin: 0;
+  color: var(--color-text-light);
+  font-family: var(--font-secondary);
+  line-height: 1.55;
+}
+
+.open-invitation-success a {
+  display: inline-flex;
+  justify-self: center;
+  align-items: center;
+  min-height: 46px;
+  padding: 0.65rem 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--color-text);
+  font-family: var(--font-secondary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .open-invitation-success {
+    animation: none;
+  }
+}
