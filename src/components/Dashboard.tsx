@@ -840,6 +840,91 @@ const readDashboardDraft = (storageKey: string) => {
     }
 };
 
+const mergeAuthoritativeGuests = (
+    draftGuests: WeddingGuest[],
+    sourceGuests: WeddingGuest[],
+    preserveDraftGuestIds?: ReadonlySet<string>
+) => {
+    const draftById = new Map(draftGuests.map((guest) => [guest.id, guest]));
+    const sourceIds = new Set(sourceGuests.map((guest) => guest.id));
+    const shouldPreserveDraft = (draftGuest: WeddingGuest, sourceGuest?: WeddingGuest) => (
+        preserveDraftGuestIds
+            ? preserveDraftGuestIds.has(draftGuest.id)
+            : !sourceGuest || getGuestDraftSignature(draftGuest) !== getGuestDraftSignature(sourceGuest)
+    );
+    const draftOnlyGuests = draftGuests.filter((guest) => (
+        !sourceIds.has(guest.id) && shouldPreserveDraft(guest)
+    ));
+
+    return [
+        ...draftOnlyGuests.map(cloneGuestDraft),
+        ...sourceGuests.map((sourceGuest) => {
+            const draftGuest = draftById.get(sourceGuest.id);
+            return cloneGuestDraft(
+                draftGuest && shouldPreserveDraft(draftGuest, sourceGuest)
+                    ? draftGuest
+                    : sourceGuest
+            );
+        }),
+    ];
+};
+
+type DashboardContentSection = keyof SampleWeddingData;
+const dashboardContentSections: DashboardContentSection[] = [
+    'wedding',
+    'hero',
+    'music',
+    'whatsapp',
+    'couple',
+    'events',
+    'rsvp',
+    'closing',
+];
+
+const rebaseWeddingDraftOnAuthoritativeState = (
+    draft: SampleWeddingData,
+    source: SampleWeddingData,
+    savedContentSignature: string,
+    preserveDraftGuestIds: ReadonlySet<string>
+) => {
+    const savedSnapshot = JSON.parse(savedContentSignature) as SampleWeddingData;
+    const draftSnapshot = JSON.parse(getWeddingContentDraftSignature(draft)) as SampleWeddingData;
+    const draftCopy = cloneWedding(draft);
+    const sourceCopy = cloneWedding(source);
+    const useDraftSection = new Set(dashboardContentSections.filter((section) => (
+        JSON.stringify(draftSnapshot[section]) !== JSON.stringify(savedSnapshot[section])
+    )));
+
+    const rebasedWedding = useDraftSection.has('wedding') ? draftCopy.wedding : sourceCopy.wedding;
+    const rebasedRsvp = useDraftSection.has('rsvp') ? draftCopy.rsvp : sourceCopy.rsvp;
+
+    return {
+        wedding: {
+            ...rebasedWedding,
+            packageType: sourceCopy.wedding.packageType,
+            paymentStatus: sourceCopy.wedding.paymentStatus,
+            status: sourceCopy.wedding.status,
+            guestRecordLimit: sourceCopy.wedding.guestRecordLimit,
+            inviteeLimit: sourceCopy.wedding.inviteeLimit,
+            updatedAt: sourceCopy.wedding.updatedAt,
+        },
+        hero: useDraftSection.has('hero') ? draftCopy.hero : sourceCopy.hero,
+        music: useDraftSection.has('music') ? draftCopy.music : sourceCopy.music,
+        whatsapp: useDraftSection.has('whatsapp') ? draftCopy.whatsapp : sourceCopy.whatsapp,
+        couple: useDraftSection.has('couple') ? draftCopy.couple : sourceCopy.couple,
+        events: useDraftSection.has('events') ? draftCopy.events : sourceCopy.events,
+        rsvp: {
+            ...rebasedRsvp,
+            guests: mergeAuthoritativeGuests(
+                draftCopy.rsvp.guests,
+                sourceCopy.rsvp.guests,
+                preserveDraftGuestIds
+            ),
+        },
+        closing: useDraftSection.has('closing') ? draftCopy.closing : sourceCopy.closing,
+    };
+};
+
 const applyAuthoritativePlanState = (
     draft: SampleWeddingData,
     source?: SampleWeddingData
@@ -853,6 +938,13 @@ const applyAuthoritativePlanState = (
             packageType: source.wedding.packageType,
             paymentStatus: source.wedding.paymentStatus,
             status: source.wedding.status,
+            guestRecordLimit: source.wedding.guestRecordLimit,
+            inviteeLimit: source.wedding.inviteeLimit,
+            updatedAt: source.wedding.updatedAt,
+        },
+        rsvp: {
+            ...draft.rsvp,
+            guests: mergeAuthoritativeGuests(draft.rsvp.guests, source.rsvp.guests),
         },
     };
 };
@@ -2188,13 +2280,7 @@ export default function Dashboard({
         try {
             await saveDirtyGuests();
 
-            const weddingToSave = cloneWedding(weddingDataRef.current);
-            const guestCapacityError = getGuestCapacityError(weddingToSave);
-            if (guestCapacityError) {
-                setSaveStatus('');
-                setSaveError(guestCapacityError);
-                return false;
-            }
+            let weddingToSave = cloneWedding(weddingDataRef.current);
 
             if (supabaseWeddingId) {
                 if (validation.slug || validation.brideName || validation.groomName) {
@@ -2203,9 +2289,53 @@ export default function Dashboard({
                     return false;
                 }
 
-                const result = await saveSupabaseWeddingDashboard(supabaseWeddingId, weddingToSave, {
+                const refreshWeddingForSave = async () => {
+                    const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, {
+                        includeGuests: true,
+                        client: authenticatedDataClient ?? undefined,
+                    });
+                    if (refreshed.error || !refreshed.wedding) {
+                        setSaveStatus('');
+                        setSaveError('Could not refresh the latest wedding data. Your changes are still on screen; retry.');
+                        setSaveErrorDetail(refreshed.error);
+                        return null;
+                    }
+                    return rebaseWeddingDraftOnAuthoritativeState(
+                        weddingDataRef.current,
+                        refreshed.wedding,
+                        savedWeddingContentSignatureRef.current,
+                        dirtyGuestIdsRef.current
+                    );
+                };
+
+                const refreshedWedding = await refreshWeddingForSave();
+                if (!refreshedWedding) return false;
+                weddingToSave = refreshedWedding;
+
+                let guestCapacityError = getGuestCapacityError(weddingToSave);
+                if (guestCapacityError) {
+                    setSaveStatus('');
+                    setSaveError(guestCapacityError);
+                    return false;
+                }
+
+                let result = await saveSupabaseWeddingDashboard(supabaseWeddingId, weddingToSave, {
                     client: authenticatedDataClient ?? undefined,
                 });
+                if (result.error && isGuestSaveVersionConflict(undefined, result.detail)) {
+                    const retryWedding = await refreshWeddingForSave();
+                    if (!retryWedding) return false;
+                    weddingToSave = retryWedding;
+                    guestCapacityError = getGuestCapacityError(weddingToSave);
+                    if (guestCapacityError) {
+                        setSaveStatus('');
+                        setSaveError(guestCapacityError);
+                        return false;
+                    }
+                    result = await saveSupabaseWeddingDashboard(supabaseWeddingId, weddingToSave, {
+                        client: authenticatedDataClient ?? undefined,
+                    });
+                }
                 if (result.error) {
                     console.error('Could not save dashboard transactionally', {
                         error: result.detail || result.error,
@@ -2225,7 +2355,13 @@ export default function Dashboard({
                     eventShowCalendar: submittedEventsById.get(savedEvent.id)?.eventShowCalendar ?? savedEvent.eventShowCalendar,
                 }));
                 weddingToSave.wedding.updatedAt = result.weddingUpdatedAt || weddingToSave.wedding.updatedAt;
-                weddingToSave.rsvp.guests = cloneWedding(weddingDataRef.current).rsvp.guests;
+            } else {
+                const guestCapacityError = getGuestCapacityError(weddingToSave);
+                if (guestCapacityError) {
+                    setSaveStatus('');
+                    setSaveError(guestCapacityError);
+                    return false;
+                }
             }
 
             let mediaCleanupWarning = '';
@@ -2248,6 +2384,11 @@ export default function Dashboard({
             const persistedWedding = cloneWedding(weddingToSave);
             savedWeddingContentSignatureRef.current = getWeddingContentDraftSignature(persistedWedding);
             const failedGuestIds = pruneGuestAutosaveErrors();
+            persistedWedding.rsvp.guests.forEach((guest) => {
+                if (!dirtyGuestIdsRef.current.has(resolveGuestAutosaveId(guest.id))) {
+                    savedGuestSnapshotsRef.current.set(guest.id, cloneGuestDraft(guest));
+                }
+            });
             const guestSaveWarning = failedGuestIds.length > 0
                 ? `${failedGuestIds.length} guest draft${failedGuestIds.length === 1 ? '' : 's'} could not be saved. Website changes were saved; review the guest row${failedGuestIds.length === 1 ? '' : 's'} marked Save failed and retry.`
                 : '';
@@ -2261,8 +2402,12 @@ export default function Dashboard({
                 || failedGuestIds.length > 0
             );
             if (hasNewerChanges) {
-                const currentWedding = cloneWedding(weddingDataRef.current);
-                currentWedding.wedding.updatedAt = weddingToSave.wedding.updatedAt;
+                const currentWedding = rebaseWeddingDraftOnAuthoritativeState(
+                    weddingDataRef.current,
+                    persistedWedding,
+                    getWeddingContentDraftSignature(weddingToSave),
+                    dirtyGuestIdsRef.current
+                );
                 weddingDataRef.current = currentWedding;
                 setWeddingData(currentWedding);
                 syncDashboardDirtyState();
@@ -2281,6 +2426,17 @@ export default function Dashboard({
             if (saveWarnings.length > 0) setSaveError(saveWarnings.join(' '));
             else setSaveError('');
             return true;
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
+            console.error('Could not save dashboard', {
+                error: detail,
+                weddingId: supabaseWeddingId,
+                mode,
+            });
+            setSaveStatus('');
+            setSaveError('Could not save changes. Your changes are still on screen; retry.');
+            setSaveErrorDetail(detail);
+            return false;
         } finally {
             isSaveInFlightRef.current = false;
             setIsSavingDashboard(false);
