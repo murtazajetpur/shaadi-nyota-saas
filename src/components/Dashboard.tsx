@@ -176,6 +176,32 @@ type GuestSaveState = {
     phase: GuestSavePhase;
     message?: string;
 };
+type DashboardUnsavedValueChange = {
+    path: string;
+    savedValue: unknown;
+    currentValue: unknown;
+};
+type DashboardUnsavedGuestChange = {
+    dirtyId: string;
+    resolvedId: string;
+    guestName: string;
+    saveState: GuestSaveState['phase'] | 'untracked';
+    saveMessage?: string;
+    changes: DashboardUnsavedValueChange[];
+    note: string;
+};
+type DashboardUnsavedChangesReport = {
+    hasUnsavedChanges: boolean;
+    websiteChanges: DashboardUnsavedValueChange[];
+    guestChanges: DashboardUnsavedGuestChange[];
+    dirtyGuestIds: string[];
+};
+type ShaadiNyotaDebugApi = Record<string, unknown> & {
+    unsavedChanges?: () => DashboardUnsavedChangesReport;
+};
+type ShaadiNyotaDebugWindow = Window & {
+    shaadiNyotaDebug?: ShaadiNyotaDebugApi;
+};
 
 const cloneGuestDraft = (guest: WeddingGuest): WeddingGuest => ({
     ...guest,
@@ -208,6 +234,50 @@ const getWeddingContentDraftSignature = (wedding: SampleWeddingData) => JSON.str
     },
     rsvp: { ...wedding.rsvp, guests: [] },
 });
+
+const collectUnsavedValueChanges = (
+    savedValue: unknown,
+    currentValue: unknown,
+    path = '',
+): DashboardUnsavedValueChange[] => {
+    if (Object.is(savedValue, currentValue)) return [];
+
+    const savedIsObject = typeof savedValue === 'object' && savedValue !== null;
+    const currentIsObject = typeof currentValue === 'object' && currentValue !== null;
+    if (!savedIsObject || !currentIsObject) {
+        return [{ path: path || '(root)', savedValue, currentValue }];
+    }
+
+    if (Array.isArray(savedValue) || Array.isArray(currentValue)) {
+        if (!Array.isArray(savedValue) || !Array.isArray(currentValue)) {
+            return [{ path: path || '(root)', savedValue, currentValue }];
+        }
+
+        const changes: DashboardUnsavedValueChange[] = [];
+        const maxLength = Math.max(savedValue.length, currentValue.length);
+        for (let index = 0; index < maxLength; index += 1) {
+            changes.push(...collectUnsavedValueChanges(
+                savedValue[index],
+                currentValue[index],
+                `${path}[${index}]`,
+            ));
+        }
+        return changes;
+    }
+
+    const savedRecord = savedValue as Record<string, unknown>;
+    const currentRecord = currentValue as Record<string, unknown>;
+    const keys = Array.from(new Set([
+        ...Object.keys(savedRecord),
+        ...Object.keys(currentRecord),
+    ])).sort((left, right) => left.localeCompare(right));
+
+    return keys.flatMap((key) => collectUnsavedValueChanges(
+        savedRecord[key],
+        currentRecord[key],
+        path ? `${path}.${key}` : key,
+    ));
+};
 
 
 
@@ -979,6 +1049,7 @@ export default function Dashboard({
     const [previewRefreshNonce, setPreviewRefreshNonce] = useState(0);
     const [isPreviewRefreshing, setIsPreviewRefreshing] = useState(false);
     const weddingDataRef = useRef(weddingData);
+    const guestSaveStateByIdRef = useRef(guestSaveStateById);
     const hasUnsavedChangesRef = useRef(restoredHasUnsavedChanges);
     const isSaveInFlightRef = useRef(false);
     const guestAutosaveVersionsRef = useRef(new Map<string, number>());
@@ -1078,8 +1149,137 @@ export default function Dashboard({
     }, [weddingData]);
 
     useEffect(() => {
+        guestSaveStateByIdRef.current = guestSaveStateById;
+    }, [guestSaveStateById]);
+
+    useEffect(() => {
         hasUnsavedChangesRef.current = hasUnsavedChanges;
     }, [hasUnsavedChanges]);
+
+    useEffect(() => {
+        const debugWindow = window as ShaadiNyotaDebugWindow;
+        const debugApi = debugWindow.shaadiNyotaDebug ?? {};
+        const previousUnsavedChanges = debugApi.unsavedChanges;
+
+        const showUnsavedChanges = () => {
+            const currentWebsiteSnapshot = JSON.parse(
+                getWeddingContentDraftSignature(weddingDataRef.current)
+            ) as unknown;
+            const savedWebsiteSnapshot = JSON.parse(savedWeddingContentSignatureRef.current) as unknown;
+            const websiteChanges = collectUnsavedValueChanges(
+                savedWebsiteSnapshot,
+                currentWebsiteSnapshot,
+            );
+            const dirtyGuestIds = Array.from(dirtyGuestIdsRef.current);
+            const currentGuests = weddingDataRef.current.rsvp.guests;
+            const reportedGuestIds = new Set<string>();
+            const guestChanges: DashboardUnsavedGuestChange[] = [];
+
+            dirtyGuestIds.forEach((dirtyId) => {
+                const resolvedId = guestAutosaveAliasesRef.current.get(dirtyId) ?? dirtyId;
+                if (reportedGuestIds.has(resolvedId)) return;
+                reportedGuestIds.add(resolvedId);
+
+                const currentGuest = currentGuests.find((guest) => (
+                    guest.id === resolvedId || guest.id === dirtyId
+                ));
+                const savedGuest = savedGuestSnapshotsRef.current.get(resolvedId)
+                    ?? savedGuestSnapshotsRef.current.get(dirtyId);
+                const saveState = guestSaveStateByIdRef.current[resolvedId]
+                    ?? guestSaveStateByIdRef.current[dirtyId];
+                const changes = collectUnsavedValueChanges(
+                    savedGuest ? JSON.parse(getGuestDraftSignature(savedGuest)) as unknown : undefined,
+                    currentGuest ? JSON.parse(getGuestDraftSignature(currentGuest)) as unknown : undefined,
+                );
+                const note = !currentGuest
+                    ? 'Tracked as dirty, but the guest is no longer present in the current draft.'
+                    : !savedGuest
+                        ? 'New guest with no saved snapshot.'
+                        : changes.length === 0
+                            ? 'Tracked as dirty, but the saved and current editable fields match.'
+                            : `${changes.length} editable field change${changes.length === 1 ? '' : 's'}.`;
+
+                guestChanges.push({
+                    dirtyId,
+                    resolvedId,
+                    guestName: currentGuest?.guestName || savedGuest?.guestName || '(guest not found)',
+                    saveState: saveState?.phase ?? 'untracked',
+                    saveMessage: saveState?.message,
+                    changes,
+                    note,
+                });
+            });
+
+            const report: DashboardUnsavedChangesReport = {
+                hasUnsavedChanges: hasUnsavedChangesRef.current,
+                websiteChanges,
+                guestChanges,
+                dirtyGuestIds,
+            };
+
+            console.group('[Shaadi Nyota] Unsaved changes');
+            console.table([{
+                bannerActive: report.hasUnsavedChanges,
+                websiteFields: report.websiteChanges.length,
+                dirtyGuests: report.guestChanges.length,
+                trackedDirtyIds: report.dirtyGuestIds.length,
+            }]);
+
+            if (report.websiteChanges.length > 0) {
+                console.group(`Website changes (${report.websiteChanges.length})`);
+                console.table(report.websiteChanges);
+                console.groupEnd();
+            } else {
+                console.info('Website changes: none');
+            }
+
+            if (report.guestChanges.length > 0) {
+                console.group(`Guest changes (${report.guestChanges.length})`);
+                console.table(report.guestChanges.map((guest) => ({
+                    guest: guest.guestName,
+                    dirtyId: guest.dirtyId,
+                    resolvedId: guest.resolvedId,
+                    saveState: guest.saveState,
+                    changedFields: guest.changes.length,
+                    note: guest.note,
+                    saveMessage: guest.saveMessage ?? '',
+                })));
+                report.guestChanges.forEach((guest) => {
+                    if (guest.changes.length === 0) return;
+                    console.group(`${guest.guestName} (${guest.resolvedId})`);
+                    console.table(guest.changes);
+                    console.groupEnd();
+                });
+                console.groupEnd();
+            } else {
+                console.info('Guest changes: none');
+            }
+
+            if (
+                report.hasUnsavedChanges
+                && report.websiteChanges.length === 0
+                && report.guestChanges.every((guest) => guest.changes.length === 0)
+            ) {
+                console.warn('The unsaved banner is active, but no saved/current field differences were found. Check the tracked dirty guest entries above.');
+            }
+            console.log('Full report:', report);
+            console.groupEnd();
+            return report;
+        };
+
+        debugApi.unsavedChanges = showUnsavedChanges;
+        debugWindow.shaadiNyotaDebug = debugApi;
+        console.info('Shaadi Nyota diagnostics ready: run window.shaadiNyotaDebug.unsavedChanges() to inspect unsaved changes.');
+
+        return () => {
+            if (debugApi.unsavedChanges !== showUnsavedChanges) return;
+            if (previousUnsavedChanges) debugApi.unsavedChanges = previousUnsavedChanges;
+            else delete debugApi.unsavedChanges;
+            if (Object.keys(debugApi).length === 0 && debugWindow.shaadiNyotaDebug === debugApi) {
+                delete debugWindow.shaadiNyotaDebug;
+            }
+        };
+    }, []);
 
     useEffect(() => () => {
         guestAutosaveErrorsRef.current.clear();
