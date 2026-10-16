@@ -179,7 +179,7 @@ export function EventSection({
 
     const mapsUrl = event.mapsUrl.trim();
     const showCalendar = event.eventShowCalendar !== false;
-    const invitedCount = event.eventShowInvitedCount === true
+    const invitedCount = showAllInvitees || event.eventShowInvitedCount === true
         ? getGuestEventInvitedCountLabel(event, guest, showAllInvitees)
         : null;
 
