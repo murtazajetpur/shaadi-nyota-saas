@@ -34,8 +34,16 @@ const renderStorySection = (section: WeddingSectionConfig, { data, showStoryScro
   return <Section2 key={section.id} couple={data.couple} showScrollPrompt={showStoryScrollPrompt} />;
 };
 
-const renderEventsSection = (section: WeddingSectionConfig, { data, events, guest }: RenderSectionContext) => {
-  return <Section3 key={section.id} events={events} coupleDisplayName={data.couple.displayName} guest={guest} />;
+const renderEventsSection = (section: WeddingSectionConfig, { data, events, guest, openInvitation }: RenderSectionContext) => {
+  return (
+    <Section3
+      key={section.id}
+      events={events}
+      coupleDisplayName={data.couple.displayName}
+      guest={guest}
+      showAllInvitees={openInvitation?.showInviteeCount === true}
+    />
+  );
 };
 
 const renderRsvpSection = (

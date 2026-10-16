@@ -298,11 +298,11 @@ export default function OpenInvitationsPanel({
             </label>
             {draft.showInviteeCount && (
               <label className="dashboard-field">
-                <span>Maximum group size</span>
+                <span>Maximum RSVP group size</span>
                 <select value={draft.maxPartySize} onChange={(event) => setDraft({ ...draft, maxPartySize: Number(event.target.value) })}>
                   {Array.from({ length: 20 }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count}</option>)}
                 </select>
-                <small>The largest group one respondent can register.</small>
+                <small>Caps the family-size and attendee-count choices in the RSVP section.</small>
               </label>
             )}
           </div>
@@ -322,7 +322,7 @@ export default function OpenInvitationsPanel({
 
           <div className="open-invitation-rules">
             <label className={`open-invitation-toggle${draft.showInviteeCount ? ' is-enabled' : ''}`}>
-              <span><strong>Show invitee count</strong><small>Show the count on the invitation and let respondents choose how many people are included. When off, each RSVP represents one person.</small></span>
+              <span><strong>Show invitee count</strong><small>Show “Invitees: All” on each event and let respondents choose their group size in RSVP. When off, each RSVP represents one person.</small></span>
               <input type="checkbox" role="switch" checked={draft.showInviteeCount} onChange={(event) => setDraft({ ...draft, showInviteeCount: event.target.checked })} />
             </label>
             <label className={`open-invitation-toggle${draft.mealPreferenceEnabled ? ' is-enabled' : ''}`}>
