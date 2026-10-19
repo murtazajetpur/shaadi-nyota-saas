@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './Section3.css';
 import type { RefObject } from 'react';
-import type { SampleWeddingData, WeddingEvent, WeddingGuest } from '../data/sampleWeddingData';
+import { getGuestEventInviteeCountDisplayMode, type SampleWeddingData, type WeddingEvent, type WeddingGuest } from '../data/sampleWeddingData';
 import { getEventVisualByKey } from '../data/eventVisuals';
 import { getOptimizedAssetPath } from '../data/assetRegistry';
 import EventAnimationLayer from './EventAnimationLayer';
@@ -10,6 +10,7 @@ interface Section3Props {
     events: SampleWeddingData['events'];
     coupleDisplayName?: string;
     guest?: WeddingGuest;
+    showAllInvitees?: boolean;
 }
 
 const monthLookup: Record<string, number> = {
@@ -97,14 +98,21 @@ const getEventTextPosition = (position?: string): NonNullable<WeddingEvent['even
 
 const normalizeInvitedCount = (value: unknown) => Math.max(1, Math.floor(Number(value) || 1));
 
-const getGuestEventInvitedCountLabel = (event: WeddingEvent, guest?: WeddingGuest) => {
+const getGuestEventInvitedCountLabel = (
+    event: WeddingEvent,
+    guest?: WeddingGuest,
+    showAllInvitees = false,
+) => {
+    if (showAllInvitees) return 'All';
+
     const count = guest
         ? guest.invitedEventCounts?.[event.id] ?? guest.invitedCount
         : event.guestInvitedCount;
     if (count === undefined) return null;
     const eventCount = normalizeInvitedCount(count);
-    const familyCount = guest ? normalizeInvitedCount(guest.invitedCount) : null;
-    return familyCount && eventCount >= familyCount ? 'All' : String(eventCount);
+    return guest && getGuestEventInviteeCountDisplayMode(guest, event.id) === 'all'
+        ? 'All'
+        : String(eventCount);
 };
 
 const particlePositions = Array.from({ length: 15 }, (_, index) => ({
@@ -147,12 +155,14 @@ export function EventSection({
     showParticles,
     coupleDisplayName,
     guest,
+    showAllInvitees = false,
 }: {
     event: WeddingEvent;
     sectionRef?: RefObject<HTMLElement | null>;
     showParticles: boolean;
     coupleDisplayName?: string;
     guest?: WeddingGuest;
+    showAllInvitees?: boolean;
 }) {
     const selectedVisual = getEventVisualByKey(event.eventVisualKey);
     const eventCategory = normalizeEventCategory(event);
@@ -169,7 +179,9 @@ export function EventSection({
 
     const mapsUrl = event.mapsUrl.trim();
     const showCalendar = event.eventShowCalendar !== false;
-    const invitedCount = event.eventShowInvitedCount === true ? getGuestEventInvitedCountLabel(event, guest) : null;
+    const invitedCount = showAllInvitees || event.eventShowInvitedCount === true
+        ? getGuestEventInvitedCountLabel(event, guest, showAllInvitees)
+        : null;
 
     const handleMapClick = () => {
         if (mapsUrl) {
@@ -229,7 +241,7 @@ export function EventSection({
     );
 }
 
-export default function Section3({ events, coupleDisplayName, guest }: Section3Props) {
+export default function Section3({ events, coupleDisplayName, guest, showAllInvitees = false }: Section3Props) {
     const haldiRef = useRef<HTMLElement>(null);
     const mehendiRef = useRef<HTMLElement>(null);
     const [showHaldiParticles, setShowHaldiParticles] = useState(false);
@@ -263,6 +275,7 @@ export default function Section3({ events, coupleDisplayName, guest }: Section3P
                     event={event}
                     coupleDisplayName={coupleDisplayName}
                     guest={guest}
+                    showAllInvitees={showAllInvitees}
                     sectionRef={normalizeEventCategory(event) === 'haldi' ? haldiRef : normalizeEventCategory(event) === 'mehendi' ? mehendiRef : undefined}
                     showParticles={
                         (normalizeEventCategory(event) === 'haldi' && showHaldiParticles) ||

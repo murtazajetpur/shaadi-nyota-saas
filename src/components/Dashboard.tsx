@@ -18,6 +18,7 @@ import { EventSection as Theme1EventPreviewSection } from './Section3';
 import Section2 from './Section2';
 import Section5 from './Section5';
 import WeddingMediaLibrary from './WeddingMediaLibrary';
+import OpenInvitationsPanel from './OpenInvitationsPanel';
 import './Dashboard.css';
 import { useAuth } from '../context/AuthContext';
 import { createAuthenticatedDataClient } from '../lib/supabaseClient';
@@ -60,6 +61,8 @@ import {
     type StoredRsvpResponse,
     type WeddingEvent,
     type WeddingGuest,
+    type InviteeCountDisplayMode,
+    getGuestEventInviteeCountDisplayMode,
 } from '../data/sampleWeddingData';
 import {
     buildManualPaymentWhatsAppUrl,
@@ -111,7 +114,8 @@ import {
 } from '../lib/weddingMedia';
 import { getGuestPhoneIdentity, validateGuestPhone } from '../lib/guestPhone';
 
-type DashboardTab = 'overview' | 'opening-reveal' | 'our-story' | 'couple' | 'events' | 'guests' | 'whatsapp' | 'rsvp-settings' | 'rsvp' | 'closing-gallery' | 'preview';
+type DashboardTab = 'overview' | 'opening-reveal' | 'our-story' | 'couple' | 'events' | 'guests' | 'open-invitations' | 'whatsapp' | 'rsvp-settings' | 'rsvp' | 'closing-gallery' | 'preview';
+type InvitationManagementView = 'individual' | 'open';
 type WebsiteActivationState = 'unpaid' | 'verification-pending' | 'publishing-pending' | 'live' | 'suspended';
 type CsvImportMode = 'append' | 'replace';
 type GuestCsvIssueLevel = 'error' | 'warning';
@@ -172,11 +176,38 @@ type GuestSaveState = {
     phase: GuestSavePhase;
     message?: string;
 };
+type DashboardUnsavedValueChange = {
+    path: string;
+    savedValue: unknown;
+    currentValue: unknown;
+};
+type DashboardUnsavedGuestChange = {
+    dirtyId: string;
+    resolvedId: string;
+    guestName: string;
+    saveState: GuestSaveState['phase'] | 'untracked';
+    saveMessage?: string;
+    changes: DashboardUnsavedValueChange[];
+    note: string;
+};
+type DashboardUnsavedChangesReport = {
+    hasUnsavedChanges: boolean;
+    websiteChanges: DashboardUnsavedValueChange[];
+    guestChanges: DashboardUnsavedGuestChange[];
+    dirtyGuestIds: string[];
+};
+type ShaadiNyotaDebugApi = Record<string, unknown> & {
+    unsavedChanges?: () => DashboardUnsavedChangesReport;
+};
+type ShaadiNyotaDebugWindow = Window & {
+    shaadiNyotaDebug?: ShaadiNyotaDebugApi;
+};
 
 const cloneGuestDraft = (guest: WeddingGuest): WeddingGuest => ({
     ...guest,
     invitedEventIds: [...guest.invitedEventIds],
     invitedEventCounts: { ...(guest.invitedEventCounts ?? {}) },
+    invitedEventDisplayModes: { ...(guest.invitedEventDisplayModes ?? {}) },
 });
 
 const getGuestDraftSignature = (guest: WeddingGuest) => JSON.stringify({
@@ -188,6 +219,7 @@ const getGuestDraftSignature = (guest: WeddingGuest) => JSON.stringify({
     mealPreference: guest.mealPreference,
     invitedEventIds: [...guest.invitedEventIds].sort(),
     invitedEventCounts: Object.fromEntries(Object.entries(guest.invitedEventCounts ?? {}).sort(([left], [right]) => left.localeCompare(right))),
+    invitedEventDisplayModes: Object.fromEntries(Object.entries(guest.invitedEventDisplayModes ?? {}).sort(([left], [right]) => left.localeCompare(right))),
 });
 const isGuestSaveVersionConflict = (code?: string, detail?: string) => (
     code === '40001' || detail?.toLowerCase().includes('changed in another session') === true
@@ -202,6 +234,50 @@ const getWeddingContentDraftSignature = (wedding: SampleWeddingData) => JSON.str
     },
     rsvp: { ...wedding.rsvp, guests: [] },
 });
+
+const collectUnsavedValueChanges = (
+    savedValue: unknown,
+    currentValue: unknown,
+    path = '',
+): DashboardUnsavedValueChange[] => {
+    if (Object.is(savedValue, currentValue)) return [];
+
+    const savedIsObject = typeof savedValue === 'object' && savedValue !== null;
+    const currentIsObject = typeof currentValue === 'object' && currentValue !== null;
+    if (!savedIsObject || !currentIsObject) {
+        return [{ path: path || '(root)', savedValue, currentValue }];
+    }
+
+    if (Array.isArray(savedValue) || Array.isArray(currentValue)) {
+        if (!Array.isArray(savedValue) || !Array.isArray(currentValue)) {
+            return [{ path: path || '(root)', savedValue, currentValue }];
+        }
+
+        const changes: DashboardUnsavedValueChange[] = [];
+        const maxLength = Math.max(savedValue.length, currentValue.length);
+        for (let index = 0; index < maxLength; index += 1) {
+            changes.push(...collectUnsavedValueChanges(
+                savedValue[index],
+                currentValue[index],
+                `${path}[${index}]`,
+            ));
+        }
+        return changes;
+    }
+
+    const savedRecord = savedValue as Record<string, unknown>;
+    const currentRecord = currentValue as Record<string, unknown>;
+    const keys = Array.from(new Set([
+        ...Object.keys(savedRecord),
+        ...Object.keys(currentRecord),
+    ])).sort((left, right) => left.localeCompare(right));
+
+    return keys.flatMap((key) => collectUnsavedValueChanges(
+        savedRecord[key],
+        currentRecord[key],
+        path ? `${path}.${key}` : key,
+    ));
+};
 
 
 
@@ -256,7 +332,7 @@ const dashboardTabGroups: Array<{ label: string; tabs: Array<{ id: DashboardTab;
     {
         label: 'Wedding Management',
         tabs: [
-            { id: 'guests', label: 'Guest List' },
+            { id: 'guests', label: 'Invitations' },
             { id: 'whatsapp', label: 'WhatsApp Message' },
             { id: 'rsvp-settings', label: 'RSVP Form' },
             { id: 'rsvp', label: 'RSVP Responses' },
@@ -484,7 +560,7 @@ const getGuestRsvpStatusLabel = (
 };
 
 const getGuestEventInviteScope = (guest: WeddingGuest, eventId: string) => (
-    getGuestEventInvitedCount(guest, eventId) >= normalizeInvitedCount(guest.invitedCount) ? 'all' : 'number'
+    getGuestEventInviteeCountDisplayMode(guest, eventId)
 );
 
 const getGuestReadinessChecks = (guest: WeddingGuest) => {
@@ -678,6 +754,7 @@ const normalizeWedding = (wedding: SampleWeddingData): SampleWeddingData => {
                 invitedCount: normalizeInvitedCount(guest.invitedCount),
                 invitedEventIds: guest.invitedEventIds ?? [],
                 invitedEventCounts: guest.invitedEventCounts ?? {},
+                invitedEventDisplayModes: guest.invitedEventDisplayModes ?? {},
             })),
         },
         closing: {
@@ -714,15 +791,37 @@ const dashboardTabIds = new Set<DashboardTab>(
 );
 
 const createDashboardActiveTabStorageKey = (draftStorageKey: string) => `${draftStorageKey}:active-tab`;
+const createDashboardInvitationViewStorageKey = (draftStorageKey: string) => `${draftStorageKey}:invitation-view`;
 const createDashboardScrollStorageKey = (draftStorageKey: string) => `${draftStorageKey}:scroll-y`;
 const createEventVisualPickerStorageKey = (draftStorageKey: string) => `${draftStorageKey}:event-visual-picker`;
 
 const readDashboardActiveTab = (storageKey: string): DashboardTab => {
     try {
         const storedTab = window.sessionStorage.getItem(storageKey) as DashboardTab | null;
+        if (storedTab === 'open-invitations') return 'guests';
         return storedTab && dashboardTabIds.has(storedTab) ? storedTab : 'overview';
     } catch {
         return 'overview';
+    }
+};
+
+const readDashboardInvitationView = (
+    storageKey: string,
+    activeTabStorageKey: string
+): InvitationManagementView => {
+    try {
+        if (window.sessionStorage.getItem(activeTabStorageKey) === 'open-invitations') return 'open';
+        return window.sessionStorage.getItem(storageKey) === 'open' ? 'open' : 'individual';
+    } catch {
+        return 'individual';
+    }
+};
+
+const writeDashboardInvitationView = (storageKey: string, view: InvitationManagementView) => {
+    try {
+        window.sessionStorage.setItem(storageKey, view);
+    } catch {
+        // Session storage may be unavailable in restricted browser contexts.
     }
 };
 
@@ -761,6 +860,91 @@ const readDashboardDraft = (storageKey: string) => {
     }
 };
 
+const mergeAuthoritativeGuests = (
+    draftGuests: WeddingGuest[],
+    sourceGuests: WeddingGuest[],
+    preserveDraftGuestIds?: ReadonlySet<string>
+) => {
+    const draftById = new Map(draftGuests.map((guest) => [guest.id, guest]));
+    const sourceIds = new Set(sourceGuests.map((guest) => guest.id));
+    const shouldPreserveDraft = (draftGuest: WeddingGuest, sourceGuest?: WeddingGuest) => (
+        preserveDraftGuestIds
+            ? preserveDraftGuestIds.has(draftGuest.id)
+            : !sourceGuest || getGuestDraftSignature(draftGuest) !== getGuestDraftSignature(sourceGuest)
+    );
+    const draftOnlyGuests = draftGuests.filter((guest) => (
+        !sourceIds.has(guest.id) && shouldPreserveDraft(guest)
+    ));
+
+    return [
+        ...draftOnlyGuests.map(cloneGuestDraft),
+        ...sourceGuests.map((sourceGuest) => {
+            const draftGuest = draftById.get(sourceGuest.id);
+            return cloneGuestDraft(
+                draftGuest && shouldPreserveDraft(draftGuest, sourceGuest)
+                    ? draftGuest
+                    : sourceGuest
+            );
+        }),
+    ];
+};
+
+type DashboardContentSection = keyof SampleWeddingData;
+const dashboardContentSections: DashboardContentSection[] = [
+    'wedding',
+    'hero',
+    'music',
+    'whatsapp',
+    'couple',
+    'events',
+    'rsvp',
+    'closing',
+];
+
+const rebaseWeddingDraftOnAuthoritativeState = (
+    draft: SampleWeddingData,
+    source: SampleWeddingData,
+    savedContentSignature: string,
+    preserveDraftGuestIds: ReadonlySet<string>
+) => {
+    const savedSnapshot = JSON.parse(savedContentSignature) as SampleWeddingData;
+    const draftSnapshot = JSON.parse(getWeddingContentDraftSignature(draft)) as SampleWeddingData;
+    const draftCopy = cloneWedding(draft);
+    const sourceCopy = cloneWedding(source);
+    const useDraftSection = new Set(dashboardContentSections.filter((section) => (
+        JSON.stringify(draftSnapshot[section]) !== JSON.stringify(savedSnapshot[section])
+    )));
+
+    const rebasedWedding = useDraftSection.has('wedding') ? draftCopy.wedding : sourceCopy.wedding;
+    const rebasedRsvp = useDraftSection.has('rsvp') ? draftCopy.rsvp : sourceCopy.rsvp;
+
+    return {
+        wedding: {
+            ...rebasedWedding,
+            packageType: sourceCopy.wedding.packageType,
+            paymentStatus: sourceCopy.wedding.paymentStatus,
+            status: sourceCopy.wedding.status,
+            guestRecordLimit: sourceCopy.wedding.guestRecordLimit,
+            inviteeLimit: sourceCopy.wedding.inviteeLimit,
+            updatedAt: sourceCopy.wedding.updatedAt,
+        },
+        hero: useDraftSection.has('hero') ? draftCopy.hero : sourceCopy.hero,
+        music: useDraftSection.has('music') ? draftCopy.music : sourceCopy.music,
+        whatsapp: useDraftSection.has('whatsapp') ? draftCopy.whatsapp : sourceCopy.whatsapp,
+        couple: useDraftSection.has('couple') ? draftCopy.couple : sourceCopy.couple,
+        events: useDraftSection.has('events') ? draftCopy.events : sourceCopy.events,
+        rsvp: {
+            ...rebasedRsvp,
+            guests: mergeAuthoritativeGuests(
+                draftCopy.rsvp.guests,
+                sourceCopy.rsvp.guests,
+                preserveDraftGuestIds
+            ),
+        },
+        closing: useDraftSection.has('closing') ? draftCopy.closing : sourceCopy.closing,
+    };
+};
+
 const applyAuthoritativePlanState = (
     draft: SampleWeddingData,
     source?: SampleWeddingData
@@ -774,6 +958,13 @@ const applyAuthoritativePlanState = (
             packageType: source.wedding.packageType,
             paymentStatus: source.wedding.paymentStatus,
             status: source.wedding.status,
+            guestRecordLimit: source.wedding.guestRecordLimit,
+            inviteeLimit: source.wedding.inviteeLimit,
+            updatedAt: source.wedding.updatedAt,
+        },
+        rsvp: {
+            ...draft.rsvp,
+            guests: mergeAuthoritativeGuests(draft.rsvp.guests, source.rsvp.guests),
         },
     };
 };
@@ -891,6 +1082,7 @@ export default function Dashboard({
         ? createDashboardDraftStorageKey(mode, supabaseWeddingId, initialWedding?.wedding.slug)
         : mockDashboardDraftStorageKey;
     const dashboardActiveTabStorageKey = createDashboardActiveTabStorageKey(dashboardDraftStorageKey);
+    const dashboardInvitationViewStorageKey = createDashboardInvitationViewStorageKey(dashboardDraftStorageKey);
     const dashboardScrollStorageKey = createDashboardScrollStorageKey(dashboardDraftStorageKey);
     const eventVisualPickerStorageKey = createEventVisualPickerStorageKey(dashboardDraftStorageKey);
     const storedDashboardDraft = supabaseWeddingId ? readDashboardDraft(dashboardDraftStorageKey) : null;
@@ -898,6 +1090,9 @@ export default function Dashboard({
         ? applyAuthoritativePlanState(storedDashboardDraft, initialWedding)
         : null;
     const [activeTab, setActiveTab] = useState<DashboardTab>(() => readDashboardActiveTab(dashboardActiveTabStorageKey));
+    const [invitationManagementView, setInvitationManagementView] = useState<InvitationManagementView>(() => (
+        readDashboardInvitationView(dashboardInvitationViewStorageKey, dashboardActiveTabStorageKey)
+    ));
     const [weddingData, setWeddingData] = useState<SampleWeddingData>(() => (
         restoredDashboardDraft ?? (initialWedding ? normalizeWedding(initialWedding) : loadInitialWedding())
     ));
@@ -966,6 +1161,7 @@ export default function Dashboard({
     const [previewRefreshNonce, setPreviewRefreshNonce] = useState(0);
     const [isPreviewRefreshing, setIsPreviewRefreshing] = useState(false);
     const weddingDataRef = useRef(weddingData);
+    const guestSaveStateByIdRef = useRef(guestSaveStateById);
     const hasUnsavedChangesRef = useRef(restoredHasUnsavedChanges);
     const isSaveInFlightRef = useRef(false);
     const guestAutosaveVersionsRef = useRef(new Map<string, number>());
@@ -990,6 +1186,7 @@ export default function Dashboard({
     };
     const activeDraftStorageKeyRef = useRef(dashboardDraftStorageKey);
     const activeTabStorageKeyRef = useRef(dashboardActiveTabStorageKey);
+    const invitationViewStorageKeyRef = useRef(dashboardInvitationViewStorageKey);
     const whatsappMessageTextareaRef = useRef<HTMLTextAreaElement | null>(null);
     const isAdminMode = mode === 'admin';
     const visibleStoryImageOptions = storyImageOptions.filter((option) => isAdminMode || option.visibility !== 'admin');
@@ -1064,8 +1261,137 @@ export default function Dashboard({
     }, [weddingData]);
 
     useEffect(() => {
+        guestSaveStateByIdRef.current = guestSaveStateById;
+    }, [guestSaveStateById]);
+
+    useEffect(() => {
         hasUnsavedChangesRef.current = hasUnsavedChanges;
     }, [hasUnsavedChanges]);
+
+    useEffect(() => {
+        const debugWindow = window as ShaadiNyotaDebugWindow;
+        const debugApi = debugWindow.shaadiNyotaDebug ?? {};
+        const previousUnsavedChanges = debugApi.unsavedChanges;
+
+        const showUnsavedChanges = () => {
+            const currentWebsiteSnapshot = JSON.parse(
+                getWeddingContentDraftSignature(weddingDataRef.current)
+            ) as unknown;
+            const savedWebsiteSnapshot = JSON.parse(savedWeddingContentSignatureRef.current) as unknown;
+            const websiteChanges = collectUnsavedValueChanges(
+                savedWebsiteSnapshot,
+                currentWebsiteSnapshot,
+            );
+            const dirtyGuestIds = Array.from(dirtyGuestIdsRef.current);
+            const currentGuests = weddingDataRef.current.rsvp.guests;
+            const reportedGuestIds = new Set<string>();
+            const guestChanges: DashboardUnsavedGuestChange[] = [];
+
+            dirtyGuestIds.forEach((dirtyId) => {
+                const resolvedId = guestAutosaveAliasesRef.current.get(dirtyId) ?? dirtyId;
+                if (reportedGuestIds.has(resolvedId)) return;
+                reportedGuestIds.add(resolvedId);
+
+                const currentGuest = currentGuests.find((guest) => (
+                    guest.id === resolvedId || guest.id === dirtyId
+                ));
+                const savedGuest = savedGuestSnapshotsRef.current.get(resolvedId)
+                    ?? savedGuestSnapshotsRef.current.get(dirtyId);
+                const saveState = guestSaveStateByIdRef.current[resolvedId]
+                    ?? guestSaveStateByIdRef.current[dirtyId];
+                const changes = collectUnsavedValueChanges(
+                    savedGuest ? JSON.parse(getGuestDraftSignature(savedGuest)) as unknown : undefined,
+                    currentGuest ? JSON.parse(getGuestDraftSignature(currentGuest)) as unknown : undefined,
+                );
+                const note = !currentGuest
+                    ? 'Tracked as dirty, but the guest is no longer present in the current draft.'
+                    : !savedGuest
+                        ? 'New guest with no saved snapshot.'
+                        : changes.length === 0
+                            ? 'Tracked as dirty, but the saved and current editable fields match.'
+                            : `${changes.length} editable field change${changes.length === 1 ? '' : 's'}.`;
+
+                guestChanges.push({
+                    dirtyId,
+                    resolvedId,
+                    guestName: currentGuest?.guestName || savedGuest?.guestName || '(guest not found)',
+                    saveState: saveState?.phase ?? 'untracked',
+                    saveMessage: saveState?.message,
+                    changes,
+                    note,
+                });
+            });
+
+            const report: DashboardUnsavedChangesReport = {
+                hasUnsavedChanges: hasUnsavedChangesRef.current,
+                websiteChanges,
+                guestChanges,
+                dirtyGuestIds,
+            };
+
+            console.group('[Shaadi Nyota] Unsaved changes');
+            console.table([{
+                bannerActive: report.hasUnsavedChanges,
+                websiteFields: report.websiteChanges.length,
+                dirtyGuests: report.guestChanges.length,
+                trackedDirtyIds: report.dirtyGuestIds.length,
+            }]);
+
+            if (report.websiteChanges.length > 0) {
+                console.group(`Website changes (${report.websiteChanges.length})`);
+                console.table(report.websiteChanges);
+                console.groupEnd();
+            } else {
+                console.info('Website changes: none');
+            }
+
+            if (report.guestChanges.length > 0) {
+                console.group(`Guest changes (${report.guestChanges.length})`);
+                console.table(report.guestChanges.map((guest) => ({
+                    guest: guest.guestName,
+                    dirtyId: guest.dirtyId,
+                    resolvedId: guest.resolvedId,
+                    saveState: guest.saveState,
+                    changedFields: guest.changes.length,
+                    note: guest.note,
+                    saveMessage: guest.saveMessage ?? '',
+                })));
+                report.guestChanges.forEach((guest) => {
+                    if (guest.changes.length === 0) return;
+                    console.group(`${guest.guestName} (${guest.resolvedId})`);
+                    console.table(guest.changes);
+                    console.groupEnd();
+                });
+                console.groupEnd();
+            } else {
+                console.info('Guest changes: none');
+            }
+
+            if (
+                report.hasUnsavedChanges
+                && report.websiteChanges.length === 0
+                && report.guestChanges.every((guest) => guest.changes.length === 0)
+            ) {
+                console.warn('The unsaved banner is active, but no saved/current field differences were found. Check the tracked dirty guest entries above.');
+            }
+            console.log('Full report:', report);
+            console.groupEnd();
+            return report;
+        };
+
+        debugApi.unsavedChanges = showUnsavedChanges;
+        debugWindow.shaadiNyotaDebug = debugApi;
+        console.info('Shaadi Nyota diagnostics ready: run window.shaadiNyotaDebug.unsavedChanges() to inspect unsaved changes.');
+
+        return () => {
+            if (debugApi.unsavedChanges !== showUnsavedChanges) return;
+            if (previousUnsavedChanges) debugApi.unsavedChanges = previousUnsavedChanges;
+            else delete debugApi.unsavedChanges;
+            if (Object.keys(debugApi).length === 0 && debugWindow.shaadiNyotaDebug === debugApi) {
+                delete debugWindow.shaadiNyotaDebug;
+            }
+        };
+    }, []);
 
     useEffect(() => () => {
         guestAutosaveErrorsRef.current.clear();
@@ -1080,6 +1406,15 @@ export default function Dashboard({
         activeTabStorageKeyRef.current = dashboardActiveTabStorageKey;
         setActiveTab(readDashboardActiveTab(dashboardActiveTabStorageKey));
     }, [dashboardActiveTabStorageKey]);
+
+    useEffect(() => {
+        if (invitationViewStorageKeyRef.current === dashboardInvitationViewStorageKey) return;
+        invitationViewStorageKeyRef.current = dashboardInvitationViewStorageKey;
+        setInvitationManagementView(readDashboardInvitationView(
+            dashboardInvitationViewStorageKey,
+            dashboardActiveTabStorageKey
+        ));
+    }, [dashboardActiveTabStorageKey, dashboardInvitationViewStorageKey]);
 
     useEffect(() => {
         let restoreFrame = 0;
@@ -1970,13 +2305,7 @@ export default function Dashboard({
         try {
             await saveDirtyGuests();
 
-            const weddingToSave = cloneWedding(weddingDataRef.current);
-            const guestCapacityError = getGuestCapacityError(weddingToSave);
-            if (guestCapacityError) {
-                setSaveStatus('');
-                setSaveError(guestCapacityError);
-                return false;
-            }
+            let weddingToSave = cloneWedding(weddingDataRef.current);
 
             if (supabaseWeddingId) {
                 if (validation.slug || validation.brideName || validation.groomName) {
@@ -1985,9 +2314,53 @@ export default function Dashboard({
                     return false;
                 }
 
-                const result = await saveSupabaseWeddingDashboard(supabaseWeddingId, weddingToSave, {
+                const refreshWeddingForSave = async () => {
+                    const refreshed = await loadSupabaseWeddingBundle(supabaseWeddingId, {
+                        includeGuests: true,
+                        client: authenticatedDataClient ?? undefined,
+                    });
+                    if (refreshed.error || !refreshed.wedding) {
+                        setSaveStatus('');
+                        setSaveError('Could not refresh the latest wedding data. Your changes are still on screen; retry.');
+                        setSaveErrorDetail(refreshed.error);
+                        return null;
+                    }
+                    return rebaseWeddingDraftOnAuthoritativeState(
+                        weddingDataRef.current,
+                        refreshed.wedding,
+                        savedWeddingContentSignatureRef.current,
+                        dirtyGuestIdsRef.current
+                    );
+                };
+
+                const refreshedWedding = await refreshWeddingForSave();
+                if (!refreshedWedding) return false;
+                weddingToSave = refreshedWedding;
+
+                let guestCapacityError = getGuestCapacityError(weddingToSave);
+                if (guestCapacityError) {
+                    setSaveStatus('');
+                    setSaveError(guestCapacityError);
+                    return false;
+                }
+
+                let result = await saveSupabaseWeddingDashboard(supabaseWeddingId, weddingToSave, {
                     client: authenticatedDataClient ?? undefined,
                 });
+                if (result.error && isGuestSaveVersionConflict(undefined, result.detail)) {
+                    const retryWedding = await refreshWeddingForSave();
+                    if (!retryWedding) return false;
+                    weddingToSave = retryWedding;
+                    guestCapacityError = getGuestCapacityError(weddingToSave);
+                    if (guestCapacityError) {
+                        setSaveStatus('');
+                        setSaveError(guestCapacityError);
+                        return false;
+                    }
+                    result = await saveSupabaseWeddingDashboard(supabaseWeddingId, weddingToSave, {
+                        client: authenticatedDataClient ?? undefined,
+                    });
+                }
                 if (result.error) {
                     console.error('Could not save dashboard transactionally', {
                         error: result.detail || result.error,
@@ -2007,7 +2380,13 @@ export default function Dashboard({
                     eventShowCalendar: submittedEventsById.get(savedEvent.id)?.eventShowCalendar ?? savedEvent.eventShowCalendar,
                 }));
                 weddingToSave.wedding.updatedAt = result.weddingUpdatedAt || weddingToSave.wedding.updatedAt;
-                weddingToSave.rsvp.guests = cloneWedding(weddingDataRef.current).rsvp.guests;
+            } else {
+                const guestCapacityError = getGuestCapacityError(weddingToSave);
+                if (guestCapacityError) {
+                    setSaveStatus('');
+                    setSaveError(guestCapacityError);
+                    return false;
+                }
             }
 
             let mediaCleanupWarning = '';
@@ -2030,6 +2409,11 @@ export default function Dashboard({
             const persistedWedding = cloneWedding(weddingToSave);
             savedWeddingContentSignatureRef.current = getWeddingContentDraftSignature(persistedWedding);
             const failedGuestIds = pruneGuestAutosaveErrors();
+            persistedWedding.rsvp.guests.forEach((guest) => {
+                if (!dirtyGuestIdsRef.current.has(resolveGuestAutosaveId(guest.id))) {
+                    savedGuestSnapshotsRef.current.set(guest.id, cloneGuestDraft(guest));
+                }
+            });
             const guestSaveWarning = failedGuestIds.length > 0
                 ? `${failedGuestIds.length} guest draft${failedGuestIds.length === 1 ? '' : 's'} could not be saved. Website changes were saved; review the guest row${failedGuestIds.length === 1 ? '' : 's'} marked Save failed and retry.`
                 : '';
@@ -2043,8 +2427,12 @@ export default function Dashboard({
                 || failedGuestIds.length > 0
             );
             if (hasNewerChanges) {
-                const currentWedding = cloneWedding(weddingDataRef.current);
-                currentWedding.wedding.updatedAt = weddingToSave.wedding.updatedAt;
+                const currentWedding = rebaseWeddingDraftOnAuthoritativeState(
+                    weddingDataRef.current,
+                    persistedWedding,
+                    getWeddingContentDraftSignature(weddingToSave),
+                    dirtyGuestIdsRef.current
+                );
                 weddingDataRef.current = currentWedding;
                 setWeddingData(currentWedding);
                 syncDashboardDirtyState();
@@ -2063,6 +2451,17 @@ export default function Dashboard({
             if (saveWarnings.length > 0) setSaveError(saveWarnings.join(' '));
             else setSaveError('');
             return true;
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
+            console.error('Could not save dashboard', {
+                error: detail,
+                weddingId: supabaseWeddingId,
+                mode,
+            });
+            setSaveStatus('');
+            setSaveError('Could not save changes. Your changes are still on screen; retry.');
+            setSaveErrorDetail(detail);
+            return false;
         } finally {
             isSaveInFlightRef.current = false;
             setIsSavingDashboard(false);
@@ -2386,6 +2785,7 @@ export default function Dashboard({
                     ...guest,
                     invitedEventIds: guest.invitedEventIds.filter((eventId) => eventId !== eventToDelete?.id),
                     invitedEventCounts: Object.fromEntries(Object.entries(guest.invitedEventCounts ?? {}).filter(([eventId]) => eventId !== eventToDelete?.id)),
+                    invitedEventDisplayModes: Object.fromEntries(Object.entries(guest.invitedEventDisplayModes ?? {}).filter(([eventId]) => eventId !== eventToDelete?.id)),
                 })),
             },
         }));
@@ -2440,7 +2840,10 @@ export default function Dashboard({
                     const invitedEventCounts = Object.fromEntries(
                         Object.entries(guest.invitedEventCounts ?? {}).map(([eventId, count]) => [
                             eventId,
-                            normalizeInvitedCount(count) >= previousFamilySize ? familySize : Math.min(normalizeInvitedCount(count), familySize),
+                            guest.invitedEventDisplayModes?.[eventId] === 'all'
+                                || (!guest.invitedEventDisplayModes?.[eventId] && normalizeInvitedCount(count) >= previousFamilySize)
+                                ? familySize
+                                : Math.min(normalizeInvitedCount(count), familySize),
                         ])
                     );
                     return { ...guest, invitedCount: familySize, invitedEventCounts };
@@ -2472,8 +2875,10 @@ export default function Dashboard({
             ? currentGuest.invitedEventIds.filter((id) => id !== eventId)
             : [...currentGuest.invitedEventIds, eventId];
         const nextEventCounts = { ...(currentGuest.invitedEventCounts ?? {}) };
+        const nextEventDisplayModes = { ...(currentGuest.invitedEventDisplayModes ?? {}) };
         if (isSelected) {
             delete nextEventCounts[eventId];
+            delete nextEventDisplayModes[eventId];
         } else {
             nextEventCounts[eventId] = normalizeInvitedCount(currentGuest.invitedCount);
         }
@@ -2484,7 +2889,12 @@ export default function Dashboard({
                 ...current.rsvp,
                 guests: current.rsvp.guests.map((guest, index) => {
                     if (index !== guestIndex) return guest;
-                    return { ...guest, invitedEventIds: nextEventIds, invitedEventCounts: nextEventCounts };
+                    return {
+                        ...guest,
+                        invitedEventIds: nextEventIds,
+                        invitedEventCounts: nextEventCounts,
+                        invitedEventDisplayModes: nextEventDisplayModes,
+                    };
                 }),
             },
         }));
@@ -2505,6 +2915,10 @@ export default function Dashboard({
                             ...(guest.invitedEventCounts ?? {}),
                             [eventId]: normalizeInvitedCount(value),
                         },
+                        invitedEventDisplayModes: {
+                            ...(guest.invitedEventDisplayModes ?? {}),
+                            [eventId]: 'number',
+                        },
                     };
                 }),
             },
@@ -2512,7 +2926,7 @@ export default function Dashboard({
         if (guestId) markAndSaveGuest(guestId);
     };
 
-    const updateGuestEventInviteScope = (guestIndex: number, eventId: string, scope: 'all' | 'number') => {
+    const updateGuestEventInviteScope = (guestIndex: number, eventId: string, scope: InviteeCountDisplayMode) => {
         const guestId = weddingDataRef.current.rsvp.guests[guestIndex]?.id;
         updateWeddingData((current) => ({
             ...current,
@@ -2524,12 +2938,16 @@ export default function Dashboard({
                     const currentCount = getGuestEventInvitedCount(guest, eventId);
                     const nextCount = scope === 'all'
                         ? familySize
-                        : Math.max(1, Math.min(currentCount >= familySize ? 1 : currentCount, Math.max(1, familySize - 1)));
+                        : Math.max(1, Math.min(currentCount, familySize));
                     return {
                         ...guest,
                         invitedEventCounts: {
                             ...(guest.invitedEventCounts ?? {}),
                             [eventId]: nextCount,
+                        },
+                        invitedEventDisplayModes: {
+                            ...(guest.invitedEventDisplayModes ?? {}),
+                            [eventId]: scope,
                         },
                     };
                 }),
@@ -2553,6 +2971,7 @@ export default function Dashboard({
             inviteCode: Math.random().toString(36).slice(2, 8),
             invitedEventIds: [],
             invitedEventCounts: {},
+            invitedEventDisplayModes: {},
         };
 
         updateWeddingData((current) => ({
@@ -2748,8 +3167,17 @@ export default function Dashboard({
         setSaveStatus('Copied website URL');
     };
     const navigateToDashboardTab = (tab: DashboardTab) => {
-        writeDashboardActiveTab(dashboardActiveTabStorageKey, tab);
-        setActiveTab(tab);
+        const nextTab = tab === 'open-invitations' ? 'guests' : tab;
+        if (tab === 'open-invitations') {
+            writeDashboardInvitationView(dashboardInvitationViewStorageKey, 'open');
+            setInvitationManagementView('open');
+        }
+        writeDashboardActiveTab(dashboardActiveTabStorageKey, nextTab);
+        setActiveTab(nextTab);
+    };
+    const selectInvitationManagementView = (view: InvitationManagementView) => {
+        writeDashboardInvitationView(dashboardInvitationViewStorageKey, view);
+        setInvitationManagementView(view);
     };
     const activeDashboardTabIndex = Math.max(0, dashboardTabs.findIndex((tab) => tab.id === activeTab));
     const activeDashboardTab = dashboardTabs[activeDashboardTabIndex];
@@ -2771,8 +3199,7 @@ export default function Dashboard({
         const isInvited = guest.invitedEventIds.includes(event.id);
         if (!isInvited) return 0;
         const eventInvitees = getGuestEventInvitedCount(guest, event.id);
-        const familySize = normalizeInvitedCount(guest.invitedCount);
-        return eventInvitees >= familySize ? 'All' : eventInvitees;
+        return getGuestEventInviteScope(guest, event.id) === 'all' ? 'All' : eventInvitees;
     };
 
     const downloadGuestCsvTemplate = () => {
@@ -2977,17 +3404,20 @@ export default function Dashboard({
                 };
 
                 let eventInvitees = 0;
+                let displayMode: InviteeCountDisplayMode = 'number';
                 if (isLegacyTwoColumnFormat) {
                     const hasStatusYes = invitedCsvValues.has(normalizedEventValue);
                     const hasStatusNo = notInvitedCsvValues.has(normalizedEventValue);
                     const inviteeValueSelectsEvent = Boolean(inviteeValue) && !notInvitedCsvValues.has(normalizedInviteeValue);
                     if (!hasStatusYes && (hasStatusNo || !inviteeValueSelectsEvent)) return null;
                     eventInvitees = inviteeValue ? parseInviteeCount(normalizedInviteeValue) : usableFamilySize;
+                    displayMode = inviteeValue && !isAllValue(normalizedInviteeValue) ? 'number' : 'all';
                 } else {
                     eventInvitees = parseInviteeCount(normalizedEventValue);
+                    displayMode = isAllValue(normalizedEventValue) ? 'all' : 'number';
                 }
-                return eventInvitees > 0 ? { eventId: column.eventId, invitedCount: eventInvitees } : null;
-            }).filter((selection): selection is { eventId: string; invitedCount: number } => Boolean(selection));
+                return eventInvitees > 0 ? { eventId: column.eventId, invitedCount: eventInvitees, displayMode } : null;
+            }).filter((selection): selection is { eventId: string; invitedCount: number; displayMode: InviteeCountDisplayMode } => Boolean(selection));
 
             if (!parsedEventSelections.length) addRowIssue('error', 'Select at least one invited event using All or an invitee number.', 'events');
 
@@ -3050,6 +3480,7 @@ export default function Dashboard({
                 inviteCode,
                 invitedEventIds: parsedEventSelections.map((selection) => selection.eventId),
                 invitedEventCounts: Object.fromEntries(parsedEventSelections.map((selection) => [selection.eventId, selection.invitedCount])),
+                invitedEventDisplayModes: Object.fromEntries(parsedEventSelections.map((selection) => [selection.eventId, selection.displayMode])),
             });
         });
 
@@ -3192,6 +3623,7 @@ export default function Dashboard({
                 };
 
                 let eventInvitees = 0;
+                let displayMode: InviteeCountDisplayMode = 'number';
                 if (isLegacyTwoColumnFormat) {
                     const hasStatusYes = invitedCsvValues.has(normalizedEventValue);
                     const hasStatusNo = notInvitedCsvValues.has(normalizedEventValue);
@@ -3199,15 +3631,18 @@ export default function Dashboard({
                     const isInvited = hasStatusYes || (!hasStatusNo && inviteeValueSelectsEvent);
                     if (!isInvited) return null;
                     eventInvitees = inviteeValue ? parseInviteeCount(normalizedInviteeValue) : invitedCount;
+                    displayMode = inviteeValue && !isAllValue(normalizedInviteeValue) ? 'number' : 'all';
                 } else {
                     eventInvitees = parseInviteeCount(normalizedEventValue);
+                    displayMode = isAllValue(normalizedEventValue) ? 'all' : 'number';
                 }
 
                 if (eventInvitees <= 0) return null;
-                return { eventId: column.eventId, invitedCount: eventInvitees };
-            }).filter((selection): selection is { eventId: string; invitedCount: number } => Boolean(selection));
+                return { eventId: column.eventId, invitedCount: eventInvitees, displayMode };
+            }).filter((selection): selection is { eventId: string; invitedCount: number; displayMode: InviteeCountDisplayMode } => Boolean(selection));
             const invitedEventIds = parsedEventSelections.map((selection) => selection.eventId);
             const invitedEventCounts = Object.fromEntries(parsedEventSelections.map((selection) => [selection.eventId, selection.invitedCount]));
+            const invitedEventDisplayModes = Object.fromEntries(parsedEventSelections.map((selection) => [selection.eventId, selection.displayMode]));
 
             if (!guestName) warnings.push(`Row ${displayRow}: guestName is missing.`);
             if (!phone) warnings.push(`Row ${displayRow}: phone is missing.`);
@@ -3231,6 +3666,7 @@ export default function Dashboard({
                 inviteCode: createUniqueInviteCode(existingCodes),
                 invitedEventIds,
                 invitedEventCounts,
+                invitedEventDisplayModes,
             };
         });
 
@@ -4098,11 +4534,40 @@ export default function Dashboard({
                 )}
 
                 {activeTab === 'guests' && (hasDashboardGuestAccess ? (
-                    <div className="dashboard-panel guest-list-panel">
-                        <div className="dashboard-panel-header dashboard-panel-header-row">
+                    <div className="dashboard-panel guest-list-panel invitation-management-panel">
+                        <div className="dashboard-panel-header invitation-management-header">
+                            <p className="dashboard-eyebrow">Invitations</p>
+                            <h2>Manage wedding invitations</h2>
+                            <p>Send private links to named guests or share a reusable Open Invitation with a group.</p>
+                        </div>
+                        <div className="invitation-management-tabs" role="tablist" aria-label="Invitation type">
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={invitationManagementView === 'individual'}
+                                className={invitationManagementView === 'individual' ? 'active' : ''}
+                                onClick={() => selectInvitationManagementView('individual')}
+                            >
+                                <span>Individual Invitations</span>
+                                <small>Named guests and private links</small>
+                            </button>
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={invitationManagementView === 'open'}
+                                className={invitationManagementView === 'open' ? 'active' : ''}
+                                onClick={() => selectInvitationManagementView('open')}
+                            >
+                                <span>Open Invitations</span>
+                                <small>Reusable links for groups</small>
+                            </button>
+                        </div>
+                        {invitationManagementView === 'individual' ? (
+                            <>
+                        <div className="dashboard-panel-header dashboard-panel-header-row invitation-view-header">
                             <div>
-                                <p className="dashboard-eyebrow">Guest List</p>
-                                <h2>Manage guests and invite links</h2>
+                                <p className="dashboard-eyebrow">Individual Invitations</p>
+                                <h3>Manage named guests and private links</h3>
                             </div>
                             <div className="dashboard-header-actions">
                                 {selectedGuestIds.length > 0 && (
@@ -4444,6 +4909,9 @@ export default function Dashboard({
                                                 {guestDraftStatus.tone === 'error' && guestDraftStatus.title && (
                                                     <em className="guest-save-error">{guestDraftStatus.title}</em>
                                                 )}
+                                                {guest.sourceOpenInvitationId && (
+                                                    <span className="guest-source-status">Joined via Open Invitation</span>
+                                                )}
                                             </div>
                                             <button
                                                 className="guest-mobile-field-edit"
@@ -4605,10 +5073,10 @@ export default function Dashboard({
                                                                             <select
                                                                                 aria-label={`${event.eventName} invitee scope`}
                                                                                 value={getGuestEventInviteScope(guest, event.id)}
-                                                                                onChange={(inputEvent) => updateGuestEventInviteScope(guestIndex, event.id, inputEvent.target.value as 'all' | 'number')}
+                                                                                onChange={(inputEvent) => updateGuestEventInviteScope(guestIndex, event.id, inputEvent.target.value as InviteeCountDisplayMode)}
                                                                             >
-                                                                                <option value="all">All</option>
-                                                                                <option value="number" disabled={normalizeInvitedCount(guest.invitedCount) <= 1}>Specific number</option>
+                                                                                <option value="all">All family members</option>
+                                                                                <option value="number">Specific number</option>
                                                                             </select>
                                                                             {getGuestEventInviteScope(guest, event.id) === 'number' && (
                                                                                 <select
@@ -4616,7 +5084,7 @@ export default function Dashboard({
                                                                                     value={getGuestEventInvitedCount(guest, event.id)}
                                                                                     onChange={(inputEvent) => updateGuestEventInvitedCount(guestIndex, event.id, Number(inputEvent.target.value))}
                                                                                 >
-                                                                                    {Array.from({ length: Math.max(1, normalizeInvitedCount(guest.invitedCount) - 1) }, (_, countIndex) => countIndex + 1).map((count) => <option key={count} value={count}>{count}</option>)}
+                                                                                    {Array.from({ length: normalizeInvitedCount(guest.invitedCount) }, (_, countIndex) => countIndex + 1).map((count) => <option key={count} value={count}>{count}</option>)}
                                                                                 </select>
                                                                             )}
                                                                         </span>
@@ -4832,6 +5300,9 @@ export default function Dashboard({
                                                         </span>
                                                         {guestDraftStatus.tone === 'error' && guestDraftStatus.title && (
                                                             <em className="guest-save-error">{guestDraftStatus.title}</em>
+                                                        )}
+                                                        {guest.sourceOpenInvitationId && (
+                                                            <span className="guest-source-status">Joined via Open Invitation</span>
                                                         )}
                                                         <div className="guest-identity-grid">
                                                             <div className="guest-compact-field">
@@ -5090,10 +5561,10 @@ export default function Dashboard({
                                                                                 <select
                                                                                     aria-label={`${event.eventName} invitee scope`}
                                                                                     value={getGuestEventInviteScope(guest, event.id)}
-                                                                                    onChange={(inputEvent) => updateGuestEventInviteScope(guestIndex, event.id, inputEvent.target.value as 'all' | 'number')}
+                                                                                    onChange={(inputEvent) => updateGuestEventInviteScope(guestIndex, event.id, inputEvent.target.value as InviteeCountDisplayMode)}
                                                                                 >
-                                                                                    <option value="all">All</option>
-                                                                                    <option value="number" disabled={normalizeInvitedCount(guest.invitedCount) <= 1}>Specific number</option>
+                                                                                    <option value="all">All family members</option>
+                                                                                    <option value="number">Specific number</option>
                                                                                 </select>
                                                                                 {getGuestEventInviteScope(guest, event.id) === 'number' && (
                                                                                     <select
@@ -5101,7 +5572,7 @@ export default function Dashboard({
                                                                                         value={getGuestEventInvitedCount(guest, event.id)}
                                                                                         onChange={(inputEvent) => updateGuestEventInvitedCount(guestIndex, event.id, Number(inputEvent.target.value))}
                                                                                     >
-                                                                                        {Array.from({ length: Math.max(1, normalizeInvitedCount(guest.invitedCount) - 1) }, (_, countIndex) => countIndex + 1).map((count) => <option key={count} value={count}>{count}</option>)}
+                                                                                        {Array.from({ length: normalizeInvitedCount(guest.invitedCount) }, (_, countIndex) => countIndex + 1).map((count) => <option key={count} value={count}>{count}</option>)}
                                                                                     </select>
                                                                                 )}
                                                                             </span>
@@ -5161,9 +5632,18 @@ export default function Dashboard({
                                 </div>
                             </div>
                         )}
+                            </>
+                        ) : (
+                            <OpenInvitationsPanel
+                                weddingId={supabaseWeddingId}
+                                weddingSlug={weddingData.wedding.slug}
+                                events={weddingData.events}
+                                dataClient={authenticatedDataClient ?? undefined}
+                            />
+                        )}
                     </div>
                 ) : (
-                    <RsvpPlanLockedPanel title="Guest List is locked" whatsAppContext={paymentWhatsAppContext} />
+                    <RsvpPlanLockedPanel title="Invitations are locked" whatsAppContext={paymentWhatsAppContext} />
                 ))}
 
                 {activeTab === 'whatsapp' && (hasDashboardGuestAccess ? (
@@ -5425,11 +5905,11 @@ export default function Dashboard({
                                         onChange={(checked) => updateRsvp('attendingCountEnabled', checked)}
                                     />
                                     <ToggleField
-                                        label="Meal preference question"
+                                        label="Meal preference on individual invitations"
                                         checked={weddingData.rsvp.mealPreferenceEnabled}
                                         onLabel="Enabled"
                                         offLabel="Disabled"
-                                        helperText="When hidden, guests can RSVP without selecting Veg, Non-Veg, or Jain."
+                                        helperText="Controls personalized guest links. Open Invitations have their own meal-preference setting."
                                         onChange={(checked) => updateRsvp('mealPreferenceEnabled', checked)}
                                     />
                                 </div>
@@ -5507,23 +5987,21 @@ export default function Dashboard({
                             ))}
                         </RsvpTable>
 
-                        {weddingData.rsvp.mealPreferenceEnabled && (
-                            <RsvpTable
-                                title="Meal Preference by Event"
-                                helperText="Meal counts are calculated using invited guest count for confirmed RSVP responses. If a family has 5 invited guests and selects a meal preference, it counts as 5 meals."
-                                headers={['Event', 'Veg Guests', 'Non-Veg Guests', 'Jain Guests', 'Other / Not Specified']}
-                            >
-                                {rsvpAnalytics.eventMealSummaries.map(({ event, mealCounts }) => (
-                                    <tr key={event.id}>
-                                        <td>{event.eventName}</td>
-                                        <td>{mealCounts.veg}</td>
-                                        <td>{mealCounts.nonVeg}</td>
-                                        <td>{mealCounts.jain}</td>
-                                        <td>{mealCounts.other}</td>
-                                    </tr>
-                                ))}
-                            </RsvpTable>
-                        )}
+                        <RsvpTable
+                            title="Meal Preference by Event"
+                            helperText="Meal counts include responses from personalized and Open Invitations whenever meal preference was enabled for that invitation."
+                            headers={['Event', 'Veg Guests', 'Non-Veg Guests', 'Jain Guests', 'Other / Not Specified']}
+                        >
+                            {rsvpAnalytics.eventMealSummaries.map(({ event, mealCounts }) => (
+                                <tr key={event.id}>
+                                    <td>{event.eventName}</td>
+                                    <td>{mealCounts.veg}</td>
+                                    <td>{mealCounts.nonVeg}</td>
+                                    <td>{mealCounts.jain}</td>
+                                    <td>{mealCounts.other}</td>
+                                </tr>
+                            ))}
+                        </RsvpTable>
 
                         <p className="dashboard-note">View guest-wise RSVP responses in the Guests tab.</p>
 

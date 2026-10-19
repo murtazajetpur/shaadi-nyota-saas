@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import './Section4.css';
 import {
+    getGuestEventInviteeCountDisplayMode,
     mockRsvpResponsesStorageKey,
     type MealPreference,
     type RsvpResponse,
@@ -30,8 +31,7 @@ const getEventInvitedCountValue = (event: WeddingEvent, guest: WeddingGuest) => 
 
 const getEventInvitedCountLabel = (event: WeddingEvent, guest: WeddingGuest) => {
     const eventCount = getEventInvitedCountValue(event, guest);
-    const familyCount = normalizeInvitedCount(guest.invitedCount);
-    return eventCount >= familyCount ? 'All' : String(eventCount);
+    return getGuestEventInviteeCountDisplayMode(guest, event.id) === 'all' ? 'All' : String(eventCount);
 };
 
 const loadStoredRsvpResponses = () => {

@@ -11,6 +11,7 @@ export type PaymentStatus = 'unpaid' | 'paid' | 'manual_pending' | 'ref_pending'
 export type RsvpStatus = 'yes' | 'no' | 'maybe' | '';
 export type MealPreference = 'veg' | 'nonVeg' | 'jain' | '';
 export type EventTextStyle = 'auto' | 'light' | 'dark';
+export type InviteeCountDisplayMode = 'all' | 'number';
 export type EventTextPosition =
   | 'top'
   | 'middle';
@@ -91,9 +92,23 @@ export interface WeddingGuest {
   inviteCode: string;
   invitedEventIds: string[];
   invitedEventCounts?: Record<string, number>;
+  invitedEventDisplayModes?: Record<string, InviteeCountDisplayMode>;
   mealPreference?: MealPreference;
+  sourceOpenInvitationId?: string;
   updatedAt?: string;
 }
+
+export const getGuestEventInviteeCountDisplayMode = (
+  guest: WeddingGuest,
+  eventId: string
+): InviteeCountDisplayMode => {
+  const explicitMode = guest.invitedEventDisplayModes?.[eventId];
+  if (explicitMode) return explicitMode;
+
+  const familySize = Math.max(1, Math.floor(Number(guest.invitedCount) || 1));
+  const invitedCount = Math.max(1, Math.floor(Number(guest.invitedEventCounts?.[eventId] ?? familySize) || 1));
+  return invitedCount === familySize ? 'all' : 'number';
+};
 
 export interface RsvpResponse {
   guestId: string;

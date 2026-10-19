@@ -4892,6 +4892,20 @@
   line-height: 1.2;
 }
 
+.guest-source-status {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 0.35rem;
+  padding: 0.22rem 0.48rem;
+  border: 1px solid rgba(86, 111, 88, 0.24);
+  border-radius: 999px;
+  background: rgba(235, 243, 235, 0.82);
+  color: #3d6345;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .guest-save-status.saving,
 .guest-save-status.pending {
   border-color: #d9c79a;
@@ -4962,4 +4976,87 @@
   .guest-mobile-card > .guest-row-save-actions button {
     flex: 1 1 8rem;
   }
+}
+
+
+.invitation-management-header {
+    margin-bottom: 1rem;
+}
+
+.invitation-management-header > p:last-child {
+    max-width: 48rem;
+}
+
+.invitation-management-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding: 0.25rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(111, 43, 38, 0.16);
+    border-radius: 8px;
+    background: #f4f1ec;
+}
+
+.invitation-management-tabs button {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+    min-height: 3.75rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-light);
+    text-align: left;
+    cursor: pointer;
+}
+
+.invitation-management-tabs button span {
+    font-weight: 700;
+    color: inherit;
+}
+
+.invitation-management-tabs button small {
+    color: inherit;
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.invitation-management-tabs button.active {
+    border-color: rgba(111, 43, 38, 0.18);
+    background: #fff;
+    color: #6f2b26;
+}
+
+.invitation-management-tabs button:focus-visible {
+    outline: 3px solid rgba(160, 118, 47, 0.28);
+    outline-offset: 2px;
+}
+
+.invitation-view-header {
+    margin-top: 0.15rem;
+}
+
+.invitation-view-header h3 {
+    margin: 0;
+    font-family: var(--font-secondary);
+    font-size: 1.45rem;
+    color: var(--color-text);
+}
+
+@media (max-width: 640px) {
+    .invitation-management-tabs button {
+        min-height: 4.25rem;
+        padding: 0.6rem;
+        text-align: center;
+    }
+
+    .invitation-management-tabs button span {
+        line-height: 1.2;
+    }
+
+    .invitation-management-tabs button small {
+        font-size: 0.7rem;
+    }
 }

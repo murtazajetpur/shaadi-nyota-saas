@@ -30,7 +30,9 @@ import {
 } from './lib/weddingOnboarding';
 import {
   getSupabasePublicWeddingRouteStatus,
+  loadSupabaseOpenInvitation,
   type PublicWeddingRouteStatus,
+  type PublicOpenInvitation,
   loadSupabasePersonalizedInvite,
   loadSupabaseWeddingBundle,
   loadSupabaseWeddingBySlug,
@@ -484,10 +486,12 @@ function AdminWeddingDetailRoute({ weddingId }: { weddingId: string }) {
 function PublicInviteRoute({
   slug,
   inviteCode,
+  openInviteCode,
   isPersonalizedInvite,
 }: {
   slug: string;
   inviteCode?: string;
+  openInviteCode?: string;
   isPersonalizedInvite: boolean;
 }) {
   const [isLoadingInvite, setIsLoadingInvite] = useState(isSupabaseConfigured);
@@ -496,6 +500,7 @@ function PublicInviteRoute({
     weddingId?: string;
     guest?: WeddingGuest;
     visibleEvents?: WeddingEvent[];
+    openInvitation?: PublicOpenInvitation;
   } | null>(null);
   const [supabaseError, setSupabaseError] = useState('');
   const [routeStatus, setRouteStatus] = useState<PublicWeddingRouteStatus>('unknown');
@@ -547,9 +552,11 @@ function PublicInviteRoute({
         return;
       }
 
-      const result = isPersonalizedInvite && inviteCode
-        ? await loadSupabasePersonalizedInvite(slug, inviteCode)
-        : await loadSupabaseWeddingBySlug(slug, { includeGuests: false });
+      const result = openInviteCode
+        ? await loadSupabaseOpenInvitation(slug, openInviteCode)
+        : isPersonalizedInvite && inviteCode
+          ? await loadSupabasePersonalizedInvite(slug, inviteCode)
+          : await loadSupabaseWeddingBySlug(slug, { includeGuests: false });
 
       if (!mounted) return;
 
@@ -564,12 +571,14 @@ function PublicInviteRoute({
         const personalizedResult = result as {
           guest?: WeddingGuest;
           visibleEvents?: WeddingEvent[];
+          openInvitation?: PublicOpenInvitation;
         };
         setSupabaseData({
           data: result.wedding,
           weddingId: result.weddingId,
           guest: personalizedResult.guest,
           visibleEvents: personalizedResult.visibleEvents,
+          openInvitation: personalizedResult.openInvitation,
         });
       } else {
         setSupabaseData(null);
@@ -583,7 +592,7 @@ function PublicInviteRoute({
     return () => {
       mounted = false;
     };
-  }, [inviteCode, isPersonalizedInvite, slug]);
+  }, [inviteCode, isPersonalizedInvite, openInviteCode, slug]);
 
   const sampleWedding = getWeddingBySlug(slug);
   const baseData = draftWedding?.wedding.slug === slug ? draftWedding : sampleWedding;
@@ -636,7 +645,17 @@ function PublicInviteRoute({
     );
   }
 
-  if (supabaseError && !fallbackData) {
+  if (openInviteCode && !isSupabaseConfigured) {
+    return (
+      <NotFound
+        statusType="unavailable"
+        title="Open invitation unavailable"
+        message="Open Invitations require the live wedding service. Please try this link again later."
+      />
+    );
+  }
+
+  if (supabaseError && !fallbackData && !openInviteCode) {
     return (
       <NotFound
         statusType="unavailable"
@@ -647,6 +666,15 @@ function PublicInviteRoute({
   }
 
   if (!data) {
+    if (openInviteCode) {
+      return (
+        <NotFound
+          title="Open invitation unavailable"
+          message={supabaseError || 'This Open Invitation link is invalid, paused, expired, or no longer available.'}
+        />
+      );
+    }
+
     if (isPersonalizedInvite && routeStatus === 'live') {
       return (
         <NotFound
@@ -705,6 +733,7 @@ function PublicInviteRoute({
       guest={guest}
       visibleEvents={visibleEvents}
       personalizedInviteMode={Boolean(guest)}
+      openInvitation={supabaseData?.openInvitation}
     />
   );
 }
@@ -725,8 +754,10 @@ function AppRoutes() {
   const isMarketingEnvelopePreview = firstSegment === 'marketing-envelope-preview';
   const isMarketingHome = !firstSegment;
   const isPersonalizedInvite = isPersonalizedInvitePath(window.location.pathname);
+  const isOpenInvitation = secondSegment === 'open' && Boolean(pathParts[2]);
   const slug = firstSegment ?? defaultWeddingSlug;
   const inviteCode = isPersonalizedInvite ? pathParts[2] : undefined;
+  const openInviteCode = isOpenInvitation ? pathParts[2] : undefined;
 
   if (isMarketingHome) {
     return <MarketingHome />;
@@ -828,7 +859,14 @@ function AppRoutes() {
     return <Admin />;
   }
 
-  return <PublicInviteRoute slug={slug} inviteCode={inviteCode} isPersonalizedInvite={isPersonalizedInvite} />;
+  return (
+    <PublicInviteRoute
+      slug={slug}
+      inviteCode={inviteCode}
+      openInviteCode={openInviteCode}
+      isPersonalizedInvite={isPersonalizedInvite}
+    />
+  );
 }
 
 function App() {

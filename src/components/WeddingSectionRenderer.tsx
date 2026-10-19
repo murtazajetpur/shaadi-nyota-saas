@@ -1,11 +1,13 @@
 import { lazy, Suspense } from 'react';
 import type { SampleWeddingData, WeddingEvent, WeddingGuest } from '../data/sampleWeddingData';
 import type { WeddingSectionConfig } from '../data/sectionConfig';
+import type { PublicOpenInvitation } from '../lib/supabaseWeddingData';
 
 const Section2 = lazy(() => import('./Section2'));
 const Section3 = lazy(() => import('./Section3'));
 const Section4 = lazy(() => import('./Section4'));
 const Section5 = lazy(() => import('./Section5'));
+const OpenInvitationRsvp = lazy(() => import('./OpenInvitationRsvp'));
 
 interface ClassicWeddingSectionRendererProps {
   data: SampleWeddingData;
@@ -15,6 +17,7 @@ interface ClassicWeddingSectionRendererProps {
   guest?: WeddingGuest;
   personalizedInviteMode?: boolean;
   showStoryScrollPrompt?: boolean;
+  openInvitation?: PublicOpenInvitation;
 }
 
 interface RenderSectionContext {
@@ -24,20 +27,41 @@ interface RenderSectionContext {
   guest?: WeddingGuest;
   personalizedInviteMode: boolean;
   showStoryScrollPrompt: boolean;
+  openInvitation?: PublicOpenInvitation;
 }
 
 const renderStorySection = (section: WeddingSectionConfig, { data, showStoryScrollPrompt }: RenderSectionContext) => {
   return <Section2 key={section.id} couple={data.couple} showScrollPrompt={showStoryScrollPrompt} />;
 };
 
-const renderEventsSection = (section: WeddingSectionConfig, { data, events, guest }: RenderSectionContext) => {
-  return <Section3 key={section.id} events={events} coupleDisplayName={data.couple.displayName} guest={guest} />;
+const renderEventsSection = (section: WeddingSectionConfig, { data, events, guest, openInvitation }: RenderSectionContext) => {
+  return (
+    <Section3
+      key={section.id}
+      events={events}
+      coupleDisplayName={data.couple.displayName}
+      guest={guest}
+      showAllInvitees={openInvitation?.showInviteeCount === true}
+    />
+  );
 };
 
 const renderRsvpSection = (
   section: WeddingSectionConfig,
-  { data, events, weddingId, guest, personalizedInviteMode }: RenderSectionContext,
+  { data, events, weddingId, guest, personalizedInviteMode, openInvitation }: RenderSectionContext,
 ) => {
+  if (openInvitation) {
+    return (
+      <OpenInvitationRsvp
+        key={section.id}
+        rsvp={data.rsvp}
+        weddingSlug={data.wedding.slug}
+        events={events}
+        openInvitation={openInvitation}
+      />
+    );
+  }
+
   return (
     <Section4
       key={section.id}
@@ -63,6 +87,7 @@ export default function WeddingSectionRenderer({
   guest,
   personalizedInviteMode = false,
   showStoryScrollPrompt = false,
+  openInvitation,
 }: ClassicWeddingSectionRendererProps) {
   const enabledSections = sections
     .filter((section) => section.enabled && section.type !== 'opening' && section.type !== 'reveal')
@@ -74,6 +99,7 @@ export default function WeddingSectionRenderer({
     guest,
     personalizedInviteMode,
     showStoryScrollPrompt,
+    openInvitation,
   };
 
   return (
