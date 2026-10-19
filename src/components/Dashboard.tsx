@@ -463,6 +463,26 @@ const getGuestEventInvitedCount = (guest: WeddingGuest, eventId: string) => (
     normalizeInvitedCount(guest.invitedEventCounts?.[eventId] ?? guest.invitedCount)
 );
 
+const getGuestRsvpStatusLabel = (
+    status: string,
+    attendingCount: unknown,
+    invitedCount: number,
+) => {
+    if (status !== 'yes') {
+        return rsvpStatusLabels[status] ?? 'Pending';
+    }
+
+    const normalizedInvitedCount = normalizeInvitedCount(invitedCount);
+    const normalizedAttendingCount = Math.min(
+        normalizeInvitedCount(attendingCount ?? normalizedInvitedCount),
+        normalizedInvitedCount,
+    );
+
+    return normalizedAttendingCount === normalizedInvitedCount
+        ? `Yes (${normalizedAttendingCount})`
+        : `Partial Yes (${normalizedAttendingCount})`;
+};
+
 const getGuestEventInviteScope = (guest: WeddingGuest, eventId: string) => (
     getGuestEventInvitedCount(guest, eventId) >= normalizeInvitedCount(guest.invitedCount) ? 'all' : 'number'
 );
@@ -1409,8 +1429,13 @@ export default function Dashboard({
                 .sort()
                 .at(-1) ?? '';
             const eventStatuses = guest.invitedEventIds.map((eventId) => {
-                const status = getResponse(guest, eventId)?.status || 'pending';
-                const label = rsvpStatusLabels[status] ?? 'Pending';
+                const response = getResponse(guest, eventId);
+                const status = response?.status || 'pending';
+                const label = getGuestRsvpStatusLabel(
+                    status,
+                    response?.attendingCount,
+                    getGuestEventInvitedCount(guest, eventId),
+                );
                 return {
                     eventId,
                     eventName: eventNameById.get(eventId) ?? 'Event',
