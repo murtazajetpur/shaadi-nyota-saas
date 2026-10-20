@@ -16,6 +16,7 @@ interface InviteExperienceProps {
   guest?: WeddingGuest;
   visibleEvents?: WeddingEvent[];
   personalizedInviteMode?: boolean;
+  requirePersonalizedInvite?: boolean;
   enableResponsiveOpeningVideo?: boolean;
   previewMode?: boolean;
   previewScrollFrame?: boolean;
@@ -163,6 +164,7 @@ export default function InviteExperience({
   guest,
   visibleEvents,
   personalizedInviteMode = false,
+  requirePersonalizedInvite = false,
   enableResponsiveOpeningVideo = true,
   previewMode = false,
   previewScrollFrame = false,
@@ -171,13 +173,21 @@ export default function InviteExperience({
   demoPreviewMode = false,
   openInvitation,
 }: InviteExperienceProps) {
-  const eventsToShow = visibleEvents ?? data.events;
-  const sectionConfig = getWeddingSectionConfig(data, { visibleEvents }).map((section) => (
-    (forceEventsVisible && section.type === 'events' && eventsToShow.length > 0)
+  const eventsToShow = requirePersonalizedInvite ? [] : visibleEvents ?? data.events;
+  const sectionConfig = getWeddingSectionConfig(data, { visibleEvents: eventsToShow }).map((section) => {
+    if (requirePersonalizedInvite && section.type === 'rsvp') {
+      return { ...section, enabled: true };
+    }
+
+    if (
+      (forceEventsVisible && section.type === 'events' && eventsToShow.length > 0)
       || (openInvitation && section.type === 'rsvp')
-      ? { ...section, enabled: true }
-      : section
-  ));
+    ) {
+      return { ...section, enabled: true };
+    }
+
+    return section;
+  });
 
   return (
     <ClassicInviteExperience

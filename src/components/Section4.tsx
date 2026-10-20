@@ -138,7 +138,7 @@ export default function Section4({ rsvp, weddingId, weddingSlug, events, guest, 
                         <h2 className="rsvp-title">{rsvp.title}</h2>
                     </div>
                     <div className="rsvp-step fade-in success-step">
-                        <p className="success-text public-rsvp-message">Please open your personalized invitation link to RSVP.</p>
+                        <p className="success-text public-rsvp-message">Please open your personalized invitation link to view your event details and RSVP.</p>
                     </div>
                 </div>
             </section>

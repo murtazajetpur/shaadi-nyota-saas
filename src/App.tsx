@@ -733,6 +733,7 @@ function PublicInviteRoute({
       guest={guest}
       visibleEvents={visibleEvents}
       personalizedInviteMode={Boolean(guest)}
+      requirePersonalizedInvite={!isPersonalizedInvite && !openInviteCode}
       openInvitation={supabaseData?.openInvitation}
     />
   );
